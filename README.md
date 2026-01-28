@@ -139,12 +139,6 @@ Before contributing, please read the project specification to understand the gui
 
 ---
 
-##  License
-
-MIT License
-
----
-
 ##  Final Note
 
 Zypher is built with the belief that **frameworks should teach, not obscure**.
