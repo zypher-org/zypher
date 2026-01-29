@@ -9,5 +9,4 @@ const RouteTable = std.static_string_map.StaticStringMap(Handler).init(.{
     .{ "/", handler(controller.createTodo, &.{}, .post) },
     .{ "/{id}", handler(controller.getTodo, &.{ .id = controller.id }, .get) },
     .{ "/{id}", handler(controller.deleteTodo, &.{ .id = controller.id }, .delete) },
-    .{ "/{id}", handler(controller.updateTodo, &.{ .id = controller.id }, .put) },
 }, zypher.gpa);
