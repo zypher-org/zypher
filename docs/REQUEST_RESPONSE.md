@@ -1,6 +1,6 @@
 # zypher — Request & Response API (FROZEN v1)
 
-> ⚠️ **API FREEZE NOTICE**
+> ️ **API FREEZE NOTICE**
 >
 > This document defines the **stable v1 API contract** for `Request` and `Response`.
 > Any breaking change requires a major version bump or a formal RFC.

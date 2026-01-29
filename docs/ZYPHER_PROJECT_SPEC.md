@@ -291,5 +291,4 @@ zypher is considered successful if:
 
 ## 11. License
 
-MIT License
-
+Apache License, Version 2.0.
