@@ -1,27 +1,27 @@
-# Zypher
+# zypher
 
 > **A batteries-included web framework, built the Zig way.**
 
-Zypher is a Django-inspired web framework written in **Zig**, designed for developers who want **clarity, control, and correctness** without sacrificing productivity.
+zypher is a Django-inspired web framework written in **Zig**, designed for developers who want **clarity, control, and correctness** without sacrificing productivity.
 
 It provides the full set of tools needed to build server-side web applications — routing, middleware, templates, ORM, authentication, and an admin panel — while staying true to Zig’s philosophy: **explicit over magic, compile-time over runtime, and simplicity over cleverness**.
 
 ---
 
-## Why Zypher?
+## Why zypher?
 
 Most web frameworks fall into one of two camps:
 - *Minimal* frameworks that leave everything to you
 - *Magical* frameworks that hide too much
 
-Zypher sits deliberately in the middle.
+zypher sits deliberately in the middle.
 
 It gives you **batteries included**, but every abstraction is:
 - Understandable
 - Inspectable
 - Replaceable
 
-If you’ve ever wondered *“how does Django actually work under the hood?”*, Zypher is built to answer that — in code.
+If you’ve ever wondered *“how does Django actually work under the hood?”*, zypher is built to answer that — in code.
 
 ---
 
@@ -33,7 +33,7 @@ If you’ve ever wondered *“how does Django actually work under the hood?”*,
 - **Minimal allocations, predictable performance**
 - **One obvious way to do things**
 
-Zypher avoids runtime reflection and hidden global state. Instead, it uses Zig’s compile-time features to catch errors early and generate efficient code.
+zypher avoids runtime reflection and hidden global state. Instead, it uses Zig’s compile-time features to catch errors early and generate efficient code.
 
 ---
 
@@ -53,9 +53,9 @@ Zypher avoids runtime reflection and hidden global state. Instead, it uses Zig�
 
 ---
 
-## What Zypher Is *Not*
+## What zypher Is *Not*
 
-Zypher does **not** try to:
+zypher does **not** try to:
 - Replace Django feature-for-feature
 - Support every database or protocol
 - Hide complexity through runtime magic
@@ -68,14 +68,14 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 ## Example
 
 ```zig
-const Zypher = @import("Zypher");
+const zypher = @import("zypher");
 
-pub fn index(req: *Zypher.Request, res: *Zypher.Response) !void {
-    try res.text("Hello from Zypher 👋");
+pub fn index(req: *zypher.Request, res: *zypher.Response) !void {
+    try res.text("Hello from zypher 👋");
 }
 
 pub fn main() !void {
-    var app = Zypher.App.init();
+    var app = zypher.App.init();
 
     app.router.get("/", index);
 
@@ -88,7 +88,7 @@ pub fn main() !void {
 ## Project Structure
 
 ```
-Zypher/
+zypher/
 ├── src/
 │   ├── core/          # Request / Response primitives
 │   ├── router/        # Compile-time router
@@ -111,7 +111,7 @@ Zypher/
 
 **Early development (v0.x)**
 
-Zypher is currently under active development and evolving rapidly. APIs may change.
+zypher is currently under active development and evolving rapidly. APIs may change.
 
 That said, the project is designed to be:
 - Readable
@@ -123,7 +123,7 @@ That said, the project is designed to be:
 ##  Documentation
 
 - Architecture & design decisions: see `docs/`
-- Full project specification: see `ZYPHER_PROJECT_SPEC.md`
+- Full project specification: see `zypher_PROJECT_SPEC.md`
 - Examples: see `examples/`
 
 ---
@@ -141,7 +141,7 @@ Before contributing, please read the project specification to understand the gui
 
 ##  Final Note
 
-Zypher is built with the belief that **frameworks should teach, not obscure**.
+zypher is built with the belief that **frameworks should teach, not obscure**.
 
 If you enjoy understanding systems from the ground up, you’ll feel at home here.
 
