@@ -96,6 +96,18 @@ pub fn build(b: *std.Build) void {
         .root_module = e2e_test_mod,
     });
 
+    const regression_test_mod = b.createModule(.{
+        .root_source_file = b.path("tests/regression/test_runner.zig"),
+        .target = target,
+        .imports = &.{
+            .{ .name = "zypher", .module = lib_mod },
+        },
+    });
+
+    const regression_tests = b.addTest(.{
+        .root_module = regression_test_mod,
+    });
+
     // ── Test step targets ───────────────────────────────────────────
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(&b.addRunArtifact(lib_unit_tests).step);
@@ -103,6 +115,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(unit_tests).step);
     test_step.dependOn(&b.addRunArtifact(integration_tests).step);
     test_step.dependOn(&b.addRunArtifact(e2e_tests).step);
+    test_step.dependOn(&b.addRunArtifact(regression_tests).step);
 
     const test_unit_step = b.step("test-unit", "Run unit tests only");
     test_unit_step.dependOn(&b.addRunArtifact(lib_unit_tests).step);

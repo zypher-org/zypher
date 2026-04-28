@@ -9,4 +9,11 @@ test {
     _ = @import("router/route_test.zig");
     _ = @import("router/params_test.zig");
     _ = @import("router/router_test.zig");
+    _ = @import("middleware/chain_test.zig");
+    _ = @import("middleware/logger_test.zig");
+    _ = @import("middleware/cors_test.zig");
+    _ = @import("middleware/csrf_test.zig");
+    _ = @import("middleware/rate_limit_test.zig");
+    _ = @import("middleware/static_test.zig");
+    _ = @import("middleware/compress_test.zig");
 }

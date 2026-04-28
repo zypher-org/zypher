@@ -17,7 +17,17 @@ pub const router = struct {
 };
 
 // Re-export middleware (Phase 3)
-pub const middleware = @import("middleware/chain.zig");
+pub const middleware = struct {
+    pub const Chain = @import("middleware/chain.zig").Chain;
+    pub const MiddlewareFn = @import("middleware/chain.zig").MiddlewareFn;
+    pub const HandlerFn = @import("middleware/chain.zig").HandlerFn;
+    pub const logger = @import("middleware/logger.zig");
+    pub const cors = @import("middleware/cors.zig");
+    pub const csrf = @import("middleware/csrf.zig");
+    pub const rate_limit = @import("middleware/rate_limit.zig");
+    pub const static = @import("middleware/static.zig");
+    pub const compress = @import("middleware/compress.zig");
+};
 
 // Re-export template (Phase 4)
 pub const template = @import("template/renderer.zig");
