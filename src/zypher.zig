@@ -1,0 +1,42 @@
+/// zypher — A Django-inspired, batteries-included web framework for Zig.
+/// Every abstraction is explicit, inspectable, and replaceable.
+/// No hidden allocations, no runtime magic, no global state.
+const std = @import("std");
+
+pub const log = @import("log.zig");
+pub const errors = @import("errors.zig");
+
+// Re-export core primitives (Phase 1)
+pub const core = @import("core/main.zig");
+
+// Re-export router (Phase 2)
+pub const router = struct {
+    pub const Route = @import("router/route.zig").Route;
+    pub const RouteParams = @import("router/params.zig").RouteParams;
+    pub const Router = @import("router/router.zig").Router;
+};
+
+// Re-export middleware (Phase 3)
+pub const middleware = @import("middleware/chain.zig");
+
+// Re-export template (Phase 4)
+pub const template = @import("template/renderer.zig");
+
+// Re-export ORM (Phase 5)
+pub const orm = @import("orm/schema.zig");
+
+// Re-export forms (Phase 6)
+pub const forms = @import("forms/form.zig");
+
+// Re-export auth (Phase 7)
+pub const auth = @import("auth/session.zig");
+
+// Re-export admin (Phase 8)
+pub const admin = @import("admin/registry.zig");
+
+// Re-export CLI (Phase 9)
+pub const cli = @import("cli/main.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}
