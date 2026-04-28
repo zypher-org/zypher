@@ -6,3 +6,8 @@ status.md
 task.md
 .env
 .env.local
+.windsurf
+.vscode
+.idea
+.DS_Store
+Thumbs.db
