@@ -1,4 +1,8 @@
 .zig-cache
-.zig-out
+zig-out
 *.log
 *.tmp
+status.md
+task.md
+.env
+.env.local

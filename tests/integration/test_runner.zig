@@ -1,0 +1,5 @@
+// Integration test runner — imports all integration test files.
+test {
+    _ = @import("round_trip_test.zig");
+    _ = @import("router_test.zig");
+}
