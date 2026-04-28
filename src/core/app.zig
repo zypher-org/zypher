@@ -12,6 +12,10 @@ pub const App = struct {
     /// When set, this handler takes priority over handler_fn.
     /// Use with Router.dispatch as the handler for routed apps.
     router_handler: ?Server.HandlerFn = null,
+    /// When set, middleware runs before the router/handler dispatch.
+    /// The middleware handler is responsible for calling the terminal
+    /// handler (router_handler or handler_fn) at the end of the chain.
+    middleware_handler: ?Server.HandlerFn = null,
 
     /// Create a new App with the given allocator and optional config overrides.
     pub fn init(gpa: std.mem.Allocator, config: Server.Config) App {
@@ -36,14 +40,25 @@ pub const App = struct {
         self.router_handler = fn_ptr;
     }
 
+    /// Register a middleware handler (takes priority over router and handler).
+    /// The middleware handler is a Server.HandlerFn that typically wraps
+    /// a Chain.run() call with the router/handler as the terminal handler.
+    pub fn middlewareHandler(self: *App, fn_ptr: Server.HandlerFn) void {
+        self.middleware_handler = fn_ptr;
+    }
+
     /// Build a zypher Request from a raw HTTP head buffer.
     pub fn buildRequestFromHead(self: *App, head_buffer: []const u8) !Request {
         return Server.buildRequest(self.allocator, head_buffer, self.server.config.max_body_size);
     }
 
-    /// Dispatch a request through the registered handler, or return 404.
-    /// Priority: router_handler > handler_fn > default 404.
+    /// Dispatch a request through the registered handlers.
+    /// Priority: middleware_handler > router_handler > handler_fn > default 404.
     pub fn handleRequest(self: *App, req: *Request, res: *Response) void {
+        if (self.middleware_handler) |h| {
+            h(req, res);
+            return;
+        }
         if (self.router_handler) |h| {
             h(req, res);
             return;
@@ -59,10 +74,10 @@ pub const App = struct {
 
     /// Start the server and begin accepting connections. Blocks until shutdown.
     pub fn listenAndServe(self: *App, io: std.Io) !void {
-        if (self.router_handler == null and self.handler_fn == null) {
+        if (self.middleware_handler == null and self.router_handler == null and self.handler_fn == null) {
             log.warn("no handler registered — server will return 404 for all requests", .{});
         }
-        const h = self.router_handler orelse self.handler_fn orelse defaultHandler;
+        const h = self.middleware_handler orelse self.router_handler orelse self.handler_fn orelse defaultHandler;
         try self.server.listenAndServe(io, self.allocator, h);
     }
 

@@ -2,4 +2,5 @@
 test {
     _ = @import("round_trip_test.zig");
     _ = @import("router_test.zig");
+    _ = @import("middleware_test.zig");
 }
