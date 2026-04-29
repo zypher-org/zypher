@@ -30,7 +30,12 @@ pub const middleware = struct {
 };
 
 // Re-export template (Phase 4)
-pub const template = @import("template/renderer.zig");
+pub const template = struct {
+    pub const lexer = @import("template/lexer.zig");
+    pub const parser = @import("template/parser.zig");
+    pub const renderer = @import("template/renderer.zig");
+    pub const filters = @import("template/filters.zig");
+};
 
 // Re-export ORM (Phase 5)
 pub const orm = @import("orm/schema.zig");
