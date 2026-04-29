@@ -22,4 +22,6 @@ test {
     _ = @import("template/filters_test.zig");
     _ = @import("orm/sqlite_test.zig");
     _ = @import("orm/schema_test.zig");
+    _ = @import("orm/query_test.zig");
+    _ = @import("orm/migration_test.zig");
 }
