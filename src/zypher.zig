@@ -41,6 +41,8 @@ pub const template = struct {
 pub const orm = struct {
     pub const sqlite = @import("orm/sqlite.zig");
     pub const schema = @import("orm/schema.zig");
+    pub const query = @import("orm/query.zig");
+    pub const migration = @import("orm/migration.zig");
 };
 
 // Re-export forms (Phase 6)
