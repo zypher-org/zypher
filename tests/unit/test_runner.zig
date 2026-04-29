@@ -21,4 +21,5 @@ test {
     _ = @import("template/renderer_test.zig");
     _ = @import("template/filters_test.zig");
     _ = @import("orm/sqlite_test.zig");
+    _ = @import("orm/schema_test.zig");
 }
