@@ -38,7 +38,10 @@ pub const template = struct {
 };
 
 // Re-export ORM (Phase 5)
-pub const orm = @import("orm/schema.zig");
+pub const orm = struct {
+    pub const sqlite = @import("orm/sqlite.zig");
+    pub const schema = @import("orm/schema.zig");
+};
 
 // Re-export forms (Phase 6)
 pub const forms = @import("forms/form.zig");

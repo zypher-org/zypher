@@ -1,14 +1,37 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    const target = b.standardTargetOptions(.{
+        .default_target = .{ .abi = .musl },
+    });
     const optimize = b.standardOptimizeOption(.{});
+
+    // ── Vendored SQLite3 ─────────────────────────────────────────────
+    const sqlite3_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+    sqlite3_mod.addCSourceFiles(.{
+        .root = b.path("vendor/sqlite-amalgamation-3530000"),
+        .files = &.{"sqlite3.c"},
+        .flags = &.{ "-std=c11", "-DSQLITE_THREADSAFE=0", "-DSQLITE_OMIT_LOAD_EXTENSION" },
+    });
+    sqlite3_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
+    sqlite3_mod.link_libc = true;
+
+    const sqlite3_lib = b.addLibrary(.{
+        .name = "sqlite3",
+        .root_module = sqlite3_mod,
+    });
 
     // ── Library module ──────────────────────────────────────────────
     const lib_mod = b.addModule("zypher", .{
         .root_source_file = b.path("src/zypher.zig"),
         .target = target,
     });
+    lib_mod.linkLibrary(sqlite3_lib);
+    lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
+    lib_mod.link_libc = true;
 
     // ── CLI executable ──────────────────────────────────────────────
     const exe = b.addExecutable(.{
@@ -55,6 +78,7 @@ pub fn build(b: *std.Build) void {
     const lib_unit_tests = b.addTest(.{
         .root_module = lib_mod,
     });
+    // sqlite3 linking inherited from lib_mod
 
     const exe_unit_tests = b.addTest(.{
         .root_module = exe.root_module,
@@ -71,6 +95,7 @@ pub fn build(b: *std.Build) void {
     const unit_tests = b.addTest(.{
         .root_module = unit_test_mod,
     });
+    // sqlite3 linking inherited from lib_mod
 
     const integration_test_mod = b.createModule(.{
         .root_source_file = b.path("tests/integration/test_runner.zig"),
@@ -83,6 +108,7 @@ pub fn build(b: *std.Build) void {
     const integration_tests = b.addTest(.{
         .root_module = integration_test_mod,
     });
+    // sqlite3 linking inherited from lib_mod
 
     const e2e_test_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/test_runner.zig"),
@@ -95,6 +121,7 @@ pub fn build(b: *std.Build) void {
     const e2e_tests = b.addTest(.{
         .root_module = e2e_test_mod,
     });
+    // sqlite3 linking inherited from lib_mod
 
     const regression_test_mod = b.createModule(.{
         .root_source_file = b.path("tests/regression/test_runner.zig"),
@@ -107,6 +134,7 @@ pub fn build(b: *std.Build) void {
     const regression_tests = b.addTest(.{
         .root_module = regression_test_mod,
     });
+    // sqlite3 linking inherited from lib_mod
 
     // ── Test step targets ───────────────────────────────────────────
     const test_step = b.step("test", "Run all tests");
