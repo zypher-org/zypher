@@ -3,6 +3,7 @@ const std = @import("std");
 const Server = @import("server.zig").Server;
 const Request = @import("request.zig").Request;
 const Response = @import("response.zig").Response;
+const sqlite = @import("../orm/sqlite.zig");
 const log = std.log.scoped(.app);
 
 pub const App = struct {
@@ -16,6 +17,8 @@ pub const App = struct {
     /// The middleware handler is responsible for calling the terminal
     /// handler (router_handler or handler_fn) at the end of the chain.
     middleware_handler: ?Server.HandlerFn = null,
+    /// Optional database connection for ORM-enabled apps.
+    db: ?*sqlite.Db = null,
 
     /// Create a new App with the given allocator and optional config overrides.
     pub fn init(gpa: std.mem.Allocator, config: Server.Config) App {
@@ -27,7 +30,9 @@ pub const App = struct {
 
     /// Free all owned resources.
     pub fn deinit(self: *App) void {
-        _ = self;
+        if (self.db) |db| {
+            db.close();
+        }
     }
 
     /// Register a request handler function.
@@ -38,6 +43,11 @@ pub const App = struct {
     /// Register a router-based handler (takes priority over plain handler).
     pub fn routerHandler(self: *App, fn_ptr: Server.HandlerFn) void {
         self.router_handler = fn_ptr;
+    }
+
+    /// Attach a database connection for ORM usage.
+    pub fn database(self: *App, db: *sqlite.Db) void {
+        self.db = db;
     }
 
     /// Register a middleware handler (takes priority over router and handler).
