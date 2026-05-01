@@ -2,6 +2,8 @@
 const std = @import("std");
 const log = std.log.scoped(.user);
 const password = @import("password.zig");
+const Request = @import("../core/request.zig").Request;
+const Response = @import("../core/response.zig").Response;
 
 /// User model with hashed password, role, and active status.
 pub const User = struct {
@@ -60,6 +62,38 @@ pub const User = struct {
         log.info("user '{s}' deactivated", .{self.username});
     }
 };
+
+/// Middleware that requires an authenticated user.
+/// If no user is attached to the request (via session middleware),
+/// redirects to /login with a 302 status.
+pub fn loginRequired(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+    if (req.user == null) {
+        log.warn("unauthenticated access to {s}, redirecting to login", .{req.path});
+        _ = res.status(302);
+        _ = res.header("Location", "/login");
+        return;
+    }
+    next(req, res);
+}
+
+/// Middleware that requires an authenticated superuser (admin).
+/// If no user or user is not admin, returns 403 Forbidden.
+pub fn superuserRequired(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+    if (req.user == null) {
+        log.warn("unauthenticated access to {s}, redirecting to login", .{req.path});
+        _ = res.status(302);
+        _ = res.header("Location", "/login");
+        return;
+    }
+    const user: *User = @ptrCast(@alignCast(req.user.?));
+    if (!std.mem.eql(u8, user.role, "admin")) {
+        log.warn("non-admin access to {s} by user '{s}'", .{ req.path, user.username });
+        _ = res.status(403);
+        res.text("Forbidden: admin access required") catch {};
+        return;
+    }
+    next(req, res);
+}
 
 test {
     std.testing.refAllDecls(@This());
