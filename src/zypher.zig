@@ -52,7 +52,11 @@ pub const forms = struct {
 };
 
 // Re-export auth (Phase 7)
-pub const auth = @import("auth/session.zig");
+pub const auth = struct {
+    pub const session = @import("auth/session.zig");
+    pub const password = @import("auth/password.zig");
+    pub const user = @import("auth/user.zig");
+};
 
 // Re-export admin (Phase 8)
 pub const admin = @import("admin/registry.zig");
