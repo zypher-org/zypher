@@ -5,4 +5,5 @@ test {
     _ = @import("middleware_test.zig");
     _ = @import("template_test.zig");
     _ = @import("orm_test.zig");
+    _ = @import("forms_test.zig");
 }
