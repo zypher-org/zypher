@@ -46,7 +46,10 @@ pub const orm = struct {
 };
 
 // Re-export forms (Phase 6)
-pub const forms = @import("forms/form.zig");
+pub const forms = struct {
+    pub const validators = @import("forms/validators.zig");
+    pub const form = @import("forms/form.zig");
+};
 
 // Re-export auth (Phase 7)
 pub const auth = @import("auth/session.zig");

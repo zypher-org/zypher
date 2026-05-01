@@ -24,4 +24,6 @@ test {
     _ = @import("orm/schema_test.zig");
     _ = @import("orm/query_test.zig");
     _ = @import("orm/migration_test.zig");
+    _ = @import("forms/validators_test.zig");
+    _ = @import("forms/form_test.zig");
 }
