@@ -27,6 +27,7 @@ pub const middleware = struct {
     pub const rate_limit = @import("middleware/rate_limit.zig");
     pub const static = @import("middleware/static.zig");
     pub const compress = @import("middleware/compress.zig");
+    pub const session = @import("middleware/session.zig");
 };
 
 // Re-export template (Phase 4)
