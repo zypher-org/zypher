@@ -27,4 +27,5 @@ test {
     _ = @import("forms/validators_test.zig");
     _ = @import("forms/form_test.zig");
     _ = @import("auth/session_test.zig");
+    _ = @import("auth/password_test.zig");
 }
