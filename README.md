@@ -70,12 +70,13 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 ```zig
 const zypher = @import("zypher");
 
-pub fn index(req: *zypher.Request, res: *zypher.Response) !void {
-    try res.text("Hello from zypher 👋");
+pub fn index(req: *zypher.Request, res: *const zypher.Response) !void {
+    try res.text("Hello from zypher");
 }
 
-pub fn main() !void {
-    var app = zypher.App.init();
+pub fn main(init: std.process.Init) !void {
+    var app = zypher.App.init(init.gpa, init.io);
+    defer app.deinit();
 
     app.router.get("/", index);
 
