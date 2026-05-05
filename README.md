@@ -68,6 +68,7 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 ## Example
 
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
 pub fn index(req: *zypher.Request, res: *const zypher.Response) !void {
