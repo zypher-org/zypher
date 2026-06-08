@@ -138,7 +138,7 @@ pub fn AdminSite(comptime config: anytype) type {
                     const base = "/admin/" ++ M.table_name;
                     const off = i * 7 + 1;
 
-                    result[off + 0] = Route.init(.get, base ++ "/", listHandler(M));
+                    result[off + 0] = Route.init(.get, base ++ "/", listHandler(M, model_meta[i].list_per_page));
                     result[off + 1] = Route.init(.get, base ++ "/add/", addHandler(M));
                     result[off + 2] = Route.init(.post, base ++ "/add/", createHandler(M));
                     result[off + 3] = Route.init(.get, base ++ "/:id/change/", changeHandler(M));
@@ -252,7 +252,7 @@ fn renderTmpl(engine: *TemplateEngine, res: *Response, comptime name: []const u8
 
 // ── Per-model handler factories ────────────────────────────────────────────
 
-fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
+fn listHandler(comptime M: type, comptime per_page: usize) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
             if (!requireAdmin(req, res)) return;
@@ -262,7 +262,13 @@ fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
                 return;
             };
             const gpa = res.allocator;
-            var rows = query.all(M, db, gpa) catch {
+            // ── pagination ──────────────────────────────────────────────
+            const page_str = req.formValue("page") orelse "1";
+            const page = std.fmt.parseInt(u64, page_str, 10) catch 1;
+            const page_actual = if (page == 0) @as(u64, 1) else page;
+            const offset = (page_actual - 1) * per_page;
+
+            var rows = query.filterLimitOffset(M, db, gpa, "", &.{}, per_page, offset) catch {
                 _ = res.status(500);
                 res.text("Admin: query failed") catch {};
                 return;
@@ -272,63 +278,113 @@ fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
                 rows.deinit(gpa);
             }
 
+            const total = query.count(M, db) catch {
+                _ = res.status(500);
+                res.text("Admin: count failed") catch {};
+                return;
+            };
+            const total_pages = if (total == 0) @as(u64, 1) else (total + per_page - 1) / per_page;
+
+            // ── build pagination HTML ───────────────────────────────────
+            var pag_buf: std.ArrayList(u8) = .empty;
+            defer pag_buf.deinit(gpa);
+            if (total_pages > 1) {
+                pag_buf.appendSlice(gpa, "<div class=\"pagination\">") catch return;
+                if (page_actual > 1) {
+                    pag_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
+                    pag_buf.appendSlice(gpa, M.table_name) catch return;
+                    pag_buf.appendSlice(gpa, "/?page=") catch return;
+                    {
+                        var buf: [32]u8 = undefined;
+                        pag_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{page_actual - 1}) catch "") catch return;
+                    }
+                    pag_buf.appendSlice(gpa, "\">\u{2190} Prev</a> ") catch return;
+                }
+                pag_buf.appendSlice(gpa, "<span>Page ") catch return;
+                {
+                    var buf: [32]u8 = undefined;
+                    pag_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{page_actual}) catch "") catch return;
+                }
+                pag_buf.appendSlice(gpa, " of ") catch return;
+                {
+                    var buf: [32]u8 = undefined;
+                    pag_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{total_pages}) catch "") catch return;
+                }
+                pag_buf.appendSlice(gpa, "</span> ") catch return;
+                if (page_actual < total_pages) {
+                    pag_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
+                    pag_buf.appendSlice(gpa, M.table_name) catch return;
+                    pag_buf.appendSlice(gpa, "/?page=") catch return;
+                    {
+                        var buf: [32]u8 = undefined;
+                        pag_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{page_actual + 1}) catch "") catch return;
+                    }
+                    pag_buf.appendSlice(gpa, "\">Next \u{2192}</a>") catch return;
+                }
+                pag_buf.appendSlice(gpa, "</div>") catch return;
+            }
+            const pagination_html = pag_buf.items;
+
+            // ── build table rows HTML ───────────────────────────────────
+            var rows_buf: std.ArrayList(u8) = .empty;
+            defer rows_buf.deinit(gpa);
+            for (rows.items) |row| {
+                rows_buf.appendSlice(gpa, "<tr>") catch return;
+                inline for (0..M.fields_len) |i| {
+                    rows_buf.appendSlice(gpa, "<td>") catch return;
+                    const FT = @typeInfo(query.RowType(M)).@"struct".field_types[i];
+                    if (FT == []const u8) {
+                        rows_buf.appendSlice(gpa, row[i]) catch return;
+                    } else if (FT == i64) {
+                        var buf: [32]u8 = undefined;
+                        rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
+                    } else if (FT == bool) {
+                        rows_buf.appendSlice(gpa, if (row[i]) "true" else "false") catch return;
+                    } else if (FT == f64) {
+                        var buf: [32]u8 = undefined;
+                        rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
+                    }
+                    rows_buf.appendSlice(gpa, "</td>") catch return;
+                }
+                rows_buf.appendSlice(gpa, "<td>") catch return;
+                rows_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
+                rows_buf.appendSlice(gpa, M.table_name) catch return;
+                rows_buf.appendSlice(gpa, "/") catch return;
+                {
+                    var buf: [32]u8 = undefined;
+                    rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[0]}) catch "") catch return;
+                }
+                rows_buf.appendSlice(gpa, "/change/\">Edit</a> ") catch return;
+                rows_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
+                rows_buf.appendSlice(gpa, M.table_name) catch return;
+                rows_buf.appendSlice(gpa, "/") catch return;
+                {
+                    var buf: [32]u8 = undefined;
+                    rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[0]}) catch "") catch return;
+                }
+                rows_buf.appendSlice(gpa, "/delete/\">Delete</a>") catch return;
+                rows_buf.appendSlice(gpa, "</td></tr>\n") catch return;
+            }
+
+            // ── build header HTML ──────────────────────────────────────
+            var headers_buf: std.ArrayList(u8) = .empty;
+            defer headers_buf.deinit(gpa);
+            inline for (0..M.fields_len) |i| {
+                const f = M.fieldAt(i);
+                headers_buf.appendSlice(gpa, "<th>") catch return;
+                headers_buf.appendSlice(gpa, f.name) catch return;
+                headers_buf.appendSlice(gpa, "</th>") catch return;
+            }
+            headers_buf.appendSlice(gpa, "<th>Actions</th>") catch return;
+
             // ── try template rendering ─────────────────────────────────
             if (admin_engine) |engine| {
-                var headers_buf: std.ArrayList(u8) = .empty;
-                defer headers_buf.deinit(gpa);
-                inline for (0..M.fields_len) |i| {
-                    const f = M.fieldAt(i);
-                    headers_buf.appendSlice(gpa, "<th>") catch return;
-                    headers_buf.appendSlice(gpa, f.name) catch return;
-                    headers_buf.appendSlice(gpa, "</th>") catch return;
-                }
-                headers_buf.appendSlice(gpa, "<th>Actions</th>") catch return;
-
-                var rows_buf: std.ArrayList(u8) = .empty;
-                defer rows_buf.deinit(gpa);
-                for (rows.items) |row| {
-                    rows_buf.appendSlice(gpa, "<tr>") catch return;
-                    inline for (0..M.fields_len) |i| {
-                        rows_buf.appendSlice(gpa, "<td>") catch return;
-                        const FT = @typeInfo(query.RowType(M)).@"struct".field_types[i];
-                        if (FT == []const u8) {
-                            rows_buf.appendSlice(gpa, row[i]) catch return;
-                        } else if (FT == i64) {
-                            var buf: [32]u8 = undefined;
-                            rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
-                        } else if (FT == bool) {
-                            rows_buf.appendSlice(gpa, if (row[i]) "true" else "false") catch return;
-                        } else if (FT == f64) {
-                            var buf: [32]u8 = undefined;
-                            rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
-                        }
-                        rows_buf.appendSlice(gpa, "</td>") catch return;
-                    }
-                    rows_buf.appendSlice(gpa, "<td>") catch return;
-                    rows_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
-                    rows_buf.appendSlice(gpa, M.table_name) catch return;
-                    rows_buf.appendSlice(gpa, "/") catch return;
-                    {
-                        var buf: [32]u8 = undefined;
-                        rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[0]}) catch "") catch return;
-                    }
-                    rows_buf.appendSlice(gpa, "/change/\">Edit</a> ") catch return;
-                    rows_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
-                    rows_buf.appendSlice(gpa, M.table_name) catch return;
-                    rows_buf.appendSlice(gpa, "/") catch return;
-                    {
-                        var buf: [32]u8 = undefined;
-                        rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[0]}) catch "") catch return;
-                    }
-                    rows_buf.appendSlice(gpa, "/delete/\">Delete</a>") catch return;
-                    rows_buf.appendSlice(gpa, "</td></tr>\n") catch return;
-                }
-
                 var ctx = Context.init(gpa);
                 defer ctx.deinit();
                 ctx.put("table_name", .{ .string = M.table_name }) catch {};
                 ctx.put("field_headers", .{ .string = headers_buf.items }) catch {};
                 ctx.put("rows_html", .{ .string = rows_buf.items }) catch {};
+                ctx.put("pagination_html", .{ .string = pagination_html }) catch {};
                 if (renderTmpl(engine, res, "admin/list.html", &ctx)) return;
             }
 
@@ -337,7 +393,7 @@ fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
             defer html.deinit(gpa);
             html.appendSlice(gpa, "<!DOCTYPE html><html><head><title>") catch return;
             html.appendSlice(gpa, M.table_name) catch return;
-            html.appendSlice(gpa, "</title><meta name=\"viewport\" content=\"width=device-width\"><style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}h1{border-bottom:2px solid #eee;padding-bottom:.5em}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.5em;border-bottom:1px solid #ddd}th{font-weight:600}</style></head><body><h1>") catch return;
+            html.appendSlice(gpa, "</title><meta name=\"viewport\" content=\"width=device-width\"><style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}h1{border-bottom:2px solid #eee;padding-bottom:.5em}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.5em;border-bottom:1px solid #ddd}th{font-weight:600}.pagination{margin-top:1em;text-align:center}.pagination a,.pagination span{margin:0 .3em}.pagination a{color:#0366d6;text-decoration:none}.pagination a:hover{text-decoration:underline}</style></head><body><h1>") catch return;
             html.appendSlice(gpa, M.table_name) catch return;
             html.appendSlice(gpa, "</h1><a href=\"/admin/") catch return;
             html.appendSlice(gpa, M.table_name) catch return;
@@ -389,7 +445,9 @@ fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
                 html.appendSlice(gpa, "</td></tr>\n") catch return;
             }
 
-            html.appendSlice(gpa, "</tbody></table></body></html>") catch return;
+            html.appendSlice(gpa, "</tbody></table>") catch return;
+            html.appendSlice(gpa, pagination_html) catch return;
+            html.appendSlice(gpa, "</body></html>") catch return;
             const owned = html.toOwnedSlice(gpa) catch return;
             res.body = owned;
             _ = res.header("Content-Type", "text/html; charset=utf-8");
