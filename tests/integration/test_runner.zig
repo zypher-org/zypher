@@ -7,4 +7,5 @@ test {
     _ = @import("orm_test.zig");
     _ = @import("forms_test.zig");
     _ = @import("auth_test.zig");
+    _ = @import("admin_view_test.zig");
 }
