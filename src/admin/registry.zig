@@ -138,12 +138,12 @@ pub fn AdminSite(comptime config: anytype) type {
                     const base = "/admin/" ++ M.table_name;
                     const off = i * 7 + 1;
 
-                    result[off + 0] = Route.init(.get, base ++ "/",       listHandler(M));
-                    result[off + 1] = Route.init(.get, base ++ "/add/",   addHandler(M));
-                    result[off + 2] = Route.init(.post, base ++ "/add/",  createHandler(M));
-                    result[off + 3] = Route.init(.get, base ++ "/:id/change/",  changeHandler(M));
+                    result[off + 0] = Route.init(.get, base ++ "/", listHandler(M));
+                    result[off + 1] = Route.init(.get, base ++ "/add/", addHandler(M));
+                    result[off + 2] = Route.init(.post, base ++ "/add/", createHandler(M));
+                    result[off + 3] = Route.init(.get, base ++ "/:id/change/", changeHandler(M));
                     result[off + 4] = Route.init(.post, base ++ "/:id/change/", updateHandler(M));
-                    result[off + 5] = Route.init(.get, base ++ "/:id/delete/",  confirmDeleteHandler(M));
+                    result[off + 5] = Route.init(.get, base ++ "/:id/delete/", confirmDeleteHandler(M));
                     result[off + 6] = Route.init(.post, base ++ "/:id/delete/", deleteHandler(M));
                 }
             }

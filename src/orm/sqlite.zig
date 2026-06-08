@@ -1,12 +1,57 @@
 /// zypher ORM — thin SQLite3 C FFI wrapper.
-/// Uses @cImport for reliable C ABI binding.
+/// Manual extern declarations (Zig 0.17 removed @cImport).
 const std = @import("std");
 
 const log = std.log.scoped(.sqlite);
 
-const c = @cImport({
-    @cInclude("sqlite3.h");
-});
+const c = struct {
+    pub const sqlite3 = opaque {};
+    pub const sqlite3_stmt = opaque {};
+
+    pub const SQLITE_OK = 0;
+    pub const SQLITE_ROW = 100;
+    pub const SQLITE_DONE = 101;
+    pub const SQLITE_INTEGER = 1;
+    pub const SQLITE_FLOAT = 2;
+    pub const SQLITE_TEXT = 3;
+    pub const SQLITE_BLOB = 4;
+    pub const SQLITE_NULL = 5;
+    pub const SQLITE_CONSTRAINT = 19;
+
+    const destructor_type = *const fn (?*anyopaque) callconv(.c) void;
+    pub const SQLITE_TRANSIENT: destructor_type = @ptrFromInt(std.math.maxInt(usize));
+
+    pub extern fn sqlite3_open(path: [*:0]const u8, handle: *?*sqlite3) c_int;
+    pub extern fn sqlite3_close(handle: ?*sqlite3) c_int;
+    pub extern fn sqlite3_exec(
+        db: ?*sqlite3,
+        sql: [*:0]const u8,
+        callback: ?*const fn (?*anyopaque, c_int, ?*anyopaque, ?*anyopaque) callconv(.c) c_int,
+        arg: ?*anyopaque,
+        errmsg: ?*?*anyopaque,
+    ) c_int;
+    pub extern fn sqlite3_errmsg(db: ?*sqlite3) [*:0]const u8;
+    pub extern fn sqlite3_prepare_v2(
+        db: ?*sqlite3,
+        sql: [*:0]const u8,
+        nbytes: c_int,
+        stmt: *?*sqlite3_stmt,
+        tail: ?*?*const u8,
+    ) c_int;
+    pub extern fn sqlite3_last_insert_rowid(db: ?*sqlite3) i64;
+    pub extern fn sqlite3_changes(db: ?*sqlite3) c_int;
+    pub extern fn sqlite3_finalize(stmt: ?*sqlite3_stmt) c_int;
+    pub extern fn sqlite3_reset(stmt: ?*sqlite3_stmt) c_int;
+    pub extern fn sqlite3_bind_int64(stmt: ?*sqlite3_stmt, idx: c_int, value: i64) c_int;
+    pub extern fn sqlite3_bind_double(stmt: ?*sqlite3_stmt, idx: c_int, value: f64) c_int;
+    pub extern fn sqlite3_bind_text(stmt: ?*sqlite3_stmt, idx: c_int, text: [*]const u8, len: c_int, destructor: destructor_type) c_int;
+    pub extern fn sqlite3_bind_null(stmt: ?*sqlite3_stmt, idx: c_int) c_int;
+    pub extern fn sqlite3_step(stmt: ?*sqlite3_stmt) c_int;
+    pub extern fn sqlite3_column_type(stmt: ?*sqlite3_stmt, idx: c_int) c_int;
+    pub extern fn sqlite3_column_int64(stmt: ?*sqlite3_stmt, idx: c_int) i64;
+    pub extern fn sqlite3_column_double(stmt: ?*sqlite3_stmt, idx: c_int) f64;
+    pub extern fn sqlite3_column_text(stmt: ?*sqlite3_stmt, idx: c_int) [*]const u8;
+};
 
 // ── Public types ──────────────────────────────────────────────────────────
 

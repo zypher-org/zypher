@@ -44,7 +44,9 @@ test "password: empty password hashes and verifies" {
 }
 
 test "password: long password hashes and verifies" {
-    const long = "a" ** 1000;
+    var long_arr: [1000]u8 = undefined;
+    @memset(&long_arr, 'a');
+    const long = long_arr[0..];
     const hashed = try password.hash(std.testing.allocator, long);
     defer std.testing.allocator.free(hashed);
     try std.testing.expect(try password.verify(hashed, long));

@@ -64,24 +64,24 @@ pub const ModelOptions = struct {
 /// Define an ORM model from a table name and a struct type whose
 /// comptime-known default field values are FieldDef instances.
 pub fn Model(comptime table: [:0]const u8, comptime Fields: type) type {
-    const fields_info = @typeInfo(Fields).@"struct";
+    const field_names = std.meta.fieldNames(Fields);
     // Instantiate the struct to get default field values
     const fields_instance: Fields = .{};
 
     return struct {
         pub const table_name = table;
-        pub const fields_len = fields_info.fields.len;
+        pub const fields_len = field_names.len;
 
         /// Get field definition by index (comptime).
         pub fn fieldAt(comptime i: usize) FieldDef {
-            return @field(fields_instance, fields_info.fields[i].name);
+            return @field(fields_instance, field_names[i]);
         }
 
         /// Number of non-primary-key fields (for INSERT).
         pub const insert_field_count: comptime_int = blk: {
             var count: comptime_int = 0;
-            for (fields_info.fields) |fi| {
-                if (!@field(fields_instance, fi.name).primary) count += 1;
+            for (field_names) |name| {
+                if (!@field(fields_instance, name).primary) count += 1;
             }
             break :blk count;
         };
@@ -89,9 +89,9 @@ pub fn Model(comptime table: [:0]const u8, comptime Fields: type) type {
         /// Generate CREATE TABLE IF NOT EXISTS SQL.
         pub const create_table_sql: [:0]const u8 = blk: {
             var result: [:0]const u8 = "CREATE TABLE IF NOT EXISTS " ++ table ++ " (";
-            for (fields_info.fields, 0..) |fi, i| {
+            for (field_names, 0..) |name, i| {
                 if (i > 0) result = result ++ ", ";
-                const f = @field(fields_instance, fi.name);
+                const f = @field(fields_instance, name);
                 result = result ++ f.name ++ " ";
                 result = result ++ switch (f.kind) {
                     .integer => "INTEGER",
@@ -126,8 +126,8 @@ pub fn Model(comptime table: [:0]const u8, comptime Fields: type) type {
         pub const insert_sql: [:0]const u8 = blk: {
             var cols: [:0]const u8 = "";
             var placeholders: [:0]const u8 = "";
-            for (fields_info.fields) |fi| {
-                const f = @field(fields_instance, fi.name);
+            for (field_names) |name| {
+                const f = @field(fields_instance, name);
                 if (f.primary) continue;
                 if (cols.len > 0) {
                     cols = cols ++ ",";
@@ -142,9 +142,9 @@ pub fn Model(comptime table: [:0]const u8, comptime Fields: type) type {
         /// Generate SELECT all columns SQL.
         pub const select_all_sql: [:0]const u8 = blk: {
             var result: [:0]const u8 = "SELECT ";
-            for (fields_info.fields, 0..) |fi, i| {
+            for (field_names, 0..) |name, i| {
                 if (i > 0) result = result ++ ", ";
-                result = result ++ @field(fields_instance, fi.name).name;
+                result = result ++ @field(fields_instance, name).name;
             }
             break :blk result ++ " FROM " ++ table;
         };
@@ -156,8 +156,8 @@ pub fn Model(comptime table: [:0]const u8, comptime Fields: type) type {
         pub const update_by_id_sql: [:0]const u8 = blk: {
             var result: [:0]const u8 = "UPDATE " ++ table ++ " SET ";
             var first = true;
-            for (fields_info.fields) |fi| {
-                const f = @field(fields_instance, fi.name);
+            for (field_names) |name| {
+                const f = @field(fields_instance, name);
                 if (f.primary) continue;
                 if (!first) result = result ++ ", ";
                 first = false;

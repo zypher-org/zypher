@@ -15,16 +15,20 @@ test "regression: password verify timing within tolerance" {
     _ = try password.verify(hashed, "wrongpassword");
 
     // Measure successful verify
-    const t1_start = std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC) catch unreachable;
+    var ts1: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts1);
     _ = try password.verify(hashed, "testpassword");
-    const t1_end = std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC) catch unreachable;
-    const success_ns = (t1_end.sec - t1_start.sec) * 1_000_000_000 + (t1_end.nsec - t1_start.nsec);
+    var ts2: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts2);
+    const success_ns = (ts2.sec - ts1.sec) * 1_000_000_000 + (ts2.nsec - ts1.nsec);
 
     // Measure failed verify
-    const t2_start = std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC) catch unreachable;
+    var ts3: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts3);
     _ = try password.verify(hashed, "wrongpassword");
-    const t2_end = std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC) catch unreachable;
-    const fail_ns = (t2_end.sec - t2_start.sec) * 1_000_000_000 + (t2_end.nsec - t2_start.nsec);
+    var ts4: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts4);
+    const fail_ns = (ts4.sec - ts3.sec) * 1_000_000_000 + (ts4.nsec - ts3.nsec);
 
     // Both should take roughly the same time (PBKDF2 dominates, not the comparison)
     // Allow 50% tolerance since PBKDF2 iteration time varies

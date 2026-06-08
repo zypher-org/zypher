@@ -79,7 +79,7 @@ test "orm regression: integer injection in filter is safely bound" {
     var rows = try query.filter(Item, &db, std.testing.allocator, "value = ?", &.{.{ .int = 100 }});
     defer freeItemRows(&rows);
     try std.testing.expectEqual(@as(usize, 1), rows.items.len);
-    try std.testing.expectEqualStrings("item1", rows.items[0].name);
+    try std.testing.expectEqualStrings("item1", rows.items[0][1]);
 }
 
 test "orm regression: create with injection in text field is safely bound" {
@@ -94,7 +94,7 @@ test "orm regression: create with injection in text field is safely bound" {
     var row = try query.getById(Item, &db, std.testing.allocator, row_id);
     defer query.freeRow(Item, std.testing.allocator, &row);
     // The malicious string should be stored as-is, not executed as SQL
-    try std.testing.expectEqualStrings(malicious, row.name);
+    try std.testing.expectEqualStrings(malicious, row[1]);
 
     // Only one record should exist — the "hacked" insert did not execute
     try std.testing.expectEqual(@as(u64, 1), try query.count(Item, &db));

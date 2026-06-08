@@ -25,7 +25,8 @@ pub fn hash(gpa: std.mem.Allocator, plaintext: []const u8) ![]const u8 {
     // Generate random salt
     var salt: [SALT_LEN]u8 = undefined;
     var seed: [32]u8 = undefined;
-    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch return error.OutOfMemory;
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
     @memcpy(seed[0..8], std.mem.asBytes(&ts.sec));
     @memcpy(seed[8..16], std.mem.asBytes(&ts.nsec));
     var i: usize = 16;

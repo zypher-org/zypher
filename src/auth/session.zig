@@ -25,7 +25,8 @@ pub fn cookieConfig() CookieConfig {
 
 /// Get current unix timestamp using clock_gettime.
 fn unixTimestamp() i64 {
-    const ts = posix.clock_gettime(posix.CLOCK.REALTIME) catch return 0;
+    var ts: posix.timespec = undefined;
+    _ = posix.system.clock_gettime(posix.CLOCK.REALTIME, &ts);
     return ts.sec;
 }
 
@@ -33,7 +34,8 @@ fn unixTimestamp() i64 {
 /// Uses ChaCha CSPRNG seeded from POSIX clock_gettime for entropy.
 fn randomBytes(buf: []u8) void {
     var seed: [32]u8 = undefined;
-    const ts = posix.clock_gettime(posix.CLOCK.REALTIME) catch return;
+    var ts: posix.timespec = undefined;
+    _ = posix.system.clock_gettime(posix.CLOCK.REALTIME, &ts);
     @memcpy(seed[0..8], std.mem.asBytes(&ts.sec));
     @memcpy(seed[8..16], std.mem.asBytes(&ts.nsec));
     // Fill remaining with repeating pattern of timestamp bytes
