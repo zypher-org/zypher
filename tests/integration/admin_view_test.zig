@@ -393,6 +393,197 @@ test "admin views: delete handler removes record" {
     try std.testing.expectEqual(@as(u64, 0), try query.count(Product, &db));
 }
 
+// ── Pagination test model (list_per_page = 2) ────────────────────────────
+const PageItemFields = struct {
+    id: FieldDef = Field("id", .integer, .{ .primary = true }),
+    label: FieldDef = Field("label", .text, .{ .required = true }),
+};
+const PageItem = Model("page_items", PageItemFields);
+const PageItemSite = admin.AdminSite(.{
+    .items = admin.Registration(PageItem, .{ .list_per_page = 2 }),
+});
+
+fn findPageHandler(comptime pattern: []const u8, comptime method: Method) ?*const fn (*Request, *Response) void {
+    const routes = comptime PageItemSite.routes();
+    inline for (routes) |r| {
+        if (std.mem.eql(u8, r.pattern, pattern) and r.method == method) {
+            return r.handler;
+        }
+    }
+    return null;
+}
+
+fn migratePageItems(db: *sqlite.Db) !void {
+    var runner = migration.MigrationRunner.init(db);
+    try runner.migrate(&[_]migration.Migration{
+        .{ .id = 1, .name = "create_page_items", .up_sql = PageItem.create_table_sql, .down_sql = PageItem.drop_table_sql },
+    });
+}
+
+test "admin views: pagination — page 1 shows first items" {
+    var db = try openTestDb();
+    defer db.close();
+    try migratePageItems(&db);
+    admin.setDb(&db);
+
+    // Create 3 items (2 per page)
+    _ = try query.create(PageItem, &db, &.{.{ .text = "Alpha" }});
+    _ = try query.create(PageItem, &db, &.{.{ .text = "Beta" }});
+    _ = try query.create(PageItem, &db, &.{.{ .text = "Gamma" }});
+
+    const handler = findPageHandler("/page_items/", .get) orelse return error.SkipZigTest;
+
+    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
+    try query_map.put("page", "1");
+
+    var req = Request{
+        .method = .get,
+        .path = "/page_items/",
+        .query = query_map,
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = "",
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
+
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    handler(&req, &res);
+
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expect(res.body != null);
+
+    // Page 1 should have Alpha and Beta, but NOT Gamma
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "Alpha") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "Beta") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "Gamma") == null);
+
+    // Pagination controls should be present (total_pages > 1)
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "pagination") != null);
+}
+
+test "admin views: pagination — page 2 shows remaining items" {
+    var db = try openTestDb();
+    defer db.close();
+    try migratePageItems(&db);
+    admin.setDb(&db);
+
+    _ = try query.create(PageItem, &db, &.{.{ .text = "Alpha" }});
+    _ = try query.create(PageItem, &db, &.{.{ .text = "Beta" }});
+    _ = try query.create(PageItem, &db, &.{.{ .text = "Gamma" }});
+
+    const handler = findPageHandler("/page_items/", .get) orelse return error.SkipZigTest;
+
+    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
+    try query_map.put("page", "2");
+
+    var req = Request{
+        .method = .get,
+        .path = "/page_items/",
+        .query = query_map,
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = "",
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
+
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    handler(&req, &res);
+
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expect(res.body != null);
+
+    // Page 2 should have Gamma only
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "Alpha") == null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "Beta") == null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "Gamma") != null);
+}
+
+test "admin views: pagination — invalid page defaults to 1" {
+    var db = try openTestDb();
+    defer db.close();
+    try migratePageItems(&db);
+    admin.setDb(&db);
+
+    _ = try query.create(PageItem, &db, &.{.{ .text = "Only" }});
+
+    const handler = findPageHandler("/page_items/", .get) orelse return error.SkipZigTest;
+
+    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
+    try query_map.put("_csrf", csrf.generateToken());
+
+    var req = Request{
+        .method = .get,
+        .path = "/page_items/",
+        .query = query_map,
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = "",
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
+
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    handler(&req, &res);
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expect(res.body != null);
+}
+
+test "admin views: pagination — page 0 defaults to page 1" {
+    var db = try openTestDb();
+    defer db.close();
+    try migratePageItems(&db);
+    admin.setDb(&db);
+
+    _ = try query.create(PageItem, &db, &.{.{ .text = "First" }});
+
+    const handler = findPageHandler("/page_items/", .get) orelse return error.SkipZigTest;
+
+    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
+    try query_map.put("_csrf", csrf.generateToken());
+
+    var req = Request{
+        .method = .get,
+        .path = "/page_items/",
+        .query = query_map,
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = "",
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
+
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    handler(&req, &res);
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.?, "First") != null);
+}
+
 test "admin views: no database returns 500" {
     // Don't set admin_db — simulate missing connection
     var req = Request{

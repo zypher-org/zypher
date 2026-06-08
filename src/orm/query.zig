@@ -19,6 +19,7 @@ pub const QueryError = error{
 /// Row type returned by query functions. Fields match the model's FieldDef order.
 pub fn RowType(comptime M: type) type {
     comptime {
+        @setEvalBranchQuota(2000);
         var types: [M.fields_len]type = undefined;
         for (0..M.fields_len) |i| {
             const f = M.fieldAt(i);
