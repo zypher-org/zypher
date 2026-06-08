@@ -8,6 +8,8 @@ const query = @import("../orm/query.zig");
 const TemplateEngine = @import("../template/renderer.zig").TemplateEngine;
 const Context = @import("../template/renderer.zig").Context;
 const Value = @import("../template/renderer.zig").Value;
+const csrf = @import("../middleware/csrf.zig");
+const Session = @import("../auth/session.zig").Session;
 
 // ── Thread-local DB connection (set by the application before admin dispatch) ─
 
@@ -148,7 +150,8 @@ pub fn AdminSite(comptime config: anytype) type {
             return result;
         }
 
-        pub fn indexHandler(_: *Request, res: *Response) void {
+        pub fn indexHandler(req: *Request, res: *Response) void {
+            if (!requireAdmin(req, res)) return;
             const gpa = res.allocator;
 
             // ── try template rendering ─────────────────────────────────
@@ -210,6 +213,31 @@ pub fn AdminSite(comptime config: anytype) type {
 
 // ── Template rendering helper ─────────────────────────────────────────────
 
+fn requireAdmin(req: *Request, res: *Response) bool {
+    const user_ptr = req.user orelse {
+        _ = res.status(302);
+        _ = res.header("Location", "/login");
+        return false;
+    };
+    const session: *Session = @ptrCast(@alignCast(user_ptr));
+    const role = session.get("role") orelse {
+        _ = res.status(403);
+        res.text("Forbidden: admin access required") catch {};
+        return false;
+    };
+    if (!std.mem.eql(u8, role, "admin")) {
+        _ = res.status(403);
+        res.text("Forbidden: admin access required") catch {};
+        return false;
+    }
+    return true;
+}
+
+fn validateCsrf(req: *Request) bool {
+    const token = req.formValue("_csrf") orelse return false;
+    return csrf.validateToken(token);
+}
+
 fn renderTmpl(engine: *TemplateEngine, res: *Response, comptime name: []const u8, ctx: *Context) bool {
     const gpa = res.allocator;
     var aw = std.Io.Writer.Allocating.init(gpa);
@@ -227,7 +255,7 @@ fn renderTmpl(engine: *TemplateEngine, res: *Response, comptime name: []const u8
 fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
-            _ = req;
+            if (!requireAdmin(req, res)) return;
             const db = admin_db orelse {
                 _ = res.status(500);
                 res.text("Admin: no database") catch {};
@@ -373,7 +401,7 @@ fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
 fn addHandler(comptime M: type) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
-            _ = req;
+            if (!requireAdmin(req, res)) return;
             const gpa = res.allocator;
 
             // ── try template rendering ─────────────────────────────────
@@ -390,6 +418,9 @@ fn addHandler(comptime M: type) *const fn (*Request, *Response) void {
                         form_buf.appendSlice(gpa, "\"></label>\n") catch return;
                     }
                 }
+                form_buf.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
+                form_buf.appendSlice(gpa, csrf.generateToken()) catch return;
+                form_buf.appendSlice(gpa, "\">") catch return;
 
                 var ctx = Context.init(gpa);
                 defer ctx.deinit();
@@ -419,6 +450,9 @@ fn addHandler(comptime M: type) *const fn (*Request, *Response) void {
                 }
             }
 
+            html.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
+            html.appendSlice(gpa, csrf.generateToken()) catch return;
+            html.appendSlice(gpa, "\">") catch return;
             html.appendSlice(gpa, "<button type=\"submit\" style=\"margin-top:1em;padding:.5em 1em\">Save</button></form></body></html>") catch return;
             const owned = html.toOwnedSlice(gpa) catch return;
             res.body = owned;
@@ -431,6 +465,12 @@ fn addHandler(comptime M: type) *const fn (*Request, *Response) void {
 fn createHandler(comptime M: type) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
+            if (!requireAdmin(req, res)) return;
+            if (!validateCsrf(req)) {
+                _ = res.status(403);
+                res.text("CSRF token missing or invalid") catch {};
+                return;
+            }
             const db = admin_db orelse {
                 _ = res.status(500);
                 res.text("Admin: no database") catch {};
@@ -465,6 +505,7 @@ fn createHandler(comptime M: type) *const fn (*Request, *Response) void {
 fn changeHandler(comptime M: type) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
+            if (!requireAdmin(req, res)) return;
             const db = admin_db orelse {
                 _ = res.status(500);
                 res.text("Admin: no database") catch {};
@@ -515,6 +556,9 @@ fn changeHandler(comptime M: type) *const fn (*Request, *Response) void {
                         form_buf.appendSlice(gpa, "\"></label>\n") catch return;
                     }
                 }
+                form_buf.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
+                form_buf.appendSlice(gpa, csrf.generateToken()) catch return;
+                form_buf.appendSlice(gpa, "\">") catch return;
 
                 var ctx = Context.init(gpa);
                 defer ctx.deinit();
@@ -557,6 +601,9 @@ fn changeHandler(comptime M: type) *const fn (*Request, *Response) void {
                 }
             }
 
+            html.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
+            html.appendSlice(gpa, csrf.generateToken()) catch return;
+            html.appendSlice(gpa, "\">") catch return;
             html.appendSlice(gpa, "<button type=\"submit\" style=\"margin-top:1em;padding:.5em 1em\">Save</button></form></body></html>") catch return;
             const owned = html.toOwnedSlice(gpa) catch return;
             res.body = owned;
@@ -569,6 +616,12 @@ fn changeHandler(comptime M: type) *const fn (*Request, *Response) void {
 fn updateHandler(comptime M: type) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
+            if (!requireAdmin(req, res)) return;
+            if (!validateCsrf(req)) {
+                _ = res.status(403);
+                res.text("CSRF token missing or invalid") catch {};
+                return;
+            }
             const db = admin_db orelse {
                 _ = res.status(500);
                 res.text("Admin: no database") catch {};
@@ -613,6 +666,7 @@ fn updateHandler(comptime M: type) *const fn (*Request, *Response) void {
 fn confirmDeleteHandler(comptime M: type) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
+            if (!requireAdmin(req, res)) return;
             const db = admin_db orelse {
                 _ = res.status(500);
                 res.text("Admin: no database") catch {};
@@ -640,6 +694,7 @@ fn confirmDeleteHandler(comptime M: type) *const fn (*Request, *Response) void {
             if (admin_engine) |engine| {
                 var ctx = Context.init(gpa);
                 defer ctx.deinit();
+                ctx.put("_csrf", .{ .string = csrf.generateToken() }) catch {};
                 ctx.put("table_name", .{ .string = M.table_name }) catch {};
                 if (renderTmpl(engine, res, "admin/confirm_delete.html", &ctx)) return;
             }
@@ -649,7 +704,9 @@ fn confirmDeleteHandler(comptime M: type) *const fn (*Request, *Response) void {
             defer html.deinit(gpa);
             html.appendSlice(gpa, "<!DOCTYPE html><html><head><title>Delete ") catch return;
             html.appendSlice(gpa, M.table_name) catch return;
-            html.appendSlice(gpa, "</title><meta name=\"viewport\" content=\"width=device-width\"><style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:640px;margin:2em auto;padding:0 1em}button{padding:.5em 1em;cursor:pointer}</style></head><body><h1>Confirm Delete</h1><p>Are you sure?</p><form method=\"post\" style=\"display:inline\"><button type=\"submit\" style=\"background:#d73a49;color:white;border:none\">Delete</button></form> <a href=\"/admin/") catch return;
+            html.appendSlice(gpa, "</title><meta name=\"viewport\" content=\"width=device-width\"><style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:640px;margin:2em auto;padding:0 1em}button{padding:.5em 1em;cursor:pointer}</style></head><body><h1>Confirm Delete</h1><p>Are you sure?</p><form method=\"post\" style=\"display:inline\"><input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
+            html.appendSlice(gpa, csrf.generateToken()) catch return;
+            html.appendSlice(gpa, "\"><button type=\"submit\" style=\"background:#d73a49;color:white;border:none\">Delete</button></form> <a href=\"/admin/") catch return;
             html.appendSlice(gpa, M.table_name) catch return;
             html.appendSlice(gpa, "/\">Cancel</a></body></html>") catch return;
             const owned = html.toOwnedSlice(gpa) catch return;
@@ -663,6 +720,12 @@ fn confirmDeleteHandler(comptime M: type) *const fn (*Request, *Response) void {
 fn deleteHandler(comptime M: type) *const fn (*Request, *Response) void {
     const H = struct {
         fn handle(req: *Request, res: *Response) void {
+            if (!requireAdmin(req, res)) return;
+            if (!validateCsrf(req)) {
+                _ = res.status(403);
+                res.text("CSRF token missing or invalid") catch {};
+                return;
+            }
             const db = admin_db orelse {
                 _ = res.status(500);
                 res.text("Admin: no database") catch {};

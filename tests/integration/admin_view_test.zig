@@ -7,11 +7,14 @@ const schema = zypher.orm.schema;
 const query = zypher.orm.query;
 const migration = zypher.orm.migration;
 const admin = zypher.admin;
+const csrf = zypher.middleware.csrf;
+const Session = zypher.auth.session.Session;
 const Route = zypher.router.Route;
 const Request = zypher.core.Request;
 const Response = zypher.core.Response;
 const Method = zypher.core.Method;
 const RouteParams = zypher.router.RouteParams;
+const SESSION_ID_LEN = 32;
 
 const FieldDef = schema.FieldDef;
 const Field = schema.Field;
@@ -44,6 +47,24 @@ fn migrateProductTable(db: *sqlite.Db) !void {
     try runner.migrate(&migrations);
 }
 
+/// Create a session with admin role, set it on the request, and return the
+/// session pointer so the caller can deinit it after the handler runs.
+fn setAdminSession(req: *Request) !*Session {
+    const gpa = std.testing.allocator;
+    const session_data = std.StringHashMap([]const u8).init(gpa);
+    const session = try gpa.create(Session);
+    var id: [SESSION_ID_LEN]u8 = undefined;
+    @memset(&id, 0);
+    session.* = Session{
+        .id = id,
+        .data = session_data,
+        .expires_at = 0,
+    };
+    try session.put(gpa, "role", "admin");
+    req.user = @ptrCast(session);
+    return session;
+}
+
 /// Find a route handler by pattern and method from the Site routes.
 fn findHandler(comptime pattern: []const u8, comptime method: Method) ?*const fn (*Request, *Response) void {
     const routes = comptime Site.routes();
@@ -70,6 +91,11 @@ test "admin views: index returns 200 and lists registered models" {
         .allocator = std.testing.allocator,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -98,6 +124,11 @@ test "admin views: list view shows empty table" {
         .allocator = std.testing.allocator,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -131,6 +162,11 @@ test "admin views: list view shows created record" {
         .allocator = std.testing.allocator,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -160,6 +196,11 @@ test "admin views: add form renders correctly" {
         .allocator = std.testing.allocator,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -180,15 +221,23 @@ test "admin views: create handler inserts record" {
 
     const handler = findHandler("/admin/products/add/", .post) orelse return error.SkipZigTest;
 
+    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
+    try query_map.put("_csrf", csrf.generateToken());
+
     var req = Request{
         .method = .post,
         .path = "/admin/products/add/",
-        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .query = query_map,
         .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
         .body = "",
         .allocator = std.testing.allocator,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -235,6 +284,11 @@ test "admin views: create and then change handler shows existing values" {
         .params = params,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -274,6 +328,11 @@ test "admin views: delete confirmation renders" {
         .params = params,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -303,16 +362,24 @@ test "admin views: delete handler removes record" {
     defer params.deinit();
     try params.put("id", "1");
 
+    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
+    try query_map.put("_csrf", csrf.generateToken());
+
     var req = Request{
         .method = .post,
         .path = "/admin/products/1/delete/",
-        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .query = query_map,
         .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
         .body = "",
         .allocator = std.testing.allocator,
         .params = params,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -337,6 +404,11 @@ test "admin views: no database returns 500" {
         .allocator = std.testing.allocator,
     };
     defer req.deinit();
+    const admin_session = try setAdminSession(&req);
+    defer {
+        admin_session.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(admin_session);
+    }
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
