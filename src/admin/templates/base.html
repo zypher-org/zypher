@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{% block title %}Admin{% endblock %}</title>
+  <meta name="viewport" content="width=device-width">
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}
+    h1{border-bottom:2px solid #eee;padding-bottom:.5em}
+    a{color:#0366d6;text-decoration:none}
+    a:hover{text-decoration:underline}
+    nav{margin-bottom:1em}
+    nav a{margin-right:1em}
+    ul{list-style:none;padding:0}
+    li{margin:.5em 0}
+    table{border-collapse:collapse;width:100%}
+    th,td{text-align:left;padding:.5em;border-bottom:1px solid #ddd}
+    th{font-weight:600}
+    label{display:block;margin:.5em 0}
+    input[type=text]{width:100%;padding:.4em}
+    button{padding:.5em 1em;cursor:pointer;margin-top:1em}
+    .btn-delete{background:#d73a49;color:white;border:none;padding:.5em 1em;cursor:pointer}
+  </style>
+</head>
+<body>
+  <nav><a href="/admin/">Admin Home</a></nav>
+  {% block content %}{% endblock %}
+</body>
+</html>

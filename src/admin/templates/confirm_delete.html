@@ -1,0 +1,10 @@
+{% extends "admin/base.html" %}
+{% block title %}Delete {{ table_name }}{% endblock %}
+{% block content %}
+<h1>Confirm Delete</h1>
+<p>Are you sure you want to delete this {{ table_name }}?</p>
+<form method="post" style="display:inline">
+  <button type="submit" class="btn-delete">Delete</button>
+</form>
+<a href="/admin/{{ table_name }}/">Cancel</a>
+{% endblock %}
