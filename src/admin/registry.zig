@@ -10,6 +10,7 @@ const Context = @import("../template/renderer.zig").Context;
 const Value = @import("../template/renderer.zig").Value;
 const csrf = @import("../middleware/csrf.zig");
 const Session = @import("../auth/session.zig").Session;
+const log = std.log.scoped(.admin);
 
 // ── Thread-local DB connection (set by the application before admin dispatch) ─
 
@@ -549,11 +550,16 @@ fn createHandler(comptime M: type) *const fn (*Request, *Response) void {
                     idx += 1;
                 }
             }
-            _ = query.create(M, db, &values) catch {
+            const row_id = query.create(M, db, &values) catch {
                 _ = res.status(500);
                 res.text("Admin: create failed") catch {};
                 return;
             };
+            if (req.user) |user_ptr| {
+                const session: *Session = @ptrCast(@alignCast(user_ptr));
+                const who = session.get("username") orelse "unknown";
+                log.info("admin: {s} created {s}#{d}", .{ who, M.table_name, row_id });
+            }
             res.redirect("/admin/" ++ M.table_name ++ "/", 302) catch {};
         }
     };
@@ -715,6 +721,11 @@ fn updateHandler(comptime M: type) *const fn (*Request, *Response) void {
                 res.text("Admin: update failed") catch {};
                 return;
             };
+            if (req.user) |user_ptr| {
+                const session: *Session = @ptrCast(@alignCast(user_ptr));
+                const who = session.get("username") orelse "unknown";
+                log.info("admin: {s} updated {s}#{d}", .{ who, M.table_name, id });
+            }
             res.redirect("/admin/" ++ M.table_name ++ "/", 302) catch {};
         }
     };
@@ -804,6 +815,11 @@ fn deleteHandler(comptime M: type) *const fn (*Request, *Response) void {
                 res.text("Admin: delete failed") catch {};
                 return;
             };
+            if (req.user) |user_ptr| {
+                const session: *Session = @ptrCast(@alignCast(user_ptr));
+                const who = session.get("username") orelse "unknown";
+                log.info("admin: {s} deleted {s}#{d}", .{ who, M.table_name, id });
+            }
             res.redirect("/admin/" ++ M.table_name ++ "/", 302) catch {};
         }
     };
