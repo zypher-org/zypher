@@ -1,0 +1,14 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ table_name }}{% endblock %}
+{% block content %}
+<h1>{{ table_name }}</h1>
+<p><a href="/admin/{{ table_name }}/add/">Add {{ table_name }}</a></p>
+<table>
+  <thead>
+    <tr>{{ field_headers|safe }}</tr>
+  </thead>
+  <tbody>
+    {{ rows_html|safe }}
+  </tbody>
+</table>
+{% endblock %}

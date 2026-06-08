@@ -1,5 +1,6 @@
 /// zypher template renderer — renders parsed template AST with context values.
 /// Auto-escapes HTML by default; use |safe filter to bypass.
+/// Supports {{ var.field }}, {{ list.0 }}, {% include %}, {% extends %}.
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const lexer = @import("lexer.zig");
@@ -84,6 +85,7 @@ pub const Template = struct {
     allocator: std.mem.Allocator,
     nodes: ArrayList(parser.Node),
     source: []const u8,
+    engine: ?*anyopaque = null,
 
     pub fn fromSource(allocator: std.mem.Allocator, source: []const u8) !Template {
         var lx = lexer.Lexer.init(allocator, source);
@@ -113,6 +115,15 @@ pub const Template = struct {
     const RenderError = error{ OutOfMemory, WriteFailed };
 
     pub fn render(self: *Template, ctx: *Context, writer: *std.Io.Writer) RenderError!void {
+        // Handle {% extends %} as the first node
+        if (self.nodes.items.len > 0 and self.nodes.items[0].type == .extends_) {
+            if (self.engine) |eng| {
+                const engine: *TemplateEngine = @ptrCast(@alignCast(eng));
+                return self.renderExtended(engine, ctx, writer);
+            } else {
+                log.warn("extends ignored — no engine: {s}", .{self.nodes.items[0].value});
+            }
+        }
         for (self.nodes.items) |node| {
             try self.renderNode(node, ctx, writer);
         }
@@ -129,16 +140,52 @@ pub const Template = struct {
                     try self.renderNode(child, ctx, writer);
                 }
             },
-            .extends_ => log.warn("extends ignored in standalone render: {s}", .{node.value}),
-            .include => log.warn("include ignored in standalone render: {s}", .{node.value}),
+            .extends_ => {},
+            .include => {
+                if (self.engine) |eng| {
+                    const engine: *TemplateEngine = @ptrCast(@alignCast(eng));
+                    const included = engine.getTemplate(node.value) orelse {
+                        log.warn("template not found: {s}", .{node.value});
+                        return;
+                    };
+                    try included.render(ctx, writer);
+                } else {
+                    log.warn("include ignored — no engine: {s}", .{node.value});
+                }
+            },
         }
+    }
+
+    fn resolveVar(ctx: *Context, expr: []const u8) Value {
+        var dot_parts = std.mem.splitSequence(u8, expr, ".");
+        var current: Value = undefined;
+        var first = true;
+        while (dot_parts.next()) |part| {
+            const trimmed = std.mem.trim(u8, part, " \t");
+            if (first) {
+                current = ctx.get(trimmed) orelse Value.null_val;
+                first = false;
+            } else {
+                switch (current) {
+                    .map => |m| {
+                        current = m.get(trimmed) orelse Value.null_val;
+                    },
+                    .list => |items| {
+                        const idx = std.fmt.parseInt(usize, trimmed, 10) catch return Value.null_val;
+                        if (idx < items.len) current = items[idx] else current = Value.null_val;
+                    },
+                    else => current = Value.null_val,
+                }
+            }
+        }
+        return current;
     }
 
     fn renderVariable(self: *Template, expr: []const u8, ctx: *Context, writer: *std.Io.Writer) RenderError!void {
         _ = self;
         var parts = std.mem.splitSequence(u8, expr, " | ");
-        const var_name = std.mem.trim(u8, parts.first(), " \t");
-        const value = ctx.get(var_name) orelse Value.null_val;
+        const var_expr = std.mem.trim(u8, parts.first(), " \t");
+        const value = resolveVar(ctx, var_expr);
 
         var is_safe = false;
         while (parts.next()) |part| {
@@ -196,7 +243,7 @@ pub const Template = struct {
         const iterable = ctx.get(node.value) orelse return;
         switch (iterable) {
             .list => |items| {
-                for (items) |item| {
+                for (items, 0..) |item, i| {
                     var child_ctx = Context.init(self.allocator);
                     defer child_ctx.deinit();
 
@@ -206,12 +253,59 @@ pub const Template = struct {
                     }
                     try child_ctx.put(node.loop_var, item);
 
+                    var forloop_ctx = try self.allocator.create(Context);
+                    forloop_ctx.* = Context.init(self.allocator);
+                    try forloop_ctx.put("counter0", .{ .int = @as(i64, @intCast(i)) });
+                    try forloop_ctx.put("counter", .{ .int = @as(i64, @intCast(i + 1)) });
+                    try forloop_ctx.put("first", .{ .bool = i == 0 });
+                    try forloop_ctx.put("last", .{ .bool = i == items.len - 1 });
+                    try child_ctx.put("forloop", .{ .map = forloop_ctx });
+
                     for (node.children.items) |child| {
                         try self.renderNode(child, &child_ctx, writer);
                     }
+
+                    forloop_ctx.deinit();
+                    self.allocator.destroy(forloop_ctx);
                 }
             },
             else => log.warn("for iterable '{s}' is not a list", .{node.value}),
+        }
+    }
+    fn renderExtended(self: *Template, engine: *TemplateEngine, ctx: *Context, writer: *std.Io.Writer) RenderError!void {
+        const base_name = self.nodes.items[0].value;
+        const base_tmpl = engine.getTemplate(base_name) orelse {
+            log.warn("base template not found: {s}", .{base_name});
+            return;
+        };
+
+        var blocks = std.StringHashMap([]const parser.Node).init(self.allocator);
+        defer blocks.deinit();
+        for (self.nodes.items[1..]) |child_node| {
+            if (child_node.type == .block) {
+                try blocks.put(child_node.value, child_node.children.items);
+            }
+        }
+
+        try self.renderWithBlocks(base_tmpl, &blocks, ctx, writer);
+    }
+
+    fn renderWithBlocks(self: *Template, tmpl: *Template, blocks: *std.StringHashMap([]const parser.Node), ctx: *Context, writer: *std.Io.Writer) RenderError!void {
+        _ = self;
+        for (tmpl.nodes.items) |node| {
+            if (node.type == .block) {
+                if (blocks.get(node.value)) |child_children| {
+                    for (child_children) |child_node| {
+                        try tmpl.renderNode(child_node, ctx, writer);
+                    }
+                } else {
+                    for (node.children.items) |child_node| {
+                        try tmpl.renderNode(child_node, ctx, writer);
+                    }
+                }
+            } else {
+                try tmpl.renderNode(node, ctx, writer);
+            }
         }
     }
 };
@@ -236,12 +330,17 @@ pub const TemplateEngine = struct {
         self.cache.deinit();
     }
 
+    pub fn getTemplate(self: *TemplateEngine, name: []const u8) ?*Template {
+        return self.cache.getPtr(name);
+    }
+
     pub fn load(self: *TemplateEngine, name: []const u8, source: []const u8) !*Template {
         if (self.cache.getPtr(name)) |tmpl| {
             log.debug("cache hit for template '{s}'", .{name});
             return tmpl;
         }
-        const tmpl = try Template.fromSource(self.allocator, source);
+        var tmpl = try Template.fromSource(self.allocator, source);
+        tmpl.engine = @ptrCast(self);
         try self.cache.put(name, tmpl);
         log.debug("loaded and cached template '{s}'", .{name});
         return self.cache.getPtr(name).?;

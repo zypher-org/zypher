@@ -1,0 +1,10 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block content %}
+<h1>{{ page_title }}</h1>
+<form method="post">
+  {{ form_fields|safe }}
+  <button type="submit">Save</button>
+</form>
+<p><a href="/admin/{{ table_name }}/">Cancel</a></p>
+{% endblock %}

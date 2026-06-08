@@ -5,13 +5,21 @@ const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const sqlite = @import("../orm/sqlite.zig");
 const query = @import("../orm/query.zig");
+const TemplateEngine = @import("../template/renderer.zig").TemplateEngine;
+const Context = @import("../template/renderer.zig").Context;
+const Value = @import("../template/renderer.zig").Value;
 
 // ── Thread-local DB connection (set by the application before admin dispatch) ─
 
 threadlocal var admin_db: ?*sqlite.Db = null;
+threadlocal var admin_engine: ?*TemplateEngine = null;
 
 pub fn setDb(db: *sqlite.Db) void {
     admin_db = db;
+}
+
+pub fn setEngine(engine: *TemplateEngine) void {
+    admin_engine = engine;
 }
 
 // ── Configuration ───────────────────────────────────────────────────────────
@@ -94,6 +102,14 @@ pub fn AdminSite(comptime config: anytype) type {
             @compileError("AdminSite: unknown table '" ++ table ++ "'");
         }
 
+        pub fn loadTemplates(engine: *TemplateEngine) void {
+            _ = engine.load("admin/base.html", @embedFile("templates/base.html")) catch {};
+            _ = engine.load("admin/index.html", @embedFile("templates/index.html")) catch {};
+            _ = engine.load("admin/list.html", @embedFile("templates/list.html")) catch {};
+            _ = engine.load("admin/form.html", @embedFile("templates/form.html")) catch {};
+            _ = engine.load("admin/confirm_delete.html", @embedFile("templates/confirm_delete.html")) catch {};
+        }
+
         pub fn hasDuplicates() bool {
             comptime {
                 var seen: [count][]const u8 = undefined;
@@ -134,6 +150,30 @@ pub fn AdminSite(comptime config: anytype) type {
 
         pub fn indexHandler(_: *Request, res: *Response) void {
             const gpa = res.allocator;
+
+            // ── try template rendering ─────────────────────────────────
+            if (admin_engine) |engine| {
+                var list_html: std.ArrayList(u8) = .empty;
+                defer list_html.deinit(gpa);
+                list_html.appendSlice(gpa, "<ul>\n") catch return;
+                inline for (fields, 0..) |name, idx| {
+                    _ = name;
+                    const m = model_meta[idx];
+                    list_html.appendSlice(gpa, "<li><a href=\"/admin/") catch return;
+                    list_html.appendSlice(gpa, m.table_name) catch return;
+                    list_html.appendSlice(gpa, "/\">") catch return;
+                    list_html.appendSlice(gpa, m.verbose_name_plural) catch return;
+                    list_html.appendSlice(gpa, "</a></li>\n") catch return;
+                }
+                list_html.appendSlice(gpa, "</ul>\n") catch return;
+
+                var ctx = Context.init(gpa);
+                defer ctx.deinit();
+                ctx.put("index_html", .{ .string = list_html.items }) catch {};
+                if (renderTmpl(engine, res, "admin/index.html", &ctx)) return;
+            }
+
+            // ── fallback inline HTML ───────────────────────────────────
             var html: std.ArrayList(u8) = .empty;
             defer html.deinit(gpa);
 
@@ -168,6 +208,20 @@ pub fn AdminSite(comptime config: anytype) type {
     };
 }
 
+// ── Template rendering helper ─────────────────────────────────────────────
+
+fn renderTmpl(engine: *TemplateEngine, res: *Response, comptime name: []const u8, ctx: *Context) bool {
+    const gpa = res.allocator;
+    var aw = std.Io.Writer.Allocating.init(gpa);
+    defer aw.deinit();
+    engine.render(name, ctx, &aw.writer) catch return false;
+    var buf = aw.toArrayList();
+    const owned = buf.toOwnedSlice(gpa) catch return false;
+    res.body = owned;
+    _ = res.header("Content-Type", "text/html; charset=utf-8");
+    return true;
+}
+
 // ── Per-model handler factories ────────────────────────────────────────────
 
 fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
@@ -190,6 +244,67 @@ fn listHandler(comptime M: type) *const fn (*Request, *Response) void {
                 rows.deinit(gpa);
             }
 
+            // ── try template rendering ─────────────────────────────────
+            if (admin_engine) |engine| {
+                var headers_buf: std.ArrayList(u8) = .empty;
+                defer headers_buf.deinit(gpa);
+                inline for (0..M.fields_len) |i| {
+                    const f = M.fieldAt(i);
+                    headers_buf.appendSlice(gpa, "<th>") catch return;
+                    headers_buf.appendSlice(gpa, f.name) catch return;
+                    headers_buf.appendSlice(gpa, "</th>") catch return;
+                }
+                headers_buf.appendSlice(gpa, "<th>Actions</th>") catch return;
+
+                var rows_buf: std.ArrayList(u8) = .empty;
+                defer rows_buf.deinit(gpa);
+                for (rows.items) |row| {
+                    rows_buf.appendSlice(gpa, "<tr>") catch return;
+                    inline for (0..M.fields_len) |i| {
+                        rows_buf.appendSlice(gpa, "<td>") catch return;
+                        const FT = @typeInfo(query.RowType(M)).@"struct".field_types[i];
+                        if (FT == []const u8) {
+                            rows_buf.appendSlice(gpa, row[i]) catch return;
+                        } else if (FT == i64) {
+                            var buf: [32]u8 = undefined;
+                            rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
+                        } else if (FT == bool) {
+                            rows_buf.appendSlice(gpa, if (row[i]) "true" else "false") catch return;
+                        } else if (FT == f64) {
+                            var buf: [32]u8 = undefined;
+                            rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
+                        }
+                        rows_buf.appendSlice(gpa, "</td>") catch return;
+                    }
+                    rows_buf.appendSlice(gpa, "<td>") catch return;
+                    rows_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
+                    rows_buf.appendSlice(gpa, M.table_name) catch return;
+                    rows_buf.appendSlice(gpa, "/") catch return;
+                    {
+                        var buf: [32]u8 = undefined;
+                        rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[0]}) catch "") catch return;
+                    }
+                    rows_buf.appendSlice(gpa, "/change/\">Edit</a> ") catch return;
+                    rows_buf.appendSlice(gpa, "<a href=\"/admin/") catch return;
+                    rows_buf.appendSlice(gpa, M.table_name) catch return;
+                    rows_buf.appendSlice(gpa, "/") catch return;
+                    {
+                        var buf: [32]u8 = undefined;
+                        rows_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[0]}) catch "") catch return;
+                    }
+                    rows_buf.appendSlice(gpa, "/delete/\">Delete</a>") catch return;
+                    rows_buf.appendSlice(gpa, "</td></tr>\n") catch return;
+                }
+
+                var ctx = Context.init(gpa);
+                defer ctx.deinit();
+                ctx.put("table_name", .{ .string = M.table_name }) catch {};
+                ctx.put("field_headers", .{ .string = headers_buf.items }) catch {};
+                ctx.put("rows_html", .{ .string = rows_buf.items }) catch {};
+                if (renderTmpl(engine, res, "admin/list.html", &ctx)) return;
+            }
+
+            // ── fallback inline HTML ───────────────────────────────────
             var html: std.ArrayList(u8) = .empty;
             defer html.deinit(gpa);
             html.appendSlice(gpa, "<!DOCTYPE html><html><head><title>") catch return;
@@ -260,6 +375,31 @@ fn addHandler(comptime M: type) *const fn (*Request, *Response) void {
         fn handle(req: *Request, res: *Response) void {
             _ = req;
             const gpa = res.allocator;
+
+            // ── try template rendering ─────────────────────────────────
+            if (admin_engine) |engine| {
+                var form_buf: std.ArrayList(u8) = .empty;
+                defer form_buf.deinit(gpa);
+                inline for (0..M.fields_len) |i| {
+                    const f = M.fieldAt(i);
+                    if (!f.primary) {
+                        form_buf.appendSlice(gpa, "<label>") catch return;
+                        form_buf.appendSlice(gpa, f.name) catch return;
+                        form_buf.appendSlice(gpa, ": <input type=\"text\" name=\"") catch return;
+                        form_buf.appendSlice(gpa, f.name) catch return;
+                        form_buf.appendSlice(gpa, "\"></label>\n") catch return;
+                    }
+                }
+
+                var ctx = Context.init(gpa);
+                defer ctx.deinit();
+                ctx.put("page_title", .{ .string = "Add " ++ M.table_name }) catch {};
+                ctx.put("table_name", .{ .string = M.table_name }) catch {};
+                ctx.put("form_fields", .{ .string = form_buf.items }) catch {};
+                if (renderTmpl(engine, res, "admin/form.html", &ctx)) return;
+            }
+
+            // ── fallback inline HTML ───────────────────────────────────
             var html: std.ArrayList(u8) = .empty;
             defer html.deinit(gpa);
             html.appendSlice(gpa, "<!DOCTYPE html><html><head><title>Add ") catch return;
@@ -348,6 +488,43 @@ fn changeHandler(comptime M: type) *const fn (*Request, *Response) void {
             };
             defer query.freeRow(M, gpa, @constCast(&row));
 
+            // ── try template rendering ─────────────────────────────────
+            if (admin_engine) |engine| {
+                var form_buf: std.ArrayList(u8) = .empty;
+                defer form_buf.deinit(gpa);
+                inline for (0..M.fields_len) |i| {
+                    const f = M.fieldAt(i);
+                    if (!f.primary) {
+                        form_buf.appendSlice(gpa, "<label>") catch return;
+                        form_buf.appendSlice(gpa, f.name) catch return;
+                        form_buf.appendSlice(gpa, ": <input type=\"text\" name=\"") catch return;
+                        form_buf.appendSlice(gpa, f.name) catch return;
+                        form_buf.appendSlice(gpa, "\" value=\"") catch return;
+                        const FT = @typeInfo(query.RowType(M)).@"struct".field_types[i];
+                        if (FT == []const u8) {
+                            form_buf.appendSlice(gpa, row[i]) catch return;
+                        } else if (FT == i64) {
+                            var buf: [32]u8 = undefined;
+                            form_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
+                        } else if (FT == bool) {
+                            form_buf.appendSlice(gpa, if (row[i]) "1" else "0") catch return;
+                        } else if (FT == f64) {
+                            var buf: [32]u8 = undefined;
+                            form_buf.appendSlice(gpa, std.fmt.bufPrint(&buf, "{d}", .{row[i]}) catch "") catch return;
+                        }
+                        form_buf.appendSlice(gpa, "\"></label>\n") catch return;
+                    }
+                }
+
+                var ctx = Context.init(gpa);
+                defer ctx.deinit();
+                ctx.put("page_title", .{ .string = "Change " ++ M.table_name }) catch {};
+                ctx.put("table_name", .{ .string = M.table_name }) catch {};
+                ctx.put("form_fields", .{ .string = form_buf.items }) catch {};
+                if (renderTmpl(engine, res, "admin/form.html", &ctx)) return;
+            }
+
+            // ── fallback inline HTML ───────────────────────────────────
             var html: std.ArrayList(u8) = .empty;
             defer html.deinit(gpa);
             html.appendSlice(gpa, "<!DOCTYPE html><html><head><title>Change ") catch return;
@@ -459,6 +636,15 @@ fn confirmDeleteHandler(comptime M: type) *const fn (*Request, *Response) void {
             };
             defer query.freeRow(M, gpa, @constCast(&row));
 
+            // ── try template rendering ─────────────────────────────────
+            if (admin_engine) |engine| {
+                var ctx = Context.init(gpa);
+                defer ctx.deinit();
+                ctx.put("table_name", .{ .string = M.table_name }) catch {};
+                if (renderTmpl(engine, res, "admin/confirm_delete.html", &ctx)) return;
+            }
+
+            // ── fallback inline HTML ───────────────────────────────────
             var html: std.ArrayList(u8) = .empty;
             defer html.deinit(gpa);
             html.appendSlice(gpa, "<!DOCTYPE html><html><head><title>Delete ") catch return;
