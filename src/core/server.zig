@@ -67,11 +67,8 @@ pub const Server = struct {
         _ = parts.next() orelse return error.BadRequest; // version
 
         const method: Method = method: {
-            // Try to match against std.http.Method strings
-            inline for (@typeInfo(std.http.Method).@"enum".fields) |field| {
-                if (std.mem.eql(u8, method_str, field.name)) {
-                    break :method Method.fromStdString(@enumFromInt(field.value));
-                }
+            if (std.meta.stringToEnum(std.http.Method, method_str)) |std_method| {
+                break :method Method.fromStdString(std_method);
             }
             break :method .get;
         };

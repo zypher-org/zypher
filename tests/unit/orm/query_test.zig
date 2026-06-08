@@ -75,9 +75,9 @@ test "query: get by id returns record" {
 
     var row = try query.getById(Item, &db, std.testing.allocator, row_id);
     defer query.freeRow(Item, std.testing.allocator, &row);
-    try std.testing.expectEqual(row_id, row.id);
-    try std.testing.expectEqualStrings("beta", row.name);
-    try std.testing.expectEqual(@as(i64, 20), row.value);
+    try std.testing.expectEqual(row_id, row[0]);
+    try std.testing.expectEqualStrings("beta", row[1]);
+    try std.testing.expectEqual(@as(i64, 20), row[2]);
 }
 
 test "query: get by id returns NotFound for missing record" {
@@ -120,8 +120,8 @@ test "query: updateById modifies a record" {
 
     var row = try query.getById(Item, &db, std.testing.allocator, row_id);
     defer query.freeRow(Item, std.testing.allocator, &row);
-    try std.testing.expectEqualStrings("updated", row.name);
-    try std.testing.expectEqual(@as(i64, 200), row.value);
+    try std.testing.expectEqualStrings("updated", row[1]);
+    try std.testing.expectEqual(@as(i64, 200), row[2]);
 }
 
 test "query: deleteById removes a record" {
@@ -180,8 +180,8 @@ test "query: filter with LIMIT and OFFSET" {
     var rows = try query.filterLimitOffset(Item, &db, std.testing.allocator, "", &.{}, 2, 1);
     defer freeItemRows(&rows);
     try std.testing.expectEqual(@as(usize, 2), rows.items.len);
-    try std.testing.expectEqualStrings("b", rows.items[0].name);
-    try std.testing.expectEqualStrings("c", rows.items[1].name);
+    try std.testing.expectEqualStrings("b", rows.items[0][1]);
+    try std.testing.expectEqualStrings("c", rows.items[1][1]);
 }
 
 test "query: SQL injection is safely bound, not injected" {

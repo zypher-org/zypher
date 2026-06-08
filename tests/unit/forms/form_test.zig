@@ -119,9 +119,9 @@ test "form: cleanedData returns typed values after validation" {
     try std.testing.expect(bound.validate());
 
     const cleaned = bound.cleanedData();
-    try std.testing.expectEqualStrings("alice", cleaned.username);
-    try std.testing.expectEqualStrings("alice@example.com", cleaned.email);
-    try std.testing.expectEqual(@as(i64, 30), cleaned.age);
+    try std.testing.expectEqualStrings("alice", cleaned[0]);
+    try std.testing.expectEqualStrings("alice@example.com", cleaned[1]);
+    try std.testing.expectEqual(@as(i64, 30), cleaned[2]);
 }
 
 test "form: cleanedData with invalid integer returns 0" {
@@ -135,5 +135,5 @@ test "form: cleanedData with invalid integer returns 0" {
     defer bound.deinit();
     // Validation may pass (age is optional), but integer parsing fails
     const cleaned = bound.cleanedData();
-    try std.testing.expectEqual(@as(i64, 0), cleaned.age);
+    try std.testing.expectEqual(@as(i64, 0), cleaned[2]);
 }

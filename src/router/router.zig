@@ -20,10 +20,10 @@ pub const Router = struct {
     pub fn init(comptime routes: anytype, not_found: *const fn (*Request, *Response) void) Router {
         // Validate all patterns at comptime
         const route_list = comptime blk: {
-            const fields = std.meta.fields(@TypeOf(routes));
-            var list: [fields.len]Route = undefined;
-            for (fields, 0..) |field, i| {
-                const r = @field(routes, field.name);
+            const field_names = std.meta.fieldNames(@TypeOf(routes));
+            var list: [field_names.len]Route = undefined;
+            for (field_names, 0..) |name, i| {
+                const r = @field(routes, name);
                 Route.validatePattern(r.pattern) catch |err| {
                     @compileError("Invalid route pattern '" ++ r.pattern ++ "': " ++ @errorName(err));
                 };
@@ -47,7 +47,7 @@ pub const Router = struct {
         defer params.deinit();
 
         var path_matched = false;
-        var allowed_methods: [7]bool = .{false} ** 7; // one per Method variant
+        var allowed_methods: [7]bool = std.mem.zeroes([7]bool); // one per Method variant
         var allowed_count: usize = 0;
 
         for (self.routes) |r| {

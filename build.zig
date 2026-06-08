@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) void {
     // ── Run the CLI ─────────────────────────────────────────────────
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
+    run_cmd.addPassthruArgs();
 
     const run_step = b.step("run", "Run the zypher CLI");
     run_step.dependOn(&run_cmd.step);
@@ -69,7 +69,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_demo_cmd = b.addRunArtifact(demo_exe);
-    if (b.args) |args| run_demo_cmd.addArgs(args);
+    run_demo_cmd.addPassthruArgs();
 
     const run_demo_step = b.step("run-demo", "Run the demo app");
     run_demo_step.dependOn(&run_demo_cmd.step);

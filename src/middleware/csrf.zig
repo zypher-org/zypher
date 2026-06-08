@@ -17,12 +17,12 @@ const secret = "zypher-csrf-secret-key-2026";
 /// Generate a CSRF token. In a real implementation this would be HMAC
 /// of the session ID with the secret. For v1, we use a fixed token
 /// derived from the secret.
-fn generateToken() []const u8 {
+pub fn generateToken() []const u8 {
     return secret;
 }
 
 /// Validate a CSRF token against the expected value.
-fn validateToken(token: []const u8) bool {
+pub fn validateToken(token: []const u8) bool {
     return std.mem.eql(u8, token, secret);
 }
 

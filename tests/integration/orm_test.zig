@@ -64,11 +64,11 @@ test "orm integration: full lifecycle — migrate, create, read, update, delete"
     // 3. Read the user back by ID
     var row = try query.getById(User, &db, std.testing.allocator, row_id);
     defer query.freeRow(User, std.testing.allocator, &row);
-    try std.testing.expectEqual(row_id, row.id);
-    try std.testing.expectEqualStrings("alice@example.com", row.email);
-    try std.testing.expectEqualStrings("Alice", row.name);
-    try std.testing.expectEqual(@as(i64, 30), row.age);
-    try std.testing.expect(row.active);
+    try std.testing.expectEqual(row_id, row[0]);
+    try std.testing.expectEqualStrings("alice@example.com", row[1]);
+    try std.testing.expectEqualStrings("Alice", row[2]);
+    try std.testing.expectEqual(@as(i64, 30), row[3]);
+    try std.testing.expect(row[4]);
 
     // 4. Update the user
     try query.updateById(User, &db, row_id, &.{
@@ -81,10 +81,10 @@ test "orm integration: full lifecycle — migrate, create, read, update, delete"
     // 5. Verify the update
     var updated = try query.getById(User, &db, std.testing.allocator, row_id);
     defer query.freeRow(User, std.testing.allocator, &updated);
-    try std.testing.expectEqualStrings("alice.new@example.com", updated.email);
-    try std.testing.expectEqualStrings("Alice Updated", updated.name);
-    try std.testing.expectEqual(@as(i64, 31), updated.age);
-    try std.testing.expect(!updated.active);
+    try std.testing.expectEqualStrings("alice.new@example.com", updated[1]);
+    try std.testing.expectEqualStrings("Alice Updated", updated[2]);
+    try std.testing.expectEqual(@as(i64, 31), updated[3]);
+    try std.testing.expect(!updated[4]);
 
     // 6. Delete the user
     try query.deleteById(User, &db, row_id);
@@ -130,14 +130,14 @@ test "orm integration: multiple records, filter, and pagination" {
     var filtered = try query.filter(User, &db, std.testing.allocator, "name = ?", &.{.{ .text = "Bob" }});
     defer freeUserRows(&filtered);
     try std.testing.expectEqual(@as(usize, 1), filtered.items.len);
-    try std.testing.expectEqualStrings("Bob", filtered.items[0].name);
+    try std.testing.expectEqualStrings("Bob", filtered.items[0][2]);
 
     // Filter with limit and offset (page 2 of 2)
     var page = try query.filterLimitOffset(User, &db, std.testing.allocator, "", &.{}, 2, 2);
     defer freeUserRows(&page);
     try std.testing.expectEqual(@as(usize, 2), page.items.len);
-    try std.testing.expectEqualStrings("Charlie", page.items[0].name);
-    try std.testing.expectEqualStrings("Diana", page.items[1].name);
+    try std.testing.expectEqualStrings("Charlie", page.items[0][2]);
+    try std.testing.expectEqualStrings("Diana", page.items[1][2]);
 }
 
 test "orm integration: migration rollback and re-apply" {

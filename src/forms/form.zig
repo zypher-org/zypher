@@ -31,25 +31,17 @@ pub fn Field(comptime name: [:0]const u8, comptime kind: FieldKind, comptime opt
 /// Data type returned by cleanedData(). Fields match the form definition order.
 pub fn DataType(comptime F: type) type {
     comptime {
-        const info = @typeInfo(F).@"struct";
-        var names: [info.fields.len][]const u8 = undefined;
-        var types: [info.fields.len]type = undefined;
-        var attrs: [info.fields.len]std.builtin.Type.StructField.Attributes = undefined;
-        for (info.fields, 0..) |field, i| {
-            const f = @field(@as(F, .{}), field.name);
-            names[i] = f.name;
+        const field_names = std.meta.fieldNames(F);
+        var types: [field_names.len]type = undefined;
+        for (field_names, 0..) |field_name, i| {
+            const f = @field(@as(F, .{}), field_name);
             types[i] = switch (f.kind) {
                 .text => []const u8,
                 .integer => i64,
                 .boolean => bool,
             };
-            attrs[i] = .{
-                .@"align" = null,
-                .@"comptime" = false,
-                .default_value_ptr = null,
-            };
         }
-        return @Struct(.auto, null, &names, &types, &attrs);
+        return @Tuple(&types);
     }
 }
 
@@ -59,14 +51,14 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
         pub const FormName = name;
         pub const FieldsType = Fields;
         pub const Data = DataType(FieldsType);
-        pub const fields_len = @typeInfo(FieldsType).@"struct".fields.len;
+        pub const fields_len = std.meta.fieldNames(FieldsType).len;
 
         const Self = @This();
 
         /// Get a FieldDef by index.
         pub fn fieldAt(comptime i: usize) FieldDef {
-            const info = @typeInfo(FieldsType).@"struct";
-            return @field(@as(FieldsType, .{}), info.fields[i].name);
+            const names = std.meta.fieldNames(FieldsType);
+            return @field(@as(FieldsType, .{}), names[i]);
         }
 
         /// Bind form data from a string map (typically from POST body parsing).
@@ -137,15 +129,13 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
             /// Return typed cleaned data after validation.
             pub fn cleanedData(self: *BoundForm) Data {
                 var result: Data = undefined;
-                const data_fields = @typeInfo(Data).@"struct".fields;
                 inline for (0..fields_len) |i| {
                     const f = comptime fieldAt(i);
-                    const fname = data_fields[i].name;
                     const value = self.getValue(f.name);
                     switch (f.kind) {
-                        .text => @field(result, fname) = value,
-                        .integer => @field(result, fname) = std.fmt.parseInt(i64, value, 10) catch 0,
-                        .boolean => @field(result, fname) = (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "1")),
+                        .text => result[i] = value,
+                        .integer => result[i] = std.fmt.parseInt(i64, value, 10) catch 0,
+                        .boolean => result[i] = (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "1")),
                     }
                 }
                 return result;

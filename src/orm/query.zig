@@ -19,48 +19,38 @@ pub const QueryError = error{
 /// Row type returned by query functions. Fields match the model's FieldDef order.
 pub fn RowType(comptime M: type) type {
     comptime {
-        var names: [M.fields_len][]const u8 = undefined;
         var types: [M.fields_len]type = undefined;
-        var attrs: [M.fields_len]std.builtin.Type.StructField.Attributes = undefined;
         for (0..M.fields_len) |i| {
             const f = M.fieldAt(i);
-            names[i] = f.name;
             types[i] = switch (f.kind) {
                 .integer => i64,
                 .float => f64,
                 .text => []const u8,
                 .boolean => bool,
             };
-            attrs[i] = .{
-                .@"align" = null,
-                .@"comptime" = false,
-                .default_value_ptr = null,
-            };
         }
-        return @Struct(.auto, null, &names, &types, &attrs);
+        return @Tuple(&types);
     }
 }
 
 /// Read a row from the current statement step, copying text fields into owned memory.
 fn readRow(comptime M: type, stmt: *sqlite.Stmt, gpa: std.mem.Allocator) QueryError!RowType(M) {
     var row: RowType(M) = undefined;
-    const row_fields = @typeInfo(RowType(M)).@"struct".fields;
     inline for (0..M.fields_len) |i| {
-        const fname = row_fields[i].name;
-        const FieldType = row_fields[i].type;
+        const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
         if (FieldType == i64) {
             const val = stmt.column(.integer, @intCast(i)) catch return error.ColumnFailed;
-            @field(row, fname) = val.int;
+            row[i] = val.int;
         } else if (FieldType == f64) {
             const val = stmt.column(.float, @intCast(i)) catch return error.ColumnFailed;
-            @field(row, fname) = val.float;
+            row[i] = val.float;
         } else if (FieldType == []const u8) {
             const val = stmt.column(.text, @intCast(i)) catch return error.ColumnFailed;
             const owned = gpa.dupe(u8, val.text) catch return error.AllocatorFailed;
-            @field(row, fname) = owned;
+            row[i] = owned;
         } else if (FieldType == bool) {
             const val = stmt.column(.integer, @intCast(i)) catch return error.ColumnFailed;
-            @field(row, fname) = (val.int != 0);
+            row[i] = (val.int != 0);
         }
     }
     return row;
@@ -68,13 +58,10 @@ fn readRow(comptime M: type, stmt: *sqlite.Stmt, gpa: std.mem.Allocator) QueryEr
 
 /// Free owned text memory in a row.
 pub fn freeRow(comptime M: type, gpa: std.mem.Allocator, row: *RowType(M)) void {
-    const row_fields = @typeInfo(RowType(M)).@"struct".fields;
     inline for (0..M.fields_len) |i| {
-        const fname = row_fields[i].name;
-        const FieldType = row_fields[i].type;
+        const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
         if (FieldType == []const u8) {
-            const slice = @field(row, fname);
-            gpa.free(@constCast(slice));
+            gpa.free(@constCast(row[i]));
         }
     }
 }
