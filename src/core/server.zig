@@ -11,6 +11,7 @@ pub const Server = struct {
 
     config: Config,
     listener: ?std.Io.net.Server = null,
+    shutdown_requested: std.atomic.Value(bool) = .init(false),
 
     pub const Config = struct {
         host: []const u8 = "127.0.0.1",
@@ -18,6 +19,8 @@ pub const Server = struct {
         read_buffer_size: usize = 8192,
         write_buffer_size: usize = 8192,
         max_body_size: usize = 1_048_576, // 1 MiB
+        /// Optional lifecycle bound used by tests and controlled shutdown flows.
+        max_requests: ?usize = null,
     };
 
     /// Create a Server with the given configuration.
@@ -108,13 +111,23 @@ pub const Server = struct {
     pub fn listenAndServe(self: *Server, io: std.Io, gpa: std.mem.Allocator, handler: HandlerFn) !void {
         const addr = try listenAddress(self.config.host, self.config.port);
         var net_server = try std.Io.net.IpAddress.listen(&addr, io, .{});
-        defer net_server.deinit(io);
+        defer {
+            if (!self.shutdown_requested.load(.acquire)) {
+                net_server.deinit(io);
+            }
+        }
         self.listener = net_server;
+        self.shutdown_requested.store(false, .release);
 
         log.info("listening on {s}:{d}", .{ self.config.host, self.config.port });
 
-        while (true) {
+        var served_requests: usize = 0;
+        while (!self.shutdown_requested.load(.acquire)) {
             const stream = net_server.accept(io) catch |err| {
+                if (err == error.SocketNotListening and self.shutdown_requested.load(.acquire)) {
+                    log.info("server shutdown requested", .{});
+                    break;
+                }
                 log.warn("accept failed: {t}", .{err});
                 continue;
             };
@@ -122,7 +135,16 @@ pub const Server = struct {
                 log.warn("connection handler failed: {t}", .{err});
             };
             stream.close(io);
+            served_requests += 1;
+            if (self.config.max_requests) |max_requests| {
+                if (served_requests >= max_requests) {
+                    log.info("request limit reached ({d}), stopping server", .{max_requests});
+                    break;
+                }
+            }
         }
+
+        self.listener = null;
     }
 
     /// Handle a single HTTP connection.
@@ -221,6 +243,7 @@ pub const Server = struct {
 
     /// Graceful shutdown placeholder.
     pub fn shutdown(self: *Server, io: std.Io) void {
+        self.shutdown_requested.store(true, .release);
         if (self.listener) |*l| {
             l.deinit(io);
             self.listener = null;
