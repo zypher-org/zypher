@@ -13,7 +13,11 @@ const log = std.log.scoped(.cli);
 pub const RunserverConfig = struct {
     host: []const u8 = "127.0.0.1",
     port: u16 = 8080,
+    max_requests: ?usize = null,
 };
+
+var runserver_signal_app: ?*App = null;
+var runserver_signal_io: ?std.Io = null;
 
 pub fn dispatchInner(
     out_writer: *std.Io.Writer,
@@ -949,6 +953,10 @@ pub fn parseRunserverConfig(args: []const [:0]const u8) !RunserverConfig {
             i += 1;
             if (i >= args.len) return error.MissingHost;
             config.host = args[i];
+        } else if (std.mem.eql(u8, args[i], "--max-requests")) {
+            i += 1;
+            if (i >= args.len) return error.MissingMaxRequests;
+            config.max_requests = std.fmt.parseInt(usize, args[i], 10) catch return error.InvalidMaxRequests;
         } else {
             return error.UnknownOption;
         }
@@ -966,6 +974,43 @@ pub fn runserverDefaultHandler(req: *Request, res: *Response) void {
     res.text("zypher server is running") catch {};
 }
 
+pub fn bindRunserverSignalTarget(app: *App, io: std.Io) void {
+    runserver_signal_app = app;
+    runserver_signal_io = io;
+}
+
+pub fn clearRunserverSignalTarget() void {
+    runserver_signal_app = null;
+    runserver_signal_io = null;
+}
+
+pub fn runserverSigintHandler(sig: std.posix.SIG, info: *const std.posix.siginfo_t, context: ?*anyopaque) callconv(.c) void {
+    _ = sig;
+    _ = info;
+    _ = context;
+    if (runserver_signal_app) |app| {
+        if (runserver_signal_io) |io| {
+            app.shutdown(io);
+        }
+    }
+}
+
+fn installRunserverSigintHandler() std.posix.Sigaction {
+    const act: std.posix.Sigaction = .{
+        .handler = .{ .sigaction = runserverSigintHandler },
+        .mask = std.posix.sigemptyset(),
+        .flags = std.posix.SA.SIGINFO,
+    };
+    var old: std.posix.Sigaction = undefined;
+    std.posix.sigaction(.INT, &act, &old);
+    return old;
+}
+
+fn restoreRunserverSigintHandler(old: std.posix.Sigaction) void {
+    var previous: std.posix.Sigaction = undefined;
+    std.posix.sigaction(.INT, &old, &previous);
+}
+
 fn cmdRunserver(
     out_writer: *std.Io.Writer,
     err_writer: *std.Io.Writer,
@@ -978,6 +1023,8 @@ fn cmdRunserver(
             error.MissingPort => try err_writer.print("zypher: --port requires a value\n", .{}),
             error.InvalidPort => try err_writer.print("zypher: invalid port\n", .{}),
             error.MissingHost => try err_writer.print("zypher: --host requires a value\n", .{}),
+            error.MissingMaxRequests => try err_writer.print("zypher: --max-requests requires a value\n", .{}),
+            error.InvalidMaxRequests => try err_writer.print("zypher: invalid max request count\n", .{}),
             error.UnknownOption => try err_writer.print("zypher: invalid runserver option\n", .{}),
         }
         std.process.exit(1);
@@ -986,10 +1033,15 @@ fn cmdRunserver(
     log.info("runserver starting on {s}:{d}", .{ config.host, config.port });
     try out_writer.print("Starting zypher server at http://{s}:{d}/\n", .{ config.host, config.port });
 
-    var app = App.init(gpa, .{ .host = config.host, .port = config.port });
+    var app = App.init(gpa, .{ .host = config.host, .port = config.port, .max_requests = config.max_requests });
     defer app.deinit();
 
     app.handler_fn = runserverDefaultHandler;
+
+    bindRunserverSignalTarget(&app, init.io);
+    defer clearRunserverSignalTarget();
+    const old_sigint = installRunserverSigintHandler();
+    defer restoreRunserverSigintHandler(old_sigint);
 
     try app.listenAndServe(init.io);
 }

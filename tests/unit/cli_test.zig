@@ -2,6 +2,7 @@ const std = @import("std");
 const cli = @import("zypher").cli_runner;
 const log = @import("zypher").log;
 const password = @import("zypher").auth.password;
+const App = @import("zypher").core.App;
 const Request = @import("zypher").core.Request;
 const Response = @import("zypher").core.Response;
 const sqlite = @import("zypher").orm.sqlite;
@@ -195,11 +196,12 @@ test "cli: createsuperuser validates email and password strength" {
 }
 
 test "cli: runserver parses host and port options" {
-    const args = [_][:0]const u8{ "zypher", "runserver", "--host", "0.0.0.0", "--port", "9001" };
+    const args = [_][:0]const u8{ "zypher", "runserver", "--host", "0.0.0.0", "--port", "9001", "--max-requests", "1" };
     const config = try cli.parseRunserverConfig(&args);
 
     try std.testing.expectEqualStrings("0.0.0.0", config.host);
     try std.testing.expectEqual(@as(u16, 9001), config.port);
+    try std.testing.expectEqual(@as(?usize, 1), config.max_requests);
 }
 
 test "cli: runserver default handler responds to health check" {
@@ -220,6 +222,19 @@ test "cli: runserver default handler responds to health check" {
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expectEqualStrings("OK", res.body.?);
+}
+
+test "cli: runserver SIGINT handler requests app shutdown" {
+    var app = App.init(std.testing.allocator, .{ .host = "127.0.0.1", .port = 19088 });
+    defer app.deinit();
+
+    cli.bindRunserverSignalTarget(&app, std.testing.io);
+    defer cli.clearRunserverSignalTarget();
+
+    try std.testing.expect(!app.server.shutdown_requested.load(.acquire));
+    var info: std.posix.siginfo_t = undefined;
+    cli.runserverSigintHandler(.INT, &info, null);
+    try std.testing.expect(app.server.shutdown_requested.load(.acquire));
 }
 
 test "cli: logs command invocation with redacted args and outcome" {
