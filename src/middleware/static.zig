@@ -4,11 +4,6 @@
 /// - MIME type detection by file extension
 /// - Path traversal protection (rejects `..` segments)
 /// - Passes through to next handler if file not found
-///
-/// v1 note: Actual file serving requires std.Io.Dir / std.Io.File which
-/// need an Io instance. File serving will be fully implemented when the
-/// middleware chain is wired into the server dispatch (which provides Io).
-/// For now, path traversal protection and MIME detection are functional.
 const std = @import("std");
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
@@ -60,6 +55,45 @@ fn hasPathTraversal(path: []const u8) bool {
     return false;
 }
 
+fn closeFd(fd: std.posix.fd_t) void {
+    switch (std.posix.errno(std.posix.system.close(fd))) {
+        .SUCCESS, .INTR => {},
+        else => |err| log.warn("failed to close static file fd: {}", .{err}),
+    }
+}
+
+fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
+    const fd = std.posix.openat(std.posix.AT.FDCWD, path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0) catch |err| switch (err) {
+        error.FileNotFound, error.NotDir => return null,
+        error.IsDir => return null,
+        else => return err,
+    };
+    defer closeFd(fd);
+
+    var bytes: std.ArrayList(u8) = .empty;
+    errdefer bytes.deinit(allocator);
+
+    var buf: [8192]u8 = undefined;
+    while (true) {
+        const n = try std.posix.read(fd, &buf);
+        if (n == 0) break;
+        try bytes.appendSlice(allocator, buf[0..n]);
+    }
+    return try bytes.toOwnedSlice(allocator);
+}
+
+fn relativeStaticPath(comptime config: Config, path: []const u8) ?[]const u8 {
+    var rel = path[config.prefix.len..];
+    while (std.mem.startsWith(u8, rel, "/")) {
+        rel = rel[1..];
+    }
+    if (rel.len == 0) {
+        if (!config.serve_index) return null;
+        return "index.html";
+    }
+    return rel;
+}
+
 /// Default static file middleware.
 pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
     middlewareWith(.{})(req, res, next);
@@ -91,12 +125,43 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                 return;
             }
 
-            // v1: path traversal protection is functional.
-            // File serving via std.Io.Dir requires an Io instance,
-            // which will be available when middleware is wired into
-            // the server dispatch. For now, pass through.
-            log.debug("static file path: {s} (serving deferred to Io layer)", .{path});
-            next(req, res);
+            const rel = relativeStaticPath(config, path) orelse {
+                next(req, res);
+                return;
+            };
+            if (hasPathTraversal(rel)) {
+                log.warn("path traversal rejected after prefix strip: {s}", .{path});
+                _ = res.status(403);
+                res.text("Forbidden") catch {};
+                return;
+            }
+
+            const fs_path = std.fs.path.join(res.allocator, &.{ config.root_dir, rel }) catch |err| {
+                log.err("failed to build static file path for {s}: {}", .{ path, err });
+                _ = res.status(500);
+                res.text("Internal Server Error") catch {};
+                return;
+            };
+            defer res.allocator.free(fs_path);
+
+            const body = readFileAlloc(res.allocator, fs_path) catch |err| {
+                log.err("failed to read static file {s}: {}", .{ fs_path, err });
+                _ = res.status(500);
+                res.text("Internal Server Error") catch {};
+                return;
+            };
+
+            const owned_body = body orelse {
+                log.debug("static file not found: {s}", .{fs_path});
+                next(req, res);
+                return;
+            };
+
+            if (res.body) |old| res.allocator.free(old);
+            res.body = owned_body;
+            _ = res.status(200);
+            _ = res.header("Content-Type", detectMime(rel));
+            log.info("served static file {s} ({d} bytes)", .{ fs_path, owned_body.len });
         }
     }.handle;
 }

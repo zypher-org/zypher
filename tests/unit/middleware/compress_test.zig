@@ -57,4 +57,9 @@ test "Compression: gzip accepted sets Content-Encoding header" {
     const encoding = res.headers.get("Content-Encoding");
     try std.testing.expect(encoding != null);
     try std.testing.expectEqualStrings("gzip", encoding.?);
+    const body = res.body.?;
+    try std.testing.expect(body.len > 2);
+    try std.testing.expectEqual(@as(u8, 0x1f), body[0]);
+    try std.testing.expectEqual(@as(u8, 0x8b), body[1]);
+    try std.testing.expect(!std.mem.eql(u8, body, "Hello, World! This is a test response that should be compressible."));
 }

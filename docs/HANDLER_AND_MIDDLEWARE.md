@@ -38,19 +38,20 @@ pub const Context = struct {
 ### Definition
 
 ```zig
-pub const HandlerFn = fn (ctx: *Context) anyerror!Response;
+pub const HandlerFn = fn (req: *Request, res: *Response) void;
 ```
 
 ### Rules
-- Handlers **must** return a `Response`
-- Errors propagate upward (middleware decides how to handle them)
+- Handlers write into the provided `Response`
+- Recoverable write errors are handled at the call site
 - No global state allowed
 
 ### Example
 
 ```zig
-fn hello(ctx: *Context) !Response {
-    return Response.text(ctx.allocator, "Hello, zypher");
+fn hello(req: *Request, res: *Response) void {
+    _ = req;
+    res.text("Hello, zypher") catch {};
 }
 ```
 
@@ -61,12 +62,13 @@ fn hello(ctx: *Context) !Response {
 ### Definition
 
 ```zig
-pub const NextFn = fn (ctx: *Context) anyerror!Response;
+pub const NextFn = *const fn (*Request, *Response) void;
 
 pub const MiddlewareFn = fn (
-    ctx: *Context,
+    req: *Request,
+    res: *Response,
     next: NextFn,
-) anyerror!Response;
+) void;
 ```
 
 ### Execution Model
@@ -91,10 +93,11 @@ Response
 
 ## 5. Middleware Rules (Strict)
 
-1. Middleware **must call `next(ctx)` exactly once**
+1. Middleware **may call `next(req, res)` once** to continue the chain
 2. Middleware **may short‑circuit** (return Response early)
 3. Middleware **must not mutate Request**
 4. Middleware **may modify Response before returning**
+5. Middleware that post-processes a response must call `next(req, res)` before rewriting headers or body
 
 ---
 
@@ -103,30 +106,44 @@ Response
 ### Logging
 
 ```zig
-fn logger(ctx: *Context, next: NextFn) !Response {
-    std.log.info("{s} {s}", .{ ctx.req.method, ctx.req.path });
-    const res = try next(ctx);
-    std.log.info("→ {}", .{ res.status });
-    return res;
+fn logger(req: *Request, res: *Response, next: NextFn) void {
+    std.log.info("{s} {s}", .{ @tagName(req.method), req.path });
+    next(req, res);
+    std.log.info("-> {}", .{res.status_code});
 }
 ```
 
 ### Auth Guard
 
 ```zig
-fn requireAuth(ctx: *Context, next: NextFn) !Response {
-    if (!ctx.req.headers.contains("Authorization")) {
-        return Response.json(ctx.allocator, 401, "Unauthorized");
+fn requireAuth(req: *Request, res: *Response, next: NextFn) void {
+    if (req.header("Authorization") == null) {
+        _ = res.status(401);
+        res.json(.{ .error = "Unauthorized" }) catch {};
+        return;
     }
-    return try next(ctx);
+    next(req, res);
 }
 ```
+
+### Static Files
+
+`middleware.static.middlewareWith(.{ .root_dir = "./public", .prefix = "/static" })`
+serves existing files from the configured root, rejects `..` traversal, sets MIME
+type from the extension, and passes missing files through to the next handler.
+
+### Compression
+
+`middleware.compress.middleware` checks `Accept-Encoding` for `gzip`, calls the
+next handler first, then gzip-compresses a non-empty response body. It sets
+`Content-Encoding: gzip` and `Vary: Accept-Encoding`; responses without gzip
+support pass through unchanged.
 
 ---
 
 ## 7. Error Handling Strategy
 
-- Handlers return errors
+- Handlers generally write into `Response`
 - Middleware decides:
   - recover
   - transform
@@ -135,10 +152,11 @@ fn requireAuth(ctx: *Context, next: NextFn) !Response {
 ### Example Recovery Middleware
 
 ```zig
-fn recover(ctx: *Context, next: NextFn) Response {
-    return next(ctx) catch |err| {
-        return Response.text(ctx.allocator, "Internal Server Error");
-    };
+fn recover(req: *Request, res: *Response, next: NextFn) void {
+    next(req, res);
+    if (res.status_code >= 500 and res.body == null) {
+        res.text("Internal Server Error") catch {};
+    }
 }
 ```
 
@@ -164,7 +182,7 @@ app.get("/", hello);
 - No middleware mutation of request
 - No implicit response writing
 - No hidden async runtime
-- No thread-local storage
+- Thread-local state is reserved for closure-free framework internals such as session store wiring and chain dispatch
 
 Violations require a **major version bump**.
 
@@ -187,4 +205,3 @@ Violations require a **major version bump**.
  Middleware API frozen (v1)
 
  Safe to build router, server, and extensions
-

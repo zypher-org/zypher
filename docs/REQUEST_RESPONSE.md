@@ -47,8 +47,9 @@ pub const HeaderMap = std.StringHashMap([]const u8);
 ```
 
 Rules:
-- Header keys are normalized to lowercase
-- Header values are immutable slices
+- Request header lookup is case-insensitive.
+- Response headers own inserted names and values until `Response.deinit()`.
+- Header values are immutable slices after insertion.
 
 ---
 
@@ -100,17 +101,18 @@ pub const Request = struct {
 
 ```zig
 pub const Response = struct {
-    status: u16 = 200,
+    status_code: u16 = 200,
+    reason_phrase: ?[]const u8 = "OK",
     headers: HeaderMap,
-    body: []const u8 = "",
+    body: ?[]const u8 = null,
 
     allocator: std.mem.Allocator,
 
     // ───────────── Mutators ─────────────
 
-    pub fn setStatus(self: *Response, code: u16) void {}
+    pub fn status(self: *Response, code: u16) *Response {}
 
-    pub fn setHeader(self: *Response, name: []const u8, value: []const u8) !void {}
+    pub fn header(self: *Response, name: []const u8, value: []const u8) *Response {}
 
     // ───────────── Writers ─────────────
 
@@ -120,7 +122,7 @@ pub const Response = struct {
 
     pub fn json(self: *Response, value: anytype) !void {}
 
-    pub fn redirect(self: *Response, location: []const u8) !void {}
+    pub fn redirect(self: *Response, location: []const u8, code: u16) !void {}
 };
 ```
 
@@ -129,9 +131,12 @@ pub const Response = struct {
 ## 5. Response Rules
 
 - Headers must be written before body
+- `text()` automatically sets `Content-Type: text/plain; charset=utf-8`
+- `html()` automatically sets `Content-Type: text/html; charset=utf-8`
 - `json()` automatically sets `Content-Type: application/json`
-- `html()` automatically sets `Content-Type: text/html`
-- `redirect()` sets status to `302` by default
+- `json()` accepts `anytype`; byte strings are treated as already serialized JSON, while typed values are serialized with `std.json`
+- `redirect()` clears the body, sets `Location`, and uses the caller-provided redirect status
+- `send()` always emits `Content-Length`, including `Content-Length: 0` for empty responses
 
 ---
 
@@ -143,14 +148,14 @@ Middleware interacts with Request / Response **only through this API**.
 pub fn Middleware(
     req: *Request,
     res: *Response,
-    next: fn () anyerror!void,
-) anyerror!void;
+    next: *const fn (*Request, *Response) void,
+) void;
 ```
 
 Rules:
 - Middleware may mutate Response
 - Middleware must not replace Request
-- Middleware must call `next()` exactly once
+- Middleware may call `next(req, res)` and then post-process the response, or short-circuit by writing a response and returning
 
 ---
 
@@ -204,4 +209,3 @@ Breaking changes require:
 Everything else in zypher builds on this layer.
 
 If this layer is correct, the framework remains correct.
-
