@@ -417,7 +417,7 @@ pub fn runShellSession(reader: *std.Io.Reader, out_writer: *std.Io.Writer, err_w
     log.info("shell session started", .{});
     try out_writer.writeAll("zypher shell\n");
     try out_writer.writeAll("Context: std, zypher\n");
-    try out_writer.writeAll("Commands: :help, :quit\n");
+    try out_writer.writeAll("Commands: :help, :context, :contract, :quit\n");
 
     while (true) {
         try out_writer.writeAll("zypher> ");
@@ -442,8 +442,16 @@ pub fn runShellSession(reader: *std.Io.Reader, out_writer: *std.Io.Writer, err_w
             return;
         }
         if (std.mem.eql(u8, line, ":help") or std.mem.eql(u8, line, ":h")) {
-            try out_writer.writeAll("Available commands: :help, :quit\n");
+            try out_writer.writeAll("Available commands: :help, :context, :contract, :quit\n");
             try out_writer.writeAll("Expressions: integer arithmetic with +, -, *, /\n");
+            continue;
+        }
+        if (std.mem.eql(u8, line, ":context")) {
+            try writeShellContext(out_writer);
+            continue;
+        }
+        if (std.mem.eql(u8, line, ":contract")) {
+            try writeShellContract(out_writer);
             continue;
         }
 
@@ -457,6 +465,16 @@ pub fn runShellSession(reader: *std.Io.Reader, out_writer: *std.Io.Writer, err_w
 
     try out_writer.writeAll("bye\n");
     log.info("shell session ended at EOF", .{});
+}
+
+fn writeShellContext(out_writer: *std.Io.Writer) !void {
+    try out_writer.writeAll("Context bindings:\n");
+    try out_writer.writeAll("  std    Zig standard library namespace\n");
+    try out_writer.writeAll("  zypher Framework public API namespace\n");
+}
+
+fn writeShellContract(out_writer: *std.Io.Writer) !void {
+    try out_writer.writeAll("This is a line-oriented expression shell with zypher context metadata; it is not a compiler-backed Zig REPL.\n");
 }
 
 const ExprParser = struct {
