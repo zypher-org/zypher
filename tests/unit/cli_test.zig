@@ -75,6 +75,40 @@ test "cli: makemigrations detects added field and writes ALTER TABLE migration" 
     try std.testing.expect(std.mem.indexOf(u8, migration_sql, "ALTER TABLE users ADD COLUMN email TEXT UNIQUE;") != null);
 }
 
+test "cli: new creates expected project skeleton" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const project_name = try std.fmt.allocPrintSentinel(std.testing.allocator, "zypher_cli_new_{s}", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(project_name);
+    defer std.Io.Dir.cwd().deleteTree(std.testing.io, project_name) catch {};
+
+    const args = [_][:0]const u8{ "zypher", "new", project_name };
+    const output = try runCli(&args);
+    defer std.testing.allocator.free(output);
+
+    const cwd = std.Io.Dir.cwd();
+    var root = try cwd.openDir(std.testing.io, project_name, .{});
+    defer root.close(std.testing.io);
+    var src = try root.openDir(std.testing.io, "src", .{});
+    defer src.close(std.testing.io);
+    var templates = try root.openDir(std.testing.io, "templates", .{});
+    defer templates.close(std.testing.io);
+    var tests = try root.openDir(std.testing.io, "tests", .{});
+    defer tests.close(std.testing.io);
+    var examples = try root.openDir(std.testing.io, "examples", .{});
+    defer examples.close(std.testing.io);
+
+    const build_zig = try root.readFileAlloc(std.testing.io, "build.zig", std.testing.allocator, .limited(8192));
+    defer std.testing.allocator.free(build_zig);
+    const main_zig = try src.readFileAlloc(std.testing.io, "main.zig", std.testing.allocator, .limited(4096));
+    defer std.testing.allocator.free(main_zig);
+
+    try std.testing.expect(std.mem.indexOf(u8, output, "Created project") != null);
+    try std.testing.expect(std.mem.indexOf(u8, build_zig, "b.dependency(\"zypher\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, main_zig, "@import(\"zypher\")") != null);
+}
+
 test "cli: shell eval evaluates integer expressions" {
     const args = [_][:0]const u8{ "zypher", "shell", "--eval", "1 + 2 * 3" };
     const output = try runCli(&args);
