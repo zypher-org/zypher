@@ -6,6 +6,7 @@ const Response = @import("../core/response.zig").Response;
 const sqlite = @import("../orm/sqlite.zig");
 const migration = @import("../orm/migration.zig");
 const password = @import("../auth/password.zig");
+const validators = @import("../forms/validators.zig");
 const log = std.log.scoped(.cli);
 
 pub fn dispatchInner(
@@ -469,10 +470,10 @@ fn cmdCreatesuperuser(
 
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
-        if (std.mem.eql(u8, args[i], "--username")) {
+        if (std.mem.eql(u8, args[i], "--username") or std.mem.eql(u8, args[i], "--email")) {
             i += 1;
             if (i >= args.len) {
-                try err_writer.print("zypher: --username requires a value\n", .{});
+                try err_writer.print("zypher: {s} requires a value\n", .{args[i - 1]});
                 std.process.exit(1);
             }
             username = args[i];
@@ -496,23 +497,69 @@ fn cmdCreatesuperuser(
         }
     }
 
-    const uname = username orelse {
-        try err_writer.print("zypher: --username is required\n", .{});
-        std.process.exit(1);
-    };
-    const pwd = plain_password orelse {
-        try err_writer.print("zypher: --password is required\n", .{});
-        std.process.exit(1);
-    };
-
-    if (pwd.len < 8) {
-        try err_writer.print("zypher: password must be at least 8 characters\n", .{});
-        std.process.exit(1);
+    if (username == null or plain_password == null) {
+        var stdin_buffer: [4096]u8 = undefined;
+        var stdin_reader = std.Io.File.stdin().reader(init.io, &stdin_buffer);
+        runCreatesuperuserPrompt(gpa, db_path, &stdin_reader.interface, out_writer, err_writer) catch |err| {
+            try printSuperuserError(err_writer, err);
+            std.process.exit(1);
+        };
+        return;
     }
 
-    var db = sqlite.Db.open(gpa, db_path) catch {
-        try err_writer.print("zypher: failed to open database '{s}'\n", .{db_path});
+    const row_id = createSuperuser(gpa, db_path, username.?, plain_password.?) catch |err| {
+        try printSuperuserError(err_writer, err);
         std.process.exit(1);
+    };
+    try out_writer.print("Superuser '{s}' created (id={d})\n", .{ username.?, row_id });
+}
+
+/// Validate createsuperuser credentials before writing to the database.
+pub fn validateSuperuserCredentials(email: []const u8, plain_password: []const u8) !void {
+    if (validators.email(email) != null) return error.InvalidEmail;
+    if (plain_password.len < 8) return error.WeakPassword;
+
+    var has_letter = false;
+    var has_digit = false;
+    for (plain_password) |ch| {
+        if (std.ascii.isAlphabetic(ch)) has_letter = true;
+        if (std.ascii.isDigit(ch)) has_digit = true;
+    }
+    if (!has_letter or !has_digit) return error.WeakPassword;
+}
+
+/// Prompt for superuser credentials and create the admin account.
+pub fn runCreatesuperuserPrompt(
+    gpa: std.mem.Allocator,
+    db_path: [:0]const u8,
+    reader: *std.Io.Reader,
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+) !void {
+    _ = err_writer;
+    try out_writer.writeAll("Email: ");
+    const email = try readPromptLine(gpa, reader);
+    defer gpa.free(email);
+    try out_writer.writeAll("Password: ");
+    const plain_password = try readPromptLine(gpa, reader);
+    defer gpa.free(plain_password);
+
+    const row_id = try createSuperuser(gpa, db_path, email, plain_password);
+    try out_writer.print("Superuser '{s}' created (id={d})\n", .{ email, row_id });
+}
+
+fn readPromptLine(gpa: std.mem.Allocator, reader: *std.Io.Reader) ![]u8 {
+    const raw = (try reader.takeDelimiter('\n')) orelse return error.MissingPromptValue;
+    const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+    if (trimmed.len == 0) return error.MissingPromptValue;
+    return gpa.dupe(u8, trimmed);
+}
+
+fn createSuperuser(gpa: std.mem.Allocator, db_path: [:0]const u8, email: []const u8, plain_password: []const u8) !i64 {
+    try validateSuperuserCredentials(email, plain_password);
+
+    var db = sqlite.Db.open(gpa, db_path) catch {
+        return error.OpenDatabaseFailed;
     };
     defer db.close();
 
@@ -525,39 +572,46 @@ fn cmdCreatesuperuser(
         \\  is_active INTEGER NOT NULL DEFAULT 1
         \\)
     ) catch {
-        try err_writer.print("zypher: failed to create users table\n", .{});
-        std.process.exit(1);
+        return error.CreateUserTableFailed;
     };
 
-    const hash_str = password.hash(gpa, pwd) catch {
-        try err_writer.print("zypher: failed to hash password\n", .{});
-        std.process.exit(1);
-    };
+    const hash_str = password.hash(gpa, plain_password) catch return error.HashPasswordFailed;
     defer gpa.free(hash_str);
 
     var stmt = db.prepare("INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, 'admin', 1)") catch {
-        try err_writer.print("zypher: failed to prepare insert\n", .{});
-        std.process.exit(1);
+        return error.PrepareUserInsertFailed;
     };
     defer stmt.finalize();
 
-    stmt.bind(.{ .text = uname }, 1) catch {
-        try err_writer.print("zypher: failed to bind username\n", .{});
-        std.process.exit(1);
+    stmt.bind(.{ .text = email }, 1) catch {
+        return error.BindUserInsertFailed;
     };
     stmt.bind(.{ .text = hash_str }, 2) catch {
-        try err_writer.print("zypher: failed to bind password\n", .{});
-        std.process.exit(1);
+        return error.BindUserInsertFailed;
     };
 
     _ = stmt.step() catch {
-        try err_writer.print("zypher: failed to create user (username may already exist)\n", .{});
-        std.process.exit(1);
+        return error.CreateUserFailed;
     };
 
     const row_id = db.lastInsertRowId();
-    log.info("created superuser '{s}' (id={d}, role=admin)", .{ uname, row_id });
-    try out_writer.print("Superuser '{s}' created (id={d})\n", .{ uname, row_id });
+    log.info("created superuser '{s}' (id={d}, role=admin)", .{ email, row_id });
+    return row_id;
+}
+
+fn printSuperuserError(err_writer: *std.Io.Writer, err: anyerror) !void {
+    switch (err) {
+        error.InvalidEmail => try err_writer.writeAll("zypher: invalid email address\n"),
+        error.WeakPassword => try err_writer.writeAll("zypher: password must be at least 8 characters and include a letter and a digit\n"),
+        error.MissingPromptValue => try err_writer.writeAll("zypher: email and password are required\n"),
+        error.OpenDatabaseFailed => try err_writer.writeAll("zypher: failed to open database\n"),
+        error.CreateUserTableFailed => try err_writer.writeAll("zypher: failed to create users table\n"),
+        error.HashPasswordFailed => try err_writer.writeAll("zypher: failed to hash password\n"),
+        error.PrepareUserInsertFailed => try err_writer.writeAll("zypher: failed to prepare insert\n"),
+        error.BindUserInsertFailed => try err_writer.writeAll("zypher: failed to bind user data\n"),
+        error.CreateUserFailed => try err_writer.writeAll("zypher: failed to create user (email may already exist)\n"),
+        else => try err_writer.writeAll("zypher: failed to create superuser\n"),
+    }
 }
 
 // ── migrate ───────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 const std = @import("std");
 const cli = @import("zypher").cli_runner;
+const password = @import("zypher").auth.password;
 const sqlite = @import("zypher").orm.sqlite;
 
 fn testInit() std.process.Init {
@@ -146,6 +147,48 @@ test "cli: migrate applies SQL files in order and skips applied migrations" {
     try std.testing.expect(try stmt.step());
     const count = try stmt.column(.integer, 0);
     try std.testing.expectEqual(@as(i64, 2), count.int);
+}
+
+test "cli: createsuperuser prompt creates active admin with hashed password" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const db_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/superuser.sqlite", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(db_path);
+
+    var input = std.Io.Reader.fixed("admin@example.com\nStr0ngPass\n");
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var err = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer err.deinit();
+
+    try cli.runCreatesuperuserPrompt(std.testing.allocator, db_path, &input, &out.writer, &err.writer);
+
+    try std.testing.expectEqual(@as(usize, 0), err.written().len);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Email:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Password:") != null);
+
+    var db = try sqlite.Db.open(std.testing.allocator, db_path);
+    defer db.close();
+    var stmt = try db.prepare("SELECT username, password_hash, role, is_active FROM users WHERE username = ?");
+    defer stmt.finalize();
+    try stmt.bind(.{ .text = "admin@example.com" }, 1);
+    try std.testing.expect(try stmt.step());
+    const username = try stmt.column(.text, 0);
+    const password_hash = try stmt.column(.text, 1);
+    const role = try stmt.column(.text, 2);
+    const active = try stmt.column(.integer, 3);
+
+    try std.testing.expectEqualStrings("admin@example.com", username.text);
+    try std.testing.expect(!std.mem.eql(u8, password_hash.text, "Str0ngPass"));
+    try std.testing.expect(try password.verify(password_hash.text, "Str0ngPass"));
+    try std.testing.expectEqualStrings("admin", role.text);
+    try std.testing.expectEqual(@as(i64, 1), active.int);
+}
+
+test "cli: createsuperuser validates email and password strength" {
+    try std.testing.expectError(error.InvalidEmail, cli.validateSuperuserCredentials("not-email", "Str0ngPass"));
+    try std.testing.expectError(error.WeakPassword, cli.validateSuperuserCredentials("admin@example.com", "weakpass"));
 }
 
 test "cli: shell eval evaluates integer expressions" {
