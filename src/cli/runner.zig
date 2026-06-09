@@ -696,6 +696,11 @@ fn cmdNew(
         cwd.createDirPath(io, path) catch {};
     }
     {
+        const path = try std.fmt.allocPrint(init.gpa, "{s}/examples", .{project_name});
+        defer init.gpa.free(path);
+        cwd.createDirPath(io, path) catch {};
+    }
+    {
         const path = try std.fmt.allocPrint(init.gpa, "{s}/src/main.zig", .{project_name});
         defer init.gpa.free(path);
         cwd.writeFile(io, .{ .sub_path = path, .data =
@@ -721,6 +726,7 @@ fn cmdNew(
     try out_writer.print("  {s}/src/main.zig\n", .{project_name});
     try out_writer.print("  {s}/templates/\n", .{project_name});
     try out_writer.print("  {s}/tests/\n", .{project_name});
+    try out_writer.print("  {s}/examples/\n", .{project_name});
 }
 
 // ── runserver ─────────────────────────────────────────────────────────────
