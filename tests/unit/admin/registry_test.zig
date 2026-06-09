@@ -96,3 +96,26 @@ test "admin registration: model metadata accessible" {
     try std.testing.expectEqualStrings("books", info.table_name);
     try std.testing.expect(info.field_count > 0);
 }
+
+test "admin registration: pagination metadata" {
+    const info = comptime Site.modelInfo("books");
+    try std.testing.expectEqual(@as(usize, 10), info.list_per_page);
+}
+
+test "admin registration: custom verbose_name_plural" {
+    const info = comptime Site.modelInfo("categories");
+    try std.testing.expectEqualStrings("Categories", info.verbose_name_plural);
+}
+
+test "admin registration: default pagination" {
+    const EmptyModelFields = struct {
+        id: FieldDef = Field("id", .integer, .{ .primary = true }),
+        name: FieldDef = Field("name", .text, .{}),
+    };
+    const EmptyModel = Model("empties", EmptyModelFields);
+    const CustomSite = admin.AdminSite(.{
+        .empties = admin.Registration(EmptyModel, .{}),
+    });
+    const info = comptime CustomSite.modelInfo("empties");
+    try std.testing.expectEqual(@as(usize, 25), info.list_per_page);
+}

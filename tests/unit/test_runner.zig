@@ -16,6 +16,7 @@ test {
     _ = @import("middleware/rate_limit_test.zig");
     _ = @import("middleware/static_test.zig");
     _ = @import("middleware/compress_test.zig");
+    _ = @import("middleware/security_headers_test.zig");
     _ = @import("template/lexer_test.zig");
     _ = @import("template/parser_test.zig");
     _ = @import("template/renderer_test.zig");

@@ -28,6 +28,7 @@ pub const middleware = struct {
     pub const static = @import("middleware/static.zig");
     pub const compress = @import("middleware/compress.zig");
     pub const session = @import("middleware/session.zig");
+    pub const security_headers = @import("middleware/security_headers.zig");
 };
 
 // Re-export template (Phase 4)
@@ -62,8 +63,8 @@ pub const auth = struct {
 // Re-export admin (Phase 8)
 pub const admin = @import("admin/registry.zig");
 
-// Re-export CLI (Phase 9)
-pub const cli = @import("cli/main.zig");
+// Re-export CLI runner (Phase 9)
+pub const cli_runner = @import("cli/runner.zig");
 
 test {
     std.testing.refAllDecls(@This());
