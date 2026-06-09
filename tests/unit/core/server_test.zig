@@ -85,3 +85,55 @@ test "Server.listenAddress parses host:port into IpAddress" {
         .ip6 => return error.TestUnexpectedIp6,
     }
 }
+
+test "Server starts, responds to health check, and stops after request limit" {
+    const port: u16 = 19087;
+    var server = Server.init(.{ .host = "127.0.0.1", .port = port, .max_requests = 1 });
+
+    const server_ctx = struct {
+        fn handler(req: *Request, res: *Response) void {
+            if (std.mem.eql(u8, req.path, "/health")) {
+                res.text("OK") catch {};
+                return;
+            }
+            _ = res.status(404);
+            res.text("Not Found") catch {};
+        }
+
+        fn run(s: *Server) !void {
+            try s.listenAndServe(std.testing.io, std.testing.allocator, handler);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, server_ctx.run, .{&server});
+    defer thread.join();
+
+    const addr = try Server.listenAddress("127.0.0.1", port);
+    var stream = try connectWithRetry(&addr);
+    defer stream.close(std.testing.io);
+
+    var read_buf: [1024]u8 = undefined;
+    var write_buf: [1024]u8 = undefined;
+    var reader = stream.reader(std.testing.io, &read_buf);
+    var writer = stream.writer(std.testing.io, &write_buf);
+
+    try writer.interface.writeAll("GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+    try writer.interface.flush();
+
+    const response = try reader.interface.takeDelimiterExclusive('\n');
+    try std.testing.expect(std.mem.indexOf(u8, response, "200") != null);
+}
+
+fn connectWithRetry(addr: *const std.Io.net.IpAddress) !std.Io.net.Stream {
+    var attempts: usize = 0;
+    while (attempts < 50) : (attempts += 1) {
+        return std.Io.net.IpAddress.connect(addr, std.testing.io, .{ .mode = .stream }) catch |err| switch (err) {
+            error.ConnectionRefused => {
+                try std.Thread.yield();
+                continue;
+            },
+            else => return err,
+        };
+    }
+    return error.ConnectionRefused;
+}
