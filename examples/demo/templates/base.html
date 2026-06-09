@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ title }}</title>
+    <meta name="viewport" content="width=device-width">
+    <style>
+        *{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:0 1em}
+        nav{border-bottom:2px solid #eee;padding:1em 0;margin-bottom:1em}
+        nav a{margin-right:1em;color:#0366d6;text-decoration:none}
+        nav a:hover{text-decoration:underline}
+        nav form{display:inline}nav button{background:none;border:none;color:#0366d6;cursor:pointer;padding:0;font:inherit;text-decoration:underline}
+        .flash{padding:.5em 1em;border-radius:4px;margin-bottom:1em}
+        .flash-error{background:#ffeef0;color:#d73a49}
+        .flash-success{background:#dcffe4;color:#22863a}
+        .post{border:1px solid #eee;padding:1em;margin-bottom:1em;border-radius:4px}
+        .post h2{margin:0 0 .5em 0}.post h2 a{color:inherit;text-decoration:none}
+        .post .meta{color:#666;font-size:.9em}
+        .comment{border-left:3px solid #eee;padding-left:1em;margin:.5em 0;font-size:.95em}
+        label{display:block;margin:.5em 0;font-weight:600}
+        input,textarea{width:100%;padding:.4em;margin-top:.2em;border:1px solid #ccc;border-radius:4px}
+        button{padding:.5em 1em;cursor:pointer;border:1px solid #0366d6;background:#0366d6;color:#fff;border-radius:4px}
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">Home</a>
+        <a href="/post/new">New Post</a>
+        {% if authenticated %}
+            <form method="post" action="/logout">
+                <button type="submit">Logout ({{ username }})</button>
+            </form>
+        {% else %}
+            <a href="/login">Login</a>
+            <a href="/register">Register</a>
+        {% endif %}
+    </nav>
+    {% if flash %}
+        <div class="flash {{ flash_type|safe }}">{{ flash }}</div>
+    {% endif %}
+    {{ content|safe }}
+</body>
+</html>

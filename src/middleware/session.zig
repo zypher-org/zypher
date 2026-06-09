@@ -70,9 +70,17 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
         }
 
         // Set session cookie
-        var cookie_buf: [COOKIE_NAME.len + 1 + session_mod.SESSION_ID_LEN * 2 + 40]u8 = undefined;
-        const cookie_str = std.fmt.bufPrint(&cookie_buf, "{s}={any}; HttpOnly; SameSite=Strict; Secure; Path=/", .{ COOKIE_NAME, std.fmt.fmtSliceHexLower(&new_session.id) }) catch return;
-        _ = res.header("Set-Cookie", cookie_str);
+        var hex_buf: [session_mod.SESSION_ID_LEN * 2]u8 = undefined;
+        for (new_session.id, 0..) |byte, i| {
+            hex_buf[i * 2] = "0123456789abcdef"[byte >> 4];
+            hex_buf[i * 2 + 1] = "0123456789abcdef"[byte & 0xf];
+        }
+        var cookie_buf: [COOKIE_NAME.len + 1 + session_mod.SESSION_ID_LEN * 2 + 64]u8 = undefined;
+        if (std.fmt.bufPrint(&cookie_buf, "{s}={s}; HttpOnly; SameSite=Strict; Secure; Path=/", .{ COOKIE_NAME, &hex_buf })) |cookie_str| {
+            _ = res.header("Set-Cookie", cookie_str);
+        } else |_| {
+            log.warn("failed to format session cookie - continuing without cookie", .{});
+        }
         log.debug("created new session for {s}", .{req.path});
     }
 

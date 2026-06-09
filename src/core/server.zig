@@ -142,7 +142,7 @@ pub const Server = struct {
         var http_server = std.http.Server.init(&stream_reader.interface, &stream_writer.interface);
 
         while (true) {
-            const server_req = http_server.receiveHead() catch |err| switch (err) {
+            var server_req = http_server.receiveHead() catch |err| switch (err) {
                 error.HttpConnectionClosing => return,
                 error.HttpHeadersOversize => {
                     log.warn("request headers too large", .{});
@@ -176,6 +176,32 @@ pub const Server = struct {
                 err_res.deinit();
                 continue;
             };
+
+            // ── Read POST body and parse URL-encoded form data ──────────
+            if (server_req.head.method.requestHasBody()) {
+                var body_read_buf: [4096]u8 = undefined;
+                const body_reader = server_req.readerExpectNone(&body_read_buf);
+                const body = std.Io.Reader.allocRemaining(body_reader, gpa, std.Io.Limit.limited(self.config.max_body_size)) catch |read_err| {
+                    log.warn("body read failed: {t}", .{read_err});
+                    return;
+                };
+                req.body = body;
+
+                if (body.len > 0) {
+                    const content_type = Request.getHeaderCI(&req.headers, "content-type") orelse "";
+                    if (std.mem.indexOf(u8, content_type, "x-www-form-urlencoded") != null) {
+                        var form_params = Request.parseQueryString(gpa, body) catch {
+                            log.warn("failed to parse form data", .{});
+                            return;
+                        };
+                        defer form_params.deinit();
+                        var iter = form_params.iterator();
+                        while (iter.next()) |entry| {
+                            req.query.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
+                        }
+                    }
+                }
+            }
 
             log.info("{s} {s}", .{ @tagName(req.method), req.path });
 

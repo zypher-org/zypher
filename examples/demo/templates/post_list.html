@@ -1,0 +1,17 @@
+{% extends "base" %}
+{% block title %}Posts — zypher Demo{% endblock %}
+{% block content %}
+<h1>Posts</h1>
+{% if posts %}
+    <ul>
+    {% for post in posts %}
+        <li>
+            <strong><a href="/post/{{ post.id }}">{{ post.title }}</a></strong>
+            by {{ post.author }} · {{ post.created_at }}
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No posts yet. <a href="/post/new">Create one!</a></p>
+{% endif %}
+{% endblock %}
