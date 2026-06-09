@@ -9,6 +9,11 @@ const password = @import("../auth/password.zig");
 const validators = @import("../forms/validators.zig");
 const log = std.log.scoped(.cli);
 
+pub const RunserverConfig = struct {
+    host: []const u8 = "127.0.0.1",
+    port: u16 = 8080,
+};
+
 pub fn dispatchInner(
     out_writer: *std.Io.Writer,
     err_writer: *std.Io.Writer,
@@ -883,6 +888,36 @@ fn cmdNew(
 
 // ── runserver ─────────────────────────────────────────────────────────────
 
+pub fn parseRunserverConfig(args: []const [:0]const u8) !RunserverConfig {
+    var config: RunserverConfig = .{};
+
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--port")) {
+            i += 1;
+            if (i >= args.len) return error.MissingPort;
+            config.port = std.fmt.parseInt(u16, args[i], 10) catch return error.InvalidPort;
+        } else if (std.mem.eql(u8, args[i], "--host")) {
+            i += 1;
+            if (i >= args.len) return error.MissingHost;
+            config.host = args[i];
+        } else {
+            return error.UnknownOption;
+        }
+    }
+
+    return config;
+}
+
+pub fn runserverDefaultHandler(req: *Request, res: *Response) void {
+    if (std.mem.eql(u8, req.path, "/health")) {
+        res.text("OK") catch {};
+        return;
+    }
+
+    res.text("zypher server is running") catch {};
+}
+
 fn cmdRunserver(
     out_writer: *std.Io.Writer,
     err_writer: *std.Io.Writer,
@@ -890,46 +925,23 @@ fn cmdRunserver(
     args: []const [:0]const u8,
 ) !void {
     const gpa = init.gpa;
-
-    var port: u16 = 8080;
-    var host: []const u8 = "127.0.0.1";
-
-    var i: usize = 2;
-    while (i < args.len) : (i += 1) {
-        if (std.mem.eql(u8, args[i], "--port")) {
-            i += 1;
-            if (i >= args.len) {
-                try err_writer.print("zypher: --port requires a value\n", .{});
-                std.process.exit(1);
-            }
-            port = std.fmt.parseInt(u16, args[i], 10) catch {
-                try err_writer.print("zypher: invalid port '{s}'\n", .{args[i]});
-                std.process.exit(1);
-            };
-        } else if (std.mem.eql(u8, args[i], "--host")) {
-            i += 1;
-            if (i >= args.len) {
-                try err_writer.print("zypher: --host requires a value\n", .{});
-                std.process.exit(1);
-            }
-            host = args[i];
-        } else {
-            try err_writer.print("zypher: unknown option '{s}'\n", .{args[i]});
-            std.process.exit(1);
+    const config = parseRunserverConfig(args) catch |err| {
+        switch (err) {
+            error.MissingPort => try err_writer.print("zypher: --port requires a value\n", .{}),
+            error.InvalidPort => try err_writer.print("zypher: invalid port\n", .{}),
+            error.MissingHost => try err_writer.print("zypher: --host requires a value\n", .{}),
+            error.UnknownOption => try err_writer.print("zypher: invalid runserver option\n", .{}),
         }
-    }
+        std.process.exit(1);
+    };
 
-    try out_writer.print("Starting zypher server at http://{s}:{d}/\n", .{ host, port });
+    log.info("runserver starting on {s}:{d}", .{ config.host, config.port });
+    try out_writer.print("Starting zypher server at http://{s}:{d}/\n", .{ config.host, config.port });
 
-    var app = App.init(gpa, .{ .host = host, .port = port });
+    var app = App.init(gpa, .{ .host = config.host, .port = config.port });
     defer app.deinit();
 
-    app.handler_fn = struct {
-        fn handle(req: *Request, res: *Response) void {
-            _ = req;
-            res.text("zypher server is running") catch {};
-        }
-    }.handle;
+    app.handler_fn = runserverDefaultHandler;
 
     try app.listenAndServe(init.io);
 }

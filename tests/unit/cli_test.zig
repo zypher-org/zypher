@@ -1,6 +1,8 @@
 const std = @import("std");
 const cli = @import("zypher").cli_runner;
 const password = @import("zypher").auth.password;
+const Request = @import("zypher").core.Request;
+const Response = @import("zypher").core.Response;
 const sqlite = @import("zypher").orm.sqlite;
 
 fn testInit() std.process.Init {
@@ -189,6 +191,34 @@ test "cli: createsuperuser prompt creates active admin with hashed password" {
 test "cli: createsuperuser validates email and password strength" {
     try std.testing.expectError(error.InvalidEmail, cli.validateSuperuserCredentials("not-email", "Str0ngPass"));
     try std.testing.expectError(error.WeakPassword, cli.validateSuperuserCredentials("admin@example.com", "weakpass"));
+}
+
+test "cli: runserver parses host and port options" {
+    const args = [_][:0]const u8{ "zypher", "runserver", "--host", "0.0.0.0", "--port", "9001" };
+    const config = try cli.parseRunserverConfig(&args);
+
+    try std.testing.expectEqualStrings("0.0.0.0", config.host);
+    try std.testing.expectEqual(@as(u16, 9001), config.port);
+}
+
+test "cli: runserver default handler responds to health check" {
+    var req = Request{
+        .method = .get,
+        .path = "/health",
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = &.{},
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    cli.runserverDefaultHandler(&req, &res);
+
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expectEqualStrings("OK", res.body.?);
 }
 
 test "cli: shell eval evaluates integer expressions" {
