@@ -1,5 +1,6 @@
 const std = @import("std");
 const cli = @import("zypher").cli_runner;
+const sqlite = @import("zypher").orm.sqlite;
 
 fn testInit() std.process.Init {
     return .{
@@ -107,6 +108,44 @@ test "cli: new creates expected project skeleton" {
     try std.testing.expect(std.mem.indexOf(u8, output, "Created project") != null);
     try std.testing.expect(std.mem.indexOf(u8, build_zig, "b.dependency(\"zypher\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, main_zig, "@import(\"zypher\")") != null);
+}
+
+test "cli: migrate applies SQL files in order and skips applied migrations" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = std.Io.Dir.cwd();
+    const db_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/migrate.sqlite", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(db_path);
+    const migrations_dir = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/migrations", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(migrations_dir);
+    try cwd.createDirPath(std.testing.io, migrations_dir);
+
+    const first_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/0001_create_users.sql", .{migrations_dir});
+    defer std.testing.allocator.free(first_path);
+    const second_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/0002_add_email.sql", .{migrations_dir});
+    defer std.testing.allocator.free(second_path);
+    try cwd.writeFile(std.testing.io, .{ .sub_path = first_path, .data = "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);" });
+    try cwd.writeFile(std.testing.io, .{ .sub_path = second_path, .data = "ALTER TABLE users ADD COLUMN email TEXT;" });
+
+    const args = [_][:0]const u8{ "zypher", "migrate", "--db", db_path, "--dir", migrations_dir };
+    const first_output = try runCli(&args);
+    defer std.testing.allocator.free(first_output);
+    const second_output = try runCli(&args);
+    defer std.testing.allocator.free(second_output);
+
+    try std.testing.expect(std.mem.indexOf(u8, first_output, "applied 2 migration(s)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, second_output, "applied 0 migration(s)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, second_output, "skipped 2") != null);
+
+    var db = try sqlite.Db.open(std.testing.allocator, db_path);
+    defer db.close();
+    try db.exec("INSERT INTO users (name, email) VALUES ('alice', 'alice@example.com')");
+    var stmt = try db.prepare("SELECT COUNT(*) FROM zypher_migrations");
+    defer stmt.finalize();
+    try std.testing.expect(try stmt.step());
+    const count = try stmt.column(.integer, 0);
+    try std.testing.expectEqual(@as(i64, 2), count.int);
 }
 
 test "cli: shell eval evaluates integer expressions" {

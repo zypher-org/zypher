@@ -569,7 +569,9 @@ fn cmdMigrate(
     args: []const [:0]const u8,
 ) !void {
     const gpa = init.gpa;
+    const io = init.io;
     var db_path: [:0]const u8 = "db.sqlite";
+    var migrations_dir: []const u8 = "migrations";
 
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
@@ -580,6 +582,13 @@ fn cmdMigrate(
                 std.process.exit(1);
             }
             db_path = args[i];
+        } else if (std.mem.eql(u8, args[i], "--dir")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --dir requires a value\n", .{});
+                std.process.exit(1);
+            }
+            migrations_dir = args[i];
         } else {
             try err_writer.print("zypher: unknown option '{s}'\n", .{args[i]});
             std.process.exit(1);
@@ -598,14 +607,103 @@ fn cmdMigrate(
         std.process.exit(1);
     };
 
-    const count = runner.countApplied() catch 0;
-    try out_writer.print("zypher: database '{s}' — {d} migration(s) applied\n", .{ db_path, count });
-
-    if (count == 0) {
-        try out_writer.print("zypher: no migrations found. Use zypher makemigrations first.\n", .{});
-    } else {
-        try out_writer.print("zypher: all migrations are up to date.\n", .{});
+    const result = applyMigrationDirectory(gpa, io, &db, migrations_dir) catch {
+        try err_writer.print("zypher: failed to apply migrations from '{s}'\n", .{migrations_dir});
+        std.process.exit(1);
+    };
+    try out_writer.print("zypher: database '{s}' — applied {d} migration(s), skipped {d}\n", .{ db_path, result.applied, result.skipped });
+    if (result.total == 0) {
+        try out_writer.print("zypher: no migrations found in '{s}'. Use zypher makemigrations first.\n", .{migrations_dir});
     }
+}
+
+const MigrateResult = struct {
+    total: usize = 0,
+    applied: usize = 0,
+    skipped: usize = 0,
+};
+
+fn applyMigrationDirectory(gpa: std.mem.Allocator, io: std.Io, db: *sqlite.Db, migrations_dir: []const u8) !MigrateResult {
+    var files = try collectMigrationFiles(gpa, io, migrations_dir);
+    defer {
+        for (files.items) |name| gpa.free(name);
+        files.deinit(gpa);
+    }
+
+    std.mem.sort([]u8, files.items, {}, migrationNameLessThan);
+
+    var result = MigrateResult{ .total = files.items.len };
+    for (files.items) |name| {
+        const id = try migrationIdFromFilename(name);
+        if (try cliMigrationApplied(db, id)) {
+            result.skipped += 1;
+            log.info("skipping already-applied migration {d}: {s}", .{ id, name });
+            continue;
+        }
+
+        const path = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ migrations_dir, name });
+        defer gpa.free(path);
+        const sql = try std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(1024 * 1024));
+        defer gpa.free(sql);
+        const sql_z = try gpa.dupeSentinel(u8, sql, 0);
+        defer gpa.free(sql_z);
+
+        db.exec(sql_z) catch {
+            log.err("migration {d} ({s}) failed", .{ id, name });
+            return error.MigrationApplyFailed;
+        };
+        try recordCliMigration(db, id, name);
+        result.applied += 1;
+        log.info("applied migration {d}: {s}", .{ id, name });
+    }
+    return result;
+}
+
+fn collectMigrationFiles(gpa: std.mem.Allocator, io: std.Io, migrations_dir: []const u8) !std.ArrayList([]u8) {
+    var files: std.ArrayList([]u8) = .empty;
+    errdefer {
+        for (files.items) |name| gpa.free(name);
+        files.deinit(gpa);
+    }
+
+    var dir = std.Io.Dir.cwd().openDir(io, migrations_dir, .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => return files,
+        else => return err,
+    };
+    defer dir.close(io);
+
+    var iter = dir.iterate();
+    while (try iter.next(io)) |entry| {
+        if (!std.mem.endsWith(u8, entry.name, ".sql")) continue;
+        try files.append(gpa, try gpa.dupe(u8, entry.name));
+    }
+    return files;
+}
+
+fn migrationNameLessThan(_: void, a: []u8, b: []u8) bool {
+    return std.mem.order(u8, a, b) == .lt;
+}
+
+fn migrationIdFromFilename(name: []const u8) !i64 {
+    var end: usize = 0;
+    while (end < name.len and std.ascii.isDigit(name[end])) end += 1;
+    if (end == 0) return error.InvalidMigrationFilename;
+    return std.fmt.parseInt(i64, name[0..end], 10);
+}
+
+fn cliMigrationApplied(db: *sqlite.Db, id: i64) !bool {
+    var stmt = try db.prepare("SELECT id FROM zypher_migrations WHERE id = ?");
+    defer stmt.finalize();
+    try stmt.bind(.{ .int = id }, 1);
+    return try stmt.step();
+}
+
+fn recordCliMigration(db: *sqlite.Db, id: i64, name: []const u8) !void {
+    var stmt = try db.prepare("INSERT INTO zypher_migrations (id, name) VALUES (?, ?)");
+    defer stmt.finalize();
+    try stmt.bind(.{ .int = id }, 1);
+    try stmt.bind(.{ .text = name }, 2);
+    _ = try stmt.step();
 }
 
 // ── new (scaffold) ────────────────────────────────────────────────────────
