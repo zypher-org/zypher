@@ -288,6 +288,56 @@ test "cli: runserver serves health check and returns after max requests" {
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "Starting zypher server") != null);
 }
 
+test "cli: runserver responds to health check and stops on SIGINT" {
+    const port: u16 = 19090;
+    const args = [_][:0]const u8{
+        "zypher",
+        "runserver",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19090",
+    };
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var err = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer err.deinit();
+
+    const run_ctx = struct {
+        fn run(
+            out_writer: *std.Io.Writer,
+            err_writer: *std.Io.Writer,
+            argv: []const [:0]const u8,
+        ) !void {
+            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, run_ctx.run, .{ &out.writer, &err.writer, &args });
+
+    const addr = try std.Io.net.IpAddress.parse("127.0.0.1", port);
+    var stream = try connectWithRetry(&addr);
+
+    var read_buf: [1024]u8 = undefined;
+    var write_buf: [1024]u8 = undefined;
+    var reader = stream.reader(std.testing.io, &read_buf);
+    var writer = stream.writer(std.testing.io, &write_buf);
+
+    try writer.interface.writeAll("GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+    try writer.interface.flush();
+
+    const response = try reader.interface.takeDelimiterExclusive('\n');
+    try std.testing.expect(std.mem.indexOf(u8, response, "200") != null);
+
+    try std.posix.raise(.INT);
+    stream.close(std.testing.io);
+    thread.join();
+
+    try std.testing.expectEqual(@as(usize, 0), err.written().len);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Starting zypher server") != null);
+}
+
 fn connectWithRetry(addr: *const std.Io.net.IpAddress) !std.Io.net.Stream {
     var attempts: usize = 0;
     while (attempts < 50) : (attempts += 1) {
@@ -348,4 +398,21 @@ test "cli: shell session evaluates lines, reports help, and exits" {
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "zypher> 3\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "Available commands") != null);
     try std.testing.expect(std.mem.endsWith(u8, out.written(), "bye\n"));
+}
+
+test "cli: shell exposes context and explicit line-oriented contract" {
+    var input = std.Io.Reader.fixed(":context\n:contract\n:quit\n");
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var err = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer err.deinit();
+
+    try cli.runShellSession(&input, &out.writer, &err.writer);
+
+    try std.testing.expectEqual(@as(usize, 0), err.written().len);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Context bindings") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "std") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "zypher") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "line-oriented expression shell") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "not a compiler-backed Zig REPL") != null);
 }
