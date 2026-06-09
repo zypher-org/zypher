@@ -65,6 +65,22 @@ test "CSRF: POST with valid token passes" {
     try std.testing.expectEqual(@as(u16, 200), post_res.status_code);
 }
 
+test "CSRF: POST with valid form token passes" {
+    const gpa = std.testing.allocator;
+
+    const MyChain = comptime Chain(.{csrf.middleware});
+
+    var post_req = makeRequest(gpa, .post, "/submit");
+    defer post_req.deinit();
+    try post_req.query.put("_csrf", csrf.generateToken());
+    var post_res = Response.init(gpa);
+    defer post_res.deinit();
+
+    MyChain.run(&post_req, &post_res, ok_handler);
+
+    try std.testing.expectEqual(@as(u16, 200), post_res.status_code);
+}
+
 test "CSRF: POST without token returns 403" {
     const gpa = std.testing.allocator;
 

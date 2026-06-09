@@ -18,6 +18,8 @@ const Value = zypher.template.renderer.Value;
 const SessionStore = zypher.auth.session.SessionStore;
 const Session = zypher.auth.session.Session;
 const password = zypher.auth.password;
+const form = zypher.forms.form;
+const csrf = zypher.middleware.csrf;
 const AdminSite = zypher.admin.AdminSite;
 const Registration = zypher.admin.Registration;
 
@@ -30,7 +32,7 @@ const PostFields = struct {
     author: schema.FieldDef = Field("author", .text, .{ .required = true }),
     created_at: schema.FieldDef = Field("created_at", .integer, .{ .required = true }),
 };
-const Post = Model("posts", PostFields);
+pub const Post = Model("posts", PostFields);
 
 const CommentFields = struct {
     id: schema.FieldDef = Field("id", .integer, .{ .primary = true }),
@@ -39,11 +41,35 @@ const CommentFields = struct {
     body: schema.FieldDef = Field("body", .text, .{ .required = true }),
     created_at: schema.FieldDef = Field("created_at", .integer, .{ .required = true }),
 };
-const Comment = Model("comments", CommentFields);
+pub const Comment = Model("comments", CommentFields);
+
+// ── Forms ────────────────────────────────────────────────────────────────
+
+const PostFormFields = struct {
+    title: form.FieldDef = form.Field("title", .text, .{ .required = true }),
+    body: form.FieldDef = form.Field("body", .text, .{ .required = true }),
+};
+pub const PostForm = form.Form("PostForm", PostFormFields);
+
+const CommentFormFields = struct {
+    body: form.FieldDef = form.Field("body", .text, .{ .required = true }),
+};
+pub const CommentForm = form.Form("CommentForm", CommentFormFields);
+
+pub const middleware_names = [_][]const u8{ "logger", "csrf", "rate-limit", "session" };
+
+pub const FeatureContract = struct {
+    pub const hasPostModel = true;
+    pub const hasCommentModel = true;
+    pub const hasRegisterLoginLogout = true;
+    pub const hasAdminPostAndComment = true;
+    pub const hasPostAndCommentViews = true;
+    pub const hasPostAndCommentForms = true;
+};
 
 // ── Admin Registration ────────────────────────────────────────────────────
 
-const Site = AdminSite(.{
+pub const Site = AdminSite(.{
     .posts = Registration(Post, .{ .verbose_name_plural = "Posts" }),
     .comments = Registration(Comment, .{ .verbose_name_plural = "Comments" }),
 });
@@ -134,6 +160,12 @@ fn redirect(res: *Response, url: []const u8) void {
     _ = res.header("Location", url);
 }
 
+fn appendCsrfInput(gpa: std.mem.Allocator, html: *std.ArrayList(u8)) !void {
+    try html.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"");
+    try html.appendSlice(gpa, csrf.generateToken());
+    try html.appendSlice(gpa, "\">");
+}
+
 // ── Handlers ──────────────────────────────────────────────────────────────
 
 fn indexHandler(req: *Request, res: *Response) void {
@@ -205,6 +237,9 @@ fn newPostFormHandler(req: *Request, res: *Response) void {
     html.appendSlice(gpa,
         \\<h1>New Post</h1>
         \\<form method="post" action="/post/new">
+    ) catch return;
+    appendCsrfInput(gpa, &html) catch return;
+    html.appendSlice(gpa,
         \\<label>Title: <input type="text" name="title" required></label>
         \\<label>Body: <textarea name="body" rows="10" required></textarea></label>
         \\<button type="submit">Create Post</button>
@@ -219,6 +254,7 @@ fn newPostFormHandler(req: *Request, res: *Response) void {
 }
 
 fn createPostHandler(req: *Request, res: *Response) void {
+    const gpa = res.allocator;
     const user = getSessionUser(req) orelse {
         redirect(res, "/login");
         return;
@@ -229,13 +265,24 @@ fn createPostHandler(req: *Request, res: *Response) void {
         return;
     };
 
-    const title = req.formValue("title") orelse "";
-    const body = req.formValue("body") orelse "";
-    if (title.len == 0 or body.len == 0) {
+    var form_data = std.StringHashMap([]const u8).init(gpa);
+    defer form_data.deinit();
+    if (req.formValue("title")) |title| form_data.put("title", title) catch {};
+    if (req.formValue("body")) |body| form_data.put("body", body) catch {};
+    var bound = PostForm.bind(gpa, &form_data) catch {
+        _ = res.status(500);
+        res.text("form bind failed") catch {};
+        return;
+    };
+    defer bound.deinit();
+    if (!bound.validate()) {
         _ = res.status(400);
         res.text("title and body required") catch {};
         return;
     }
+    const cleaned = bound.cleanedData();
+    const title = cleaned[0];
+    const body = cleaned[1];
 
     const now = unixTimestamp();
     const row_id = query.create(Post, d, &.{
@@ -332,6 +379,10 @@ fn postDetailHandler(req: *Request, res: *Response) void {
         ) catch return;
         html.appendSlice(gpa, id_str) catch return;
         html.appendSlice(gpa,
+            \\/comment">
+        ) catch return;
+        appendCsrfInput(gpa, &html) catch return;
+        html.appendSlice(gpa,
             \\<label>Comment: <textarea name="body" rows="3" required></textarea></label>
             \\<button type="submit">Submit</button>
             \\</form>
@@ -371,12 +422,21 @@ fn addCommentHandler(req: *Request, res: *Response) void {
         return;
     };
 
-    const body = req.formValue("body") orelse "";
-    if (body.len == 0) {
+    var form_data = std.StringHashMap([]const u8).init(req.allocator);
+    defer form_data.deinit();
+    if (req.formValue("body")) |body_value| form_data.put("body", body_value) catch {};
+    var bound = CommentForm.bind(req.allocator, &form_data) catch {
+        _ = res.status(500);
+        res.text("form bind failed") catch {};
+        return;
+    };
+    defer bound.deinit();
+    if (!bound.validate()) {
         _ = res.status(400);
         res.text("body required") catch {};
         return;
     }
+    const body = bound.cleanedData()[0];
 
     _ = query.create(Comment, d, &.{
         sqlite.Value{ .int = post_id },
@@ -406,6 +466,9 @@ fn registerFormHandler(req: *Request, res: *Response) void {
     html.appendSlice(gpa,
         \\<h1>Register</h1>
         \\<form method="post" action="/register">
+    ) catch return;
+    appendCsrfInput(gpa, &html) catch return;
+    html.appendSlice(gpa,
         \\<label>Username: <input type="text" name="username" required></label>
         \\<label>Password: <input type="password" name="password" required></label>
         \\<button type="submit">Register</button>
@@ -502,6 +565,9 @@ fn loginFormHandler(req: *Request, res: *Response) void {
     html.appendSlice(gpa,
         \\<h1>Login</h1>
         \\<form method="post" action="/login">
+    ) catch return;
+    appendCsrfInput(gpa, &html) catch return;
+    html.appendSlice(gpa,
         \\<label>Username: <input type="text" name="username" required></label>
         \\<label>Password: <input type="password" name="password" required></label>
         \\<button type="submit">Log In</button>
@@ -620,7 +686,8 @@ fn loggerMw(req: *Request, res: *Response, next: *const fn (*Request, *Response)
     std.log.info("← {d}", .{res.status_code});
 }
 
-const MwChain = Chain(.{ loggerMw, zypher.middleware.session.middleware });
+const DemoRateLimit = zypher.middleware.rate_limit.middlewareWith(.{ .max_requests = 100, .window_seconds = 60 });
+const MwChain = Chain(.{ loggerMw, zypher.middleware.csrf.middleware, DemoRateLimit.handle, zypher.middleware.session.middleware });
 
 fn dispatchWrapper(req: *Request, res: *Response) void {
     const r = tlrouter orelse return;
@@ -686,6 +753,7 @@ pub fn main(init: std.process.Init) !void {
         \\        <a href="/post/new">New Post</a>
         \\        {% if authenticated %}
         \\            <form method="post" action="/logout">
+        \\                <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
         \\                <button type="submit">Logout ({{ username }})</button>
         \\            </form>
         \\        {% else %}
@@ -709,6 +777,13 @@ pub fn main(init: std.process.Init) !void {
     defer store.deinit();
     tlstore = &store;
     zypher.middleware.session.setStore(&store);
+    zypher.middleware.session.setCookieConfig(.{
+        .httponly = true,
+        .secure = false,
+        .samesite = "Strict",
+        .path = "/",
+        .max_age = 86400,
+    });
 
     // ── Router ──────────────────────────────────────────────────────────
     const admin_routes = Site.routes();

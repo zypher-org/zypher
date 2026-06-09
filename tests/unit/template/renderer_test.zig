@@ -54,6 +54,20 @@ test "renderer: auto-escape <script> in variable output" {
     try std.testing.expectEqualStrings("&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;", output);
 }
 
+test "renderer: compact safe filter bypasses escaping" {
+    const gpa = std.testing.allocator;
+    var ctx = Context.init(gpa);
+    defer ctx.deinit();
+    try ctx.put("content", .{ .string = "<p>No posts yet</p>" });
+
+    var tmpl = try Template.fromSource(gpa, "{{ content|safe }}");
+    defer tmpl.deinit();
+
+    const output = try renderToSlice(gpa, &tmpl, &ctx);
+    defer gpa.free(output);
+    try std.testing.expectEqualStrings("<p>No posts yet</p>", output);
+}
+
 test "renderer: render {% if %} branch — true case" {
     const gpa = std.testing.allocator;
     var ctx = Context.init(gpa);

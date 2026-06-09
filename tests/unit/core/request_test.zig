@@ -121,6 +121,23 @@ test "parse cookies — empty Cookie header" {
     try std.testing.expectEqual(@as(usize, 0), cookies.count());
 }
 
+test "Request.cookie reads the Cookie header" {
+    var req: Request = .{
+        .method = .get,
+        .path = "/test",
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = &.{},
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+
+    try req.headers.put("Cookie", "zypher_session=abc123; theme=dark");
+    try std.testing.expectEqualStrings("abc123", req.cookie("zypher_session").?);
+    try std.testing.expectEqualStrings("dark", req.cookie("theme").?);
+    try std.testing.expectEqual(@as(?[]const u8, null), req.cookie("missing"));
+}
+
 // ── Request deinit ──────────────────────────────────────────────
 
 test "Request.deinit frees all owned memory" {

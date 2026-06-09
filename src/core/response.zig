@@ -51,8 +51,6 @@ pub const Response = struct {
     reason_phrase: ?[]const u8 = "OK",
     headers: std.StringHashMap([]const u8),
     body: ?[]const u8 = null,
-    /// Tracks header value slices that were allocated by us (e.g. setCookie).
-    owned_header_values: std.ArrayList([]const u8),
     allocator: std.mem.Allocator,
 
     // ───────────── Lifecycle ─────────────
@@ -61,7 +59,6 @@ pub const Response = struct {
     pub fn init(gpa: std.mem.Allocator) Response {
         return .{
             .headers = std.StringHashMap([]const u8).init(gpa),
-            .owned_header_values = .empty,
             .allocator = gpa,
         };
     }
@@ -71,10 +68,11 @@ pub const Response = struct {
         if (self.body) |b| {
             self.allocator.free(b);
         }
-        for (self.owned_header_values.items) |val| {
-            self.allocator.free(val);
+        var it = self.headers.iterator();
+        while (it.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+            self.allocator.free(entry.value_ptr.*);
         }
-        self.owned_header_values.deinit(self.allocator);
         self.headers.deinit();
     }
 
@@ -89,7 +87,24 @@ pub const Response = struct {
 
     /// Set a response header.
     pub fn header(self: *Response, name: []const u8, value: []const u8) *Response {
-        self.headers.put(name, value) catch {};
+        if (self.headers.getPtr(name)) |stored_value| {
+            const owned_value = self.allocator.dupe(u8, value) catch return self;
+            self.allocator.free(stored_value.*);
+            stored_value.* = owned_value;
+            return self;
+        }
+
+        const owned_name = self.allocator.dupe(u8, name) catch return self;
+        const owned_value = self.allocator.dupe(u8, value) catch {
+            self.allocator.free(owned_name);
+            return self;
+        };
+
+        self.headers.put(owned_name, owned_value) catch {
+            self.allocator.free(owned_name);
+            self.allocator.free(owned_value);
+            return self;
+        };
         return self;
     }
 
@@ -160,8 +175,8 @@ pub const Response = struct {
             .None => buf.appendSlice(self.allocator, "; SameSite=None") catch return self,
         }
         const slice = buf.toOwnedSlice(self.allocator) catch return self;
-        self.owned_header_values.append(self.allocator, slice) catch {};
         _ = self.header("Set-Cookie", slice);
+        self.allocator.free(slice);
         return self;
     }
 
@@ -188,14 +203,12 @@ pub const Response = struct {
         try out.appendSlice(gpa, phrase);
         try out.appendSlice(gpa, "\r\n");
 
-        // Write Content-Length if we have a body
-        if (self.body) |b| {
-            try out.appendSlice(gpa, "Content-Length: ");
-            var len_buf: [16]u8 = undefined;
-            const len_str = try std.fmt.bufPrint(&len_buf, "{d}", .{b.len});
-            try out.appendSlice(gpa, len_str);
-            try out.appendSlice(gpa, "\r\n");
-        }
+        try out.appendSlice(gpa, "Content-Length: ");
+        var len_buf: [16]u8 = undefined;
+        const len = if (self.body) |b| b.len else 0;
+        const len_str = try std.fmt.bufPrint(&len_buf, "{d}", .{len});
+        try out.appendSlice(gpa, len_str);
+        try out.appendSlice(gpa, "\r\n");
 
         // Write all headers
         var it = self.headers.iterator();

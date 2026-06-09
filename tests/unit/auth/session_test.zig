@@ -43,6 +43,25 @@ test "session: session stored and retrieved from store" {
     try std.testing.expectEqualStrings("42", retrieved.?.get("user_id") orelse "");
 }
 
+test "session: saving retrieved store-owned session keeps lookup valid" {
+    var store = SessionStore.init(std.testing.allocator);
+    defer store.deinit();
+
+    var s = try store.create();
+    try s.put(std.testing.allocator, "user_id", "42");
+    try store.save(&s);
+    const session_id = s.id;
+    s.deinit(std.testing.allocator);
+
+    const retrieved = (try store.get(session_id)).?;
+    try retrieved.put(std.testing.allocator, "role", "user");
+    try store.save(retrieved);
+
+    const again = (try store.get(session_id)).?;
+    try std.testing.expectEqualStrings("42", again.get("user_id") orelse "");
+    try std.testing.expectEqualStrings("user", again.get("role") orelse "");
+}
+
 test "session: non-existent session returns null" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();

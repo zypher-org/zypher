@@ -14,6 +14,7 @@ test {
     _ = @import("middleware/cors_test.zig");
     _ = @import("middleware/csrf_test.zig");
     _ = @import("middleware/rate_limit_test.zig");
+    _ = @import("middleware/session_test.zig");
     _ = @import("middleware/static_test.zig");
     _ = @import("middleware/compress_test.zig");
     _ = @import("middleware/security_headers_test.zig");
