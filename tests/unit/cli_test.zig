@@ -237,6 +237,71 @@ test "cli: runserver SIGINT handler requests app shutdown" {
     try std.testing.expect(app.server.shutdown_requested.load(.acquire));
 }
 
+test "cli: runserver serves health check and returns after max requests" {
+    const port: u16 = 19089;
+    const args = [_][:0]const u8{
+        "zypher",
+        "runserver",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19089",
+        "--max-requests",
+        "1",
+    };
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var err = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer err.deinit();
+
+    const run_ctx = struct {
+        fn run(
+            out_writer: *std.Io.Writer,
+            err_writer: *std.Io.Writer,
+            argv: []const [:0]const u8,
+        ) !void {
+            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, run_ctx.run, .{ &out.writer, &err.writer, &args });
+
+    const addr = try std.Io.net.IpAddress.parse("127.0.0.1", port);
+    var stream = try connectWithRetry(&addr);
+
+    var read_buf: [1024]u8 = undefined;
+    var write_buf: [1024]u8 = undefined;
+    var reader = stream.reader(std.testing.io, &read_buf);
+    var writer = stream.writer(std.testing.io, &write_buf);
+
+    try writer.interface.writeAll("GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+    try writer.interface.flush();
+
+    const response = try reader.interface.takeDelimiterExclusive('\n');
+    try std.testing.expect(std.mem.indexOf(u8, response, "200") != null);
+
+    stream.close(std.testing.io);
+    thread.join();
+
+    try std.testing.expectEqual(@as(usize, 0), err.written().len);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Starting zypher server") != null);
+}
+
+fn connectWithRetry(addr: *const std.Io.net.IpAddress) !std.Io.net.Stream {
+    var attempts: usize = 0;
+    while (attempts < 50) : (attempts += 1) {
+        return std.Io.net.IpAddress.connect(addr, std.testing.io, .{ .mode = .stream }) catch |err| switch (err) {
+            error.ConnectionRefused => {
+                try std.Thread.yield();
+                continue;
+            },
+            else => return err,
+        };
+    }
+    return error.ConnectionRefused;
+}
+
 test "cli: logs command invocation with redacted args and outcome" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
