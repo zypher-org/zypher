@@ -26,9 +26,9 @@ pub fn dispatchInner(
     } else if (std.mem.eql(u8, cmd, "new")) {
         try cmdNew(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "makemigrations")) {
-        try printStub(err_writer, cmd);
+        try cmdMakemigrations(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "shell")) {
-        try printStub(err_writer, cmd);
+        try cmdShell(out_writer, err_writer, init, args);
     } else {
         try err_writer.print("zypher: unknown command '{s}'\n", .{cmd});
         std.process.exit(1);
@@ -48,11 +48,6 @@ fn printHelp(w: *std.Io.Writer) !void {
     try w.print("  help               Show this help message\n", .{});
 }
 
-fn printStub(w: *std.Io.Writer, cmd: []const u8) !void {
-    try w.print("zypher {s}: not yet implemented\n", .{cmd});
-    std.process.exit(1);
-}
-
 fn parseDbPath(args: []const [:0]const u8) ?[:0]const u8 {
     var i: usize = 2;
     while (i + 1 < args.len) : (i += 1) {
@@ -61,6 +56,353 @@ fn parseDbPath(args: []const [:0]const u8) ?[:0]const u8 {
         }
     }
     return null;
+}
+
+// ── makemigrations ───────────────────────────────────────────────────────
+
+const SchemaField = struct {
+    table: []const u8,
+    name: []const u8,
+    kind: []const u8,
+    primary: bool = false,
+    required: bool = false,
+    unique: bool = false,
+    foreign: ?[]const u8 = null,
+};
+
+fn cmdMakemigrations(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    args: []const [:0]const u8,
+) !void {
+    const gpa = init.gpa;
+    const io = init.io;
+
+    var schema_path: []const u8 = "schema.zypher";
+    var state_path: []const u8 = ".zypher_schema";
+    var migrations_dir: []const u8 = "migrations";
+
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--schema")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --schema requires a value\n", .{});
+                std.process.exit(1);
+            }
+            schema_path = args[i];
+        } else if (std.mem.eql(u8, args[i], "--state")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --state requires a value\n", .{});
+                std.process.exit(1);
+            }
+            state_path = args[i];
+        } else if (std.mem.eql(u8, args[i], "--dir")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --dir requires a value\n", .{});
+                std.process.exit(1);
+            }
+            migrations_dir = args[i];
+        } else {
+            try err_writer.print("zypher: unknown option '{s}'\n", .{args[i]});
+            std.process.exit(1);
+        }
+    }
+
+    const cwd = std.Io.Dir.cwd();
+    const schema_text = cwd.readFileAlloc(io, schema_path, gpa, .limited(1024 * 1024)) catch {
+        try err_writer.print("zypher: failed to read schema manifest '{s}'\n", .{schema_path});
+        std.process.exit(1);
+    };
+    defer gpa.free(schema_text);
+
+    const state_text = cwd.readFileAlloc(io, state_path, gpa, .limited(1024 * 1024)) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => {
+            try err_writer.print("zypher: failed to read schema snapshot '{s}'\n", .{state_path});
+            std.process.exit(1);
+        },
+    };
+    defer if (state_text) |text| gpa.free(text);
+
+    var current = try parseSchemaManifest(gpa, schema_text);
+    defer current.deinit(gpa);
+    var previous = try parseSchemaManifest(gpa, state_text orelse "");
+    defer previous.deinit(gpa);
+
+    cwd.createDirPath(io, migrations_dir) catch {
+        try err_writer.print("zypher: failed to create migrations directory '{s}'\n", .{migrations_dir});
+        std.process.exit(1);
+    };
+
+    var created: usize = 0;
+    if (previous.items.len == 0) {
+        created = try writeInitialMigrations(gpa, io, migrations_dir, current.items, out_writer);
+    } else {
+        created = try writeAddedFieldMigrations(gpa, io, migrations_dir, previous.items, current.items, out_writer);
+    }
+
+    cwd.writeFile(io, .{ .sub_path = state_path, .data = schema_text }) catch {
+        try err_writer.print("zypher: failed to write schema snapshot '{s}'\n", .{state_path});
+        std.process.exit(1);
+    };
+
+    if (created == 0) {
+        log.info("makemigrations found no schema changes", .{});
+        try out_writer.print("No schema changes detected\n", .{});
+    } else {
+        log.info("makemigrations created {d} migration(s)", .{created});
+    }
+}
+
+fn parseSchemaManifest(gpa: std.mem.Allocator, text: []const u8) !std.ArrayList(SchemaField) {
+    var fields: std.ArrayList(SchemaField) = .empty;
+    var current_table: ?[]const u8 = null;
+
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |raw_line| {
+        const line = std.mem.trim(u8, raw_line, " \t\r");
+        if (line.len == 0 or line[0] == '#') continue;
+
+        var parts = std.mem.tokenizeAny(u8, line, " \t");
+        const head = parts.next() orelse continue;
+        if (std.mem.eql(u8, head, "table")) {
+            current_table = parts.next() orelse return error.InvalidMigrationManifest;
+        } else if (std.mem.eql(u8, head, "field")) {
+            const table = current_table orelse return error.InvalidMigrationManifest;
+            var field = SchemaField{
+                .table = table,
+                .name = parts.next() orelse return error.InvalidMigrationManifest,
+                .kind = parts.next() orelse return error.InvalidMigrationManifest,
+            };
+            while (parts.next()) |flag| {
+                if (std.mem.eql(u8, flag, "primary")) {
+                    field.primary = true;
+                } else if (std.mem.eql(u8, flag, "required")) {
+                    field.required = true;
+                } else if (std.mem.eql(u8, flag, "unique")) {
+                    field.unique = true;
+                } else if (std.mem.startsWith(u8, flag, "foreign=")) {
+                    field.foreign = flag["foreign=".len..];
+                } else {
+                    return error.InvalidMigrationManifest;
+                }
+            }
+            try fields.append(gpa, field);
+        } else {
+            return error.InvalidMigrationManifest;
+        }
+    }
+
+    return fields;
+}
+
+fn findField(fields: []const SchemaField, table: []const u8, name: []const u8) ?SchemaField {
+    for (fields) |field| {
+        if (std.mem.eql(u8, field.table, table) and std.mem.eql(u8, field.name, name)) return field;
+    }
+    return null;
+}
+
+fn writeAddedFieldMigrations(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    migrations_dir: []const u8,
+    previous: []const SchemaField,
+    current: []const SchemaField,
+    out_writer: *std.Io.Writer,
+) !usize {
+    var created: usize = 0;
+    const cwd = std.Io.Dir.cwd();
+    for (current) |field| {
+        if (findField(previous, field.table, field.name) != null) continue;
+        created += 1;
+        const filename = try migrationFilename(gpa, migrations_dir, created, "add", field.name, "to", field.table);
+        defer gpa.free(filename);
+        const column = try columnSql(gpa, field, false);
+        defer gpa.free(column);
+        const sql = try std.fmt.allocPrint(gpa, "ALTER TABLE {s} ADD COLUMN {s} {s};\n", .{
+            field.table,
+            field.name,
+            column,
+        });
+        defer gpa.free(sql);
+        try cwd.writeFile(io, .{ .sub_path = filename, .data = sql });
+        try out_writer.print("Created migration {s}: add_{s}_to_{s}\n", .{ filename, field.name, field.table });
+    }
+    return created;
+}
+
+fn writeInitialMigrations(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    migrations_dir: []const u8,
+    fields: []const SchemaField,
+    out_writer: *std.Io.Writer,
+) !usize {
+    var created: usize = 0;
+    const cwd = std.Io.Dir.cwd();
+    for (fields, 0..) |field, field_idx| {
+        if (tableAppearedBefore(fields[0..field_idx], field.table)) continue;
+        var table_fields: std.ArrayList(SchemaField) = .empty;
+        defer table_fields.deinit(gpa);
+        for (fields) |candidate| {
+            if (std.mem.eql(u8, candidate.table, field.table)) try table_fields.append(gpa, candidate);
+        }
+        created += 1;
+        const filename = try migrationFilename(gpa, migrations_dir, created, "create", field.table, "", "");
+        defer gpa.free(filename);
+        var sql = std.Io.Writer.Allocating.init(gpa);
+        defer sql.deinit();
+        try sql.writer.print("CREATE TABLE IF NOT EXISTS {s} (", .{field.table});
+        for (table_fields.items, 0..) |table_field, idx| {
+            if (idx > 0) try sql.writer.writeAll(", ");
+            const column = try columnSql(gpa, table_field, true);
+            defer gpa.free(column);
+            try sql.writer.print("{s} {s}", .{ table_field.name, column });
+        }
+        try sql.writer.writeAll(");\n");
+        try cwd.writeFile(io, .{ .sub_path = filename, .data = sql.written() });
+        try out_writer.print("Created migration {s}: create_{s}\n", .{ filename, field.table });
+    }
+    return created;
+}
+
+fn tableAppearedBefore(fields: []const SchemaField, table: []const u8) bool {
+    for (fields) |field| {
+        if (std.mem.eql(u8, field.table, table)) return true;
+    }
+    return false;
+}
+
+fn migrationFilename(
+    gpa: std.mem.Allocator,
+    migrations_dir: []const u8,
+    index: usize,
+    action: []const u8,
+    subject: []const u8,
+    middle: []const u8,
+    object: []const u8,
+) ![]u8 {
+    if (middle.len == 0) {
+        return std.fmt.allocPrint(gpa, "{s}/{d:0>4}_{s}_{s}.sql", .{ migrations_dir, index, action, subject });
+    }
+    return std.fmt.allocPrint(gpa, "{s}/{d:0>4}_{s}_{s}_{s}_{s}.sql", .{ migrations_dir, index, action, subject, middle, object });
+}
+
+fn columnSql(gpa: std.mem.Allocator, field: SchemaField, include_primary: bool) ![]u8 {
+    const sql_type = if (std.mem.eql(u8, field.kind, "integer"))
+        "INTEGER"
+    else if (std.mem.eql(u8, field.kind, "float"))
+        "REAL"
+    else if (std.mem.eql(u8, field.kind, "text"))
+        "TEXT"
+    else if (std.mem.eql(u8, field.kind, "boolean"))
+        "BOOLEAN"
+    else
+        return error.InvalidMigrationManifest;
+
+    var sql = std.Io.Writer.Allocating.init(gpa);
+    errdefer sql.deinit();
+    try sql.writer.writeAll(sql_type);
+    if (include_primary and field.primary) try sql.writer.writeAll(" PRIMARY KEY");
+    if (field.required and !field.primary) try sql.writer.writeAll(" NOT NULL");
+    if (field.unique and !field.primary) try sql.writer.writeAll(" UNIQUE");
+    if (field.foreign) |target| try sql.writer.print(" REFERENCES {s}", .{target});
+    return try sql.toOwnedSlice();
+}
+
+// ── shell ────────────────────────────────────────────────────────────────
+
+fn cmdShell(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    args: []const [:0]const u8,
+) !void {
+    _ = init;
+    var eval_expr: ?[]const u8 = null;
+
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--eval")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --eval requires an expression\n", .{});
+                std.process.exit(1);
+            }
+            eval_expr = args[i];
+        } else {
+            try err_writer.print("zypher: unknown option '{s}'\n", .{args[i]});
+            std.process.exit(1);
+        }
+    }
+
+    const expr = eval_expr orelse {
+        try out_writer.print("zypher shell ready. Use --eval <expr> for non-interactive evaluation.\n", .{});
+        return;
+    };
+    const value = evalIntegerExpression(expr) catch {
+        try err_writer.print("zypher: invalid shell expression\n", .{});
+        std.process.exit(1);
+    };
+    log.info("shell evaluated expression", .{});
+    try out_writer.print("{d}\n", .{value});
+}
+
+const ExprParser = struct {
+    input: []const u8,
+    pos: usize = 0,
+
+    fn skipSpace(self: *ExprParser) void {
+        while (self.pos < self.input.len and std.ascii.isWhitespace(self.input[self.pos])) self.pos += 1;
+    }
+
+    fn parseExpr(self: *ExprParser) !i64 {
+        var lhs = try self.parseTerm();
+        while (true) {
+            self.skipSpace();
+            if (self.pos >= self.input.len) return lhs;
+            const op = self.input[self.pos];
+            if (op != '+' and op != '-') return lhs;
+            self.pos += 1;
+            const rhs = try self.parseTerm();
+            lhs = if (op == '+') lhs + rhs else lhs - rhs;
+        }
+    }
+
+    fn parseTerm(self: *ExprParser) !i64 {
+        var lhs = try self.parseNumber();
+        while (true) {
+            self.skipSpace();
+            if (self.pos >= self.input.len) return lhs;
+            const op = self.input[self.pos];
+            if (op != '*' and op != '/') return lhs;
+            self.pos += 1;
+            const rhs = try self.parseNumber();
+            lhs = if (op == '*') lhs * rhs else @divTrunc(lhs, rhs);
+        }
+    }
+
+    fn parseNumber(self: *ExprParser) !i64 {
+        self.skipSpace();
+        const start = self.pos;
+        if (self.pos < self.input.len and (self.input[self.pos] == '-' or self.input[self.pos] == '+')) self.pos += 1;
+        while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) self.pos += 1;
+        if (self.pos == start) return error.InvalidShellExpression;
+        return std.fmt.parseInt(i64, self.input[start..self.pos], 10);
+    }
+};
+
+fn evalIntegerExpression(expr: []const u8) !i64 {
+    var parser = ExprParser{ .input = expr };
+    const value = try parser.parseExpr();
+    parser.skipSpace();
+    if (parser.pos != expr.len) return error.InvalidShellExpression;
+    return value;
 }
 
 // ── createsuperuser ───────────────────────────────────────────────────────

@@ -31,4 +31,5 @@ test {
     _ = @import("auth/password_test.zig");
     _ = @import("auth/user_test.zig");
     _ = @import("admin/registry_test.zig");
+    _ = @import("cli_test.zig");
 }
