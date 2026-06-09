@@ -1,5 +1,6 @@
 const std = @import("std");
 const cli = @import("zypher").cli_runner;
+const log = @import("zypher").log;
 const password = @import("zypher").auth.password;
 const Request = @import("zypher").core.Request;
 const Response = @import("zypher").core.Response;
@@ -219,6 +220,30 @@ test "cli: runserver default handler responds to health check" {
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expectEqualStrings("OK", res.body.?);
+}
+
+test "cli: logs command invocation with redacted args and outcome" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const db_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/logged_superuser.sqlite", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(db_path);
+
+    var buf: std.ArrayList(u8) = .empty;
+    defer buf.deinit(std.testing.allocator);
+
+    log.startCapture(std.testing.allocator, &buf);
+    defer log.stopCapture();
+
+    const args = [_][:0]const u8{ "zypher", "createsuperuser", "--db", db_path, "--email", "logged@example.com", "--password", "Secr3tPass" };
+    const output = try runCli(&args);
+    defer std.testing.allocator.free(output);
+
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "command invoked: createsuperuser") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "command completed: createsuperuser") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "--email logged@example.com") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "--password <redacted>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Secr3tPass") == null);
 }
 
 test "cli: shell eval evaluates integer expressions" {

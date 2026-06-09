@@ -7,6 +7,7 @@ const sqlite = @import("../orm/sqlite.zig");
 const migration = @import("../orm/migration.zig");
 const password = @import("../auth/password.zig");
 const validators = @import("../forms/validators.zig");
+const zypher_log = @import("../log.zig");
 const log = std.log.scoped(.cli);
 
 pub const RunserverConfig = struct {
@@ -21,6 +22,9 @@ pub fn dispatchInner(
     cmd: []const u8,
     args: []const [:0]const u8,
 ) !void {
+    logCliCommand("invoked", cmd, args);
+    defer logCliCommand("completed", cmd, args);
+
     if (std.mem.eql(u8, cmd, "help") or std.mem.eql(u8, cmd, "--help")) {
         try printHelp(out_writer);
     } else if (std.mem.eql(u8, cmd, "runserver")) {
@@ -39,6 +43,50 @@ pub fn dispatchInner(
         try err_writer.print("zypher: unknown command '{s}'\n", .{cmd});
         std.process.exit(1);
     }
+}
+
+fn logCliCommand(event: []const u8, cmd: []const u8, args: []const [:0]const u8) void {
+    var buf: [2048]u8 = undefined;
+    var pos: usize = 0;
+
+    appendLog(&buf, &pos, "command {s}: {s}", .{ event, cmd });
+    if (args.len > 2) {
+        appendLog(&buf, &pos, " args=", .{});
+        var redact_next = false;
+        var i: usize = 2;
+        while (i < args.len) : (i += 1) {
+            if (i > 2) appendLog(&buf, &pos, " ", .{});
+            if (redact_next) {
+                appendLog(&buf, &pos, "<redacted>", .{});
+                redact_next = false;
+                continue;
+            }
+            appendLog(&buf, &pos, "{s}", .{args[i]});
+            if (isSensitiveCliArg(args[i])) redact_next = true;
+        }
+    }
+
+    zypher_log.writeLog(.info, "cli", buf[0..pos]);
+}
+
+fn appendLog(buf: []u8, pos: *usize, comptime fmt: []const u8, args: anytype) void {
+    if (pos.* >= buf.len) return;
+    const written = std.fmt.bufPrint(buf[pos.*..], fmt, args) catch {
+        const suffix = "...";
+        const remaining = buf.len - pos.*;
+        const n = @min(remaining, suffix.len);
+        @memcpy(buf[pos.* .. pos.* + n], suffix[0..n]);
+        pos.* += n;
+        return;
+    };
+    pos.* += written.len;
+}
+
+fn isSensitiveCliArg(arg: []const u8) bool {
+    return std.mem.eql(u8, arg, "--password") or
+        std.mem.eql(u8, arg, "--db-password") or
+        std.mem.eql(u8, arg, "--secret") or
+        std.mem.eql(u8, arg, "--token");
 }
 
 fn printHelp(w: *std.Io.Writer) !void {
