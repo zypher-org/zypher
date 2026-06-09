@@ -323,7 +323,6 @@ fn cmdShell(
     init: std.process.Init,
     args: []const [:0]const u8,
 ) !void {
-    _ = init;
     var eval_expr: ?[]const u8 = null;
 
     var i: usize = 2;
@@ -342,7 +341,9 @@ fn cmdShell(
     }
 
     const expr = eval_expr orelse {
-        try out_writer.print("zypher shell ready. Use --eval <expr> for non-interactive evaluation.\n", .{});
+        var stdin_buffer: [4096]u8 = undefined;
+        var stdin_reader = std.Io.File.stdin().reader(init.io, &stdin_buffer);
+        try runShellSession(&stdin_reader.interface, out_writer, err_writer);
         return;
     };
     const value = evalIntegerExpression(expr) catch {
@@ -351,6 +352,53 @@ fn cmdShell(
     };
     log.info("shell evaluated expression", .{});
     try out_writer.print("{d}\n", .{value});
+}
+
+/// Run an interactive zypher shell session from a line-oriented reader.
+pub fn runShellSession(reader: *std.Io.Reader, out_writer: *std.Io.Writer, err_writer: *std.Io.Writer) !void {
+    log.info("shell session started", .{});
+    try out_writer.writeAll("zypher shell\n");
+    try out_writer.writeAll("Context: std, zypher\n");
+    try out_writer.writeAll("Commands: :help, :quit\n");
+
+    while (true) {
+        try out_writer.writeAll("zypher> ");
+        const maybe_line = reader.takeDelimiter('\n') catch |err| switch (err) {
+            error.ReadFailed => {
+                log.err("shell read failed", .{});
+                return err;
+            },
+            error.StreamTooLong => {
+                log.err("shell input line exceeded reader buffer", .{});
+                try err_writer.writeAll("zypher: input line too long\n");
+                continue;
+            },
+        };
+        const raw_line = maybe_line orelse break;
+        const line = std.mem.trim(u8, raw_line, " \t\r\n");
+        if (line.len == 0) continue;
+
+        if (std.mem.eql(u8, line, ":quit") or std.mem.eql(u8, line, ":q") or std.mem.eql(u8, line, "exit")) {
+            try out_writer.writeAll("bye\n");
+            log.info("shell session ended", .{});
+            return;
+        }
+        if (std.mem.eql(u8, line, ":help") or std.mem.eql(u8, line, ":h")) {
+            try out_writer.writeAll("Available commands: :help, :quit\n");
+            try out_writer.writeAll("Expressions: integer arithmetic with +, -, *, /\n");
+            continue;
+        }
+
+        const value = evalIntegerExpression(line) catch {
+            log.warn("shell rejected invalid expression", .{});
+            try err_writer.print("zypher: invalid expression: {s}\n", .{line});
+            continue;
+        };
+        try out_writer.print("{d}\n", .{value});
+    }
+
+    try out_writer.writeAll("bye\n");
+    log.info("shell session ended at EOF", .{});
 }
 
 const ExprParser = struct {
