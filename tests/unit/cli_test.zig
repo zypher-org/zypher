@@ -82,3 +82,19 @@ test "cli: shell eval evaluates integer expressions" {
 
     try std.testing.expectEqualStrings("7\n", output);
 }
+
+test "cli: shell session evaluates lines, reports help, and exits" {
+    var input = std.Io.Reader.fixed("1 + 2\n:help\n:quit\n");
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var err = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer err.deinit();
+
+    try cli.runShellSession(&input, &out.writer, &err.writer);
+
+    try std.testing.expectEqual(@as(usize, 0), err.written().len);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "zypher shell") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "zypher> 3\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Available commands") != null);
+    try std.testing.expect(std.mem.endsWith(u8, out.written(), "bye\n"));
+}
