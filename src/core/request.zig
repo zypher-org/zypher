@@ -47,7 +47,17 @@ pub const Request = struct {
 
     /// Cookie lookup.
     pub fn cookie(self: *const Request, name: []const u8) ?[]const u8 {
-        return self.query.get(name);
+        const cookie_header = self.header("Cookie") orelse return null;
+        var it = std.mem.splitScalar(u8, cookie_header, ';');
+        while (it.next()) |pair| {
+            const trimmed = std.mem.trim(u8, pair, " \t");
+            if (std.mem.indexOfScalar(u8, trimmed, '=')) |i| {
+                const key = std.mem.trim(u8, trimmed[0..i], " \t");
+                const value = std.mem.trim(u8, trimmed[i + 1 ..], " \t");
+                if (std.mem.eql(u8, key, name)) return value;
+            }
+        }
+        return null;
     }
 
     /// Free all owned memory.

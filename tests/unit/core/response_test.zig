@@ -41,6 +41,25 @@ test "Response.header sets a header and returns self for chaining" {
     try std.testing.expectEqualStrings("value", res.headers.get("X-Custom").?);
 }
 
+test "Response.header owns header names and values" {
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    var name_buf: [16]u8 = undefined;
+    var value_buf: [32]u8 = undefined;
+    const name = try std.fmt.bufPrint(&name_buf, "X-{s}", .{"Stack"});
+    const value = try std.fmt.bufPrint(&value_buf, "value-{d}", .{42});
+
+    _ = res.header(name, value);
+
+    const stored = res.headers.get("X-Stack").?;
+    try std.testing.expectEqualStrings("value-42", stored);
+    try std.testing.expect(stored.ptr != value.ptr);
+
+    _ = res.header(name, "replacement");
+    try std.testing.expectEqualStrings("replacement", res.headers.get("X-Stack").?);
+}
+
 // ── Text body ────────────────────────────────────────────────────
 
 test "Response.text sets body and content-type to text/plain" {
@@ -136,6 +155,21 @@ test "Response.send serialises HTTP/1.1 response" {
     try std.testing.expect(std.mem.indexOf(u8, output, "Content-Type: text/plain; charset=utf-8\r\n") != null);
     // Should end with body
     try std.testing.expect(std.mem.endsWith(u8, output, "OK"));
+}
+
+test "Response.send emits Content-Length zero for empty redirect body" {
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+    try res.redirect("/", 302);
+
+    var buf: std.ArrayList(u8) = .empty;
+    defer buf.deinit(std.testing.allocator);
+    try res.send(std.testing.allocator, &buf);
+
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "HTTP/1.1 302 Found\r\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Content-Length: 0\r\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Location: /\r\n") != null);
+    try std.testing.expect(std.mem.endsWith(u8, buf.items, "\r\n\r\n"));
 }
 
 // ── Deinit ───────────────────────────────────────────────────────

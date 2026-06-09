@@ -56,16 +56,18 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     // ── Demo app ────────────────────────────────────────────────────
+    const demo_mod = b.createModule(.{
+        .root_source_file = b.path("examples/demo/src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "zypher", .module = lib_mod },
+        },
+    });
+
     const demo_exe = b.addExecutable(.{
         .name = "zypher-demo",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/demo/src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zypher", .module = lib_mod },
-            },
-        }),
+        .root_module = demo_mod,
     });
 
     const run_demo_cmd = b.addRunArtifact(demo_exe);
@@ -115,6 +117,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
+            .{ .name = "demo", .module = demo_mod },
         },
     });
 

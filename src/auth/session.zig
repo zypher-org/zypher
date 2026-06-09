@@ -144,6 +144,31 @@ pub const SessionStore = struct {
         const id_hex_alloc = try self.gpa.dupe(u8, &id_hex);
         errdefer self.gpa.free(id_hex_alloc);
 
+        if (self.sessions.getPtr(id_hex_alloc)) |existing| {
+            if (existing == session) {
+                self.gpa.free(id_hex_alloc);
+                log.info("saved session", .{});
+                return;
+            }
+
+            var stored = Session{
+                .id = session.id,
+                .data = std.StringHashMap([]const u8).init(self.gpa),
+                .expires_at = session.expires_at,
+            };
+            errdefer stored.deinit(self.gpa);
+            var iter = session.data.iterator();
+            while (iter.next()) |entry| {
+                try stored.put(self.gpa, entry.key_ptr.*, entry.value_ptr.*);
+            }
+
+            existing.deinit(self.gpa);
+            existing.* = stored;
+            self.gpa.free(id_hex_alloc);
+            log.info("saved session", .{});
+            return;
+        }
+
         // Deep-copy session data into store-owned memory
         var stored = Session{
             .id = session.id,
@@ -161,12 +186,7 @@ pub const SessionStore = struct {
             }
         }
 
-        const old = try self.sessions.fetchPut(id_hex_alloc, stored);
-        if (old) |entry| {
-            self.gpa.free(entry.key);
-            var val = entry.value;
-            val.deinit(self.gpa);
-        }
+        try self.sessions.put(id_hex_alloc, stored);
         log.info("saved session", .{});
     }
 

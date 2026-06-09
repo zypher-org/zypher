@@ -18,10 +18,21 @@ const log = std.log.scoped(.session_mw);
 
 /// Threadlocal store reference — must be set before calling middleware.
 threadlocal var store_ptr: ?*SessionStore = null;
+threadlocal var cookie_config: CookieConfig = session_mod.cookieConfig();
 
 /// Set the session store for the current thread.
 pub fn setStore(store: *SessionStore) void {
     store_ptr = store;
+}
+
+/// Set the session cookie attributes for the current thread.
+pub fn setCookieConfig(config: CookieConfig) void {
+    cookie_config = config;
+}
+
+/// Restore the default secure session cookie attributes.
+pub fn resetCookieConfig() void {
+    cookie_config = session_mod.cookieConfig();
 }
 
 /// Session cookie name.
@@ -75,12 +86,19 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
             hex_buf[i * 2] = "0123456789abcdef"[byte >> 4];
             hex_buf[i * 2 + 1] = "0123456789abcdef"[byte & 0xf];
         }
-        var cookie_buf: [COOKIE_NAME.len + 1 + session_mod.SESSION_ID_LEN * 2 + 64]u8 = undefined;
-        if (std.fmt.bufPrint(&cookie_buf, "{s}={s}; HttpOnly; SameSite=Strict; Secure; Path=/", .{ COOKIE_NAME, &hex_buf })) |cookie_str| {
-            _ = res.header("Set-Cookie", cookie_str);
-        } else |_| {
+        var cookie_buf: [COOKIE_NAME.len + 1 + session_mod.SESSION_ID_LEN * 2 + 128]u8 = undefined;
+        var cookie_writer = std.Io.Writer.fixed(&cookie_buf);
+        cookie_writer.print("{s}={s}", .{ COOKIE_NAME, &hex_buf }) catch {
             log.warn("failed to format session cookie - continuing without cookie", .{});
-        }
+            next(req, res);
+            return;
+        };
+        if (cookie_config.httponly) cookie_writer.writeAll("; HttpOnly") catch {};
+        cookie_writer.print("; SameSite={s}", .{cookie_config.samesite}) catch {};
+        if (cookie_config.secure) cookie_writer.writeAll("; Secure") catch {};
+        cookie_writer.print("; Path={s}", .{cookie_config.path}) catch {};
+        cookie_writer.print("; Max-Age={d}", .{cookie_config.max_age}) catch {};
+        _ = res.header("Set-Cookie", cookie_buf[0..cookie_writer.end]);
         log.debug("created new session for {s}", .{req.path});
     }
 

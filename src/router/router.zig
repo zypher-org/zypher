@@ -134,15 +134,7 @@ pub const Router = struct {
                     first = false;
                 }
             }
-            // Allocate the Allow value so it survives beyond this stack frame
-            const allow_val = res.allocator.alloc(u8, pos) catch {
-                _ = res.header("Allow", "GET");
-                res.text("Method Not Allowed") catch {};
-                return;
-            };
-            @memcpy(allow_val[0..pos], buf[0..pos]);
-            res.owned_header_values.append(res.allocator, allow_val) catch {};
-            _ = res.header("Allow", allow_val);
+            _ = res.header("Allow", buf[0..pos]);
             res.text("Method Not Allowed") catch {};
             log.warn("{s} {s} → 405 (path matched, method mismatch)", .{ @tagName(req.method), req.path });
             return;

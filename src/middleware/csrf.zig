@@ -40,7 +40,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
         },
         .post, .put, .delete, .patch => {
             // Unsafe method — validate token
-            const token = req.headers.get("X-CSRF-Token");
+            const token = req.headers.get("X-CSRF-Token") orelse req.formValue("_csrf");
             if (token == null or !validateToken(token.?)) {
                 log.warn("CSRF validation failed for {s} {s}", .{ @tagName(req.method), req.path });
                 _ = res.status(403);

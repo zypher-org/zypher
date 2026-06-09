@@ -183,7 +183,7 @@ pub const Template = struct {
 
     fn renderVariable(self: *Template, expr: []const u8, ctx: *Context, writer: *std.Io.Writer) RenderError!void {
         _ = self;
-        var parts = std.mem.splitSequence(u8, expr, " | ");
+        var parts = std.mem.splitScalar(u8, expr, '|');
         const var_expr = std.mem.trim(u8, parts.first(), " \t");
         const value = resolveVar(ctx, var_expr);
 
