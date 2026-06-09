@@ -16,24 +16,51 @@ pub const Router = struct {
         return Route.init(m, pattern, handler);
     }
 
-    /// Initialise the router with a comptime tuple of routes and a 404 handler.
+    /// Initialise the router with a comptime routes tuple/array and a 404 handler.
     pub fn init(comptime routes: anytype, not_found: *const fn (*Request, *Response) void) Router {
-        // Validate all patterns at comptime
+        const type_info = @typeInfo(@TypeOf(routes));
+        comptime {
+            if (type_info != .@"struct" and type_info != .array) {
+                @compileError("routes must be a tuple or array, got " ++ @tagName(type_info));
+            }
+        }
         const route_list = comptime blk: {
-            const field_names = std.meta.fieldNames(@TypeOf(routes));
-            var list: [field_names.len]Route = undefined;
-            for (field_names, 0..) |name, i| {
-                const r = @field(routes, name);
-                Route.validatePattern(r.pattern) catch |err| {
-                    @compileError("Invalid route pattern '" ++ r.pattern ++ "': " ++ @errorName(err));
-                };
-                list[i] = r;
+            const route_count = if (type_info == .@"struct") cnt: {
+                break :cnt std.meta.fieldNames(@TypeOf(routes)).len;
+            } else cnt: {
+                break :cnt type_info.array.len;
+            };
+            var list: [route_count]Route = undefined;
+            if (type_info == .@"struct") {
+                const field_names = std.meta.fieldNames(@TypeOf(routes));
+                for (field_names, 0..) |name, i| {
+                    const r = @field(routes, name);
+                    Route.validatePattern(r.pattern) catch |err| {
+                        @compileError("Invalid route pattern '" ++ r.pattern ++ "': " ++ @errorName(err));
+                    };
+                    list[i] = r;
+                }
+            } else {
+                for (&routes, 0..) |*r, i| {
+                    Route.validatePattern(r.pattern) catch |err| {
+                        @compileError("Invalid route pattern '" ++ r.pattern ++ "': " ++ @errorName(err));
+                    };
+                    list[i] = r.*;
+                }
             }
             break :blk list;
         };
 
         return .{
             .routes = &route_list,
+            .not_found_handler = not_found,
+        };
+    }
+
+    /// Initialise the router with a runtime slice of routes and a 404 handler.
+    pub fn initFromSlice(routes: []const Route, not_found: *const fn (*Request, *Response) void) Router {
+        return .{
+            .routes = routes,
             .not_found_handler = not_found,
         };
     }

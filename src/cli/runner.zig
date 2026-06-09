@@ -913,7 +913,7 @@ fn cmdNew(
             \\const zypher = @import("zypher");
             \\
             \\pub fn main() !void {
-            \\    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+            \\    var gpa = std.heap.DebugAllocator(.{}){};
             \\    const alloc = gpa.allocator();
             \\    _ = alloc;
             \\    std.log.info("zypher app started", .{});
