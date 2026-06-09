@@ -1,20 +1,25 @@
-/// zypher CLI entry point.
+/// zypher CLI — binary entry point.
 const std = @import("std");
+const zypher = @import("zypher");
 
 pub fn main(init: std.process.Init) !void {
+    const args = try std.process.Args.toSlice(init.minimal.args, init.arena.allocator());
+    try dispatch(init, args);
+}
+
+fn dispatch(init: std.process.Init, args: []const [:0]const u8) !void {
+    const cmd = if (args.len > 1) args[1] else "help";
+
     const stdout = std.Io.File.stdout();
-    var buf: [4096]u8 = undefined;
-    var file_writer = stdout.writer(init.io, &buf);
-    const w = &file_writer.interface;
-    try w.print("zypher — Django-inspired web framework for Zig\n", .{});
-    try w.print("Usage: zypher <command> [options]\n\n", .{});
-    try w.print("Commands:\n", .{});
-    try w.print("  new <name>         Create a new project\n", .{});
-    try w.print("  runserver          Start the HTTP server\n", .{});
-    try w.print("  migrate            Run pending migrations\n", .{});
-    try w.print("  makemigrations     Generate migration files\n", .{});
-    try w.print("  createsuperuser    Create a superuser account\n", .{});
-    try w.print("  shell              Open interactive REPL\n", .{});
-    try w.print("  help               Show this help message\n", .{});
-    try file_writer.flush();
+    var out_buf: [4096]u8 = undefined;
+    var out_fw = stdout.writer(init.io, &out_buf);
+
+    const stderr = std.Io.File.stderr();
+    var err_buf: [4096]u8 = undefined;
+    var err_fw = stderr.writer(init.io, &err_buf);
+
+    try zypher.cli_runner.dispatchInner(&out_fw.interface, &err_fw.interface, init, cmd, args);
+
+    try out_fw.flush();
+    try err_fw.flush();
 }

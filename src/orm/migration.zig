@@ -39,7 +39,7 @@ pub const MigrationRunner = struct {
     }
 
     /// Ensure the migration history table exists.
-    fn ensureHistoryTable(self: *MigrationRunner) MigrationError!void {
+    pub fn ensureHistoryTable(self: *MigrationRunner) MigrationError!void {
         self.db.exec(
             \\CREATE TABLE IF NOT EXISTS zypher_migrations (
             \\  id INTEGER PRIMARY KEY,

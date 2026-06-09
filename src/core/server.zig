@@ -107,7 +107,7 @@ pub const Server = struct {
     /// Start listening and serving requests. Blocks until shutdown.
     pub fn listenAndServe(self: *Server, io: std.Io, gpa: std.mem.Allocator, handler: HandlerFn) !void {
         const addr = try listenAddress(self.config.host, self.config.port);
-        var net_server = try std.Io.net.listen(&addr, io, .{});
+        var net_server = try std.Io.net.IpAddress.listen(&addr, io, .{});
         defer net_server.deinit(io);
         self.listener = net_server;
 
@@ -136,29 +136,33 @@ pub const Server = struct {
         var read_buf: [8192]u8 = undefined;
         var write_buf: [8192]u8 = undefined;
 
-        const stream_reader = stream.reader(io, &read_buf);
-        const stream_writer = stream.writer(io, &write_buf);
+        var stream_reader = stream.reader(io, &read_buf);
+        var stream_writer = stream.writer(io, &write_buf);
 
         var http_server = std.http.Server.init(&stream_reader.interface, &stream_writer.interface);
 
         while (true) {
-            const head_buffer = http_server.receiveHead() catch |err| switch (err) {
+            const server_req = http_server.receiveHead() catch |err| switch (err) {
                 error.HttpConnectionClosing => return,
                 error.HttpHeadersOversize => {
                     log.warn("request headers too large", .{});
+                    return;
+                },
+                error.HttpHeadersInvalid => {
+                    log.warn("request headers invalid", .{});
                     return;
                 },
                 error.HttpRequestTruncated => {
                     log.warn("request truncated", .{});
                     return;
                 },
-                error.ReadFailed => {
-                    log.warn("read failed on connection", .{});
+                else => {
+                    log.warn("request error: {t}", .{err});
                     return;
                 },
             };
 
-            var req = buildRequest(gpa, head_buffer, self.config.max_body_size) catch |err| {
+            var req = buildRequest(gpa, server_req.head_buffer, self.config.max_body_size) catch |err| {
                 log.warn("failed to build request: {t}", .{err});
                 var err_res = Response.init(gpa);
                 errdefer err_res.deinit();
