@@ -161,7 +161,7 @@ Invalid route definitions **must fail at compile time**.
 
 **Middleware Signature**:
 ```zig
-fn middleware(req: *Request, res: *Response, next: fn() anyerror!void) anyerror!void
+fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void
 ```
 
 **Use Cases**:
@@ -169,6 +169,8 @@ fn middleware(req: *Request, res: *Response, next: fn() anyerror!void) anyerror!
 - Authentication
 - CSRF protection
 - Panic recovery
+- Static file serving
+- Gzip compression
 
 ---
 

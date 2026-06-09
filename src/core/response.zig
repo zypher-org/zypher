@@ -46,6 +46,22 @@ fn reasonPhrase(code: u16) ?[]const u8 {
     };
 }
 
+fn rawJsonSlice(content: anytype) ?[]const u8 {
+    const T = @TypeOf(content);
+    return switch (@typeInfo(T)) {
+        .pointer => |ptr| switch (ptr.size) {
+            .slice => if (ptr.child == u8) content else null,
+            .one => switch (@typeInfo(ptr.child)) {
+                .array => |arr| if (arr.child == u8) content[0..arr.len] else null,
+                else => null,
+            },
+            else => null,
+        },
+        .array => |arr| if (arr.child == u8) content[0..] else null,
+        else => null,
+    };
+}
+
 pub const Response = struct {
     status_code: u16 = 200,
     reason_phrase: ?[]const u8 = "OK",
@@ -125,9 +141,20 @@ pub const Response = struct {
     }
 
     /// Set a JSON body.
-    pub fn json(self: *Response, content: []const u8) !void {
+    ///
+    /// Byte strings are treated as already-serialized JSON for backwards
+    /// compatibility. Other values are serialized with `std.json`.
+    pub fn json(self: *Response, content: anytype) !void {
         if (self.body) |b| self.allocator.free(b);
-        self.body = try self.allocator.dupe(u8, content);
+        if (rawJsonSlice(content)) |raw| {
+            self.body = try self.allocator.dupe(u8, raw);
+        } else {
+            var aw = std.Io.Writer.Allocating.init(self.allocator);
+            errdefer aw.deinit();
+            try std.json.Stringify.value(content, .{}, &aw.writer);
+            var buf = aw.toArrayList();
+            self.body = try buf.toOwnedSlice(self.allocator);
+        }
         _ = self.header("Content-Type", "application/json");
     }
 

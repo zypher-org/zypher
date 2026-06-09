@@ -90,6 +90,29 @@ test "Response.json sets body and content-type to application/json" {
     try std.testing.expectEqualStrings("application/json", res.headers.get("Content-Type").?);
 }
 
+test "Response.json serializes typed struct with std.json" {
+    const Payload = struct {
+        status: []const u8,
+        count: u8,
+        active: bool,
+    };
+
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+    try res.json(Payload{ .status = "ok", .count = 2, .active = true });
+
+    try std.testing.expectEqualStrings("{\"status\":\"ok\",\"count\":2,\"active\":true}", res.body.?);
+    try std.testing.expectEqualStrings("application/json", res.headers.get("Content-Type").?);
+}
+
+test "Response.json escapes typed string values" {
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+    try res.json(.{ .message = "hello\n\"zypher\"" });
+
+    try std.testing.expectEqualStrings("{\"message\":\"hello\\n\\\"zypher\\\"\"}", res.body.?);
+}
+
 // ── Redirect ─────────────────────────────────────────────────────
 
 test "Response.redirect sets status and Location header" {
