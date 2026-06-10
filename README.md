@@ -85,13 +85,19 @@ cd examples/blog
 - `mvc` — model/view/controller split
 - `mvp` — model/view/presenter split
 
+Use `--api` to scaffold the JSON API variant of any built-in style:
+
+```sh
+zig build run -- new examples/books-api --template mvc --api
+```
+
 Third-party templates can be used with `--template-dir`:
 
 ```sh
 zypher new apps/admin_tool --template custom --template-dir /path/to/templates
 ```
 
-Generated templates include a `build.zig`, a runnable app, a sample managed ORM model, and an admin dashboard. `/admin` redirects to `/admin/login`; create credentials with `zypher createsuperuser`.
+Generated templates include a `build.zig`, a runnable app, a sample managed ORM model, and an admin dashboard. `/admin` redirects to `/admin/login`; create credentials with `zypher createsuperuser`. API variants return JSON from app routes and do not include project HTML templates.
 
 ### Manual App
 

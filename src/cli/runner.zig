@@ -103,7 +103,7 @@ fn printHelp(w: *std.Io.Writer) !void {
     try w.print("zypher — Django-inspired web framework for Zig\n", .{});
     try w.print("Usage: zypher <command> [options]\n\n", .{});
     try w.print("Commands:\n", .{});
-    try w.print("  new <name>         Create a new project from a scaffold template\n", .{});
+    try w.print("  new <path>         Create a new project from a scaffold template\n", .{});
     try w.print("  templates          List scaffold templates\n", .{});
     try w.print("  run [path]         Run a scaffolded app via its build.zig\n", .{});
     try w.print("  demo <name>        Create a demo project with template rendering\n", .{});
@@ -855,6 +855,7 @@ const NewOptions = struct {
     project_name: []const u8,
     template_name: []const u8 = default_template_name,
     template_dir: []const u8 = default_template_dir,
+    api: bool = false,
 };
 
 const RunOptions = struct {
@@ -904,6 +905,8 @@ fn parseNewOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !NewO
                 std.process.exit(1);
             }
             opts.template_dir = args[i];
+        } else if (std.mem.eql(u8, args[i], "--api")) {
+            opts.api = true;
         } else {
             try err_writer.print("zypher: unknown new option '{s}'\n", .{args[i]});
             std.process.exit(1);
@@ -954,24 +957,30 @@ fn scaffoldProject(
         std.process.exit(1);
     };
 
-    const source_path = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ opts.template_dir, opts.template_name });
+    const source_template = if (opts.api)
+        try std.fmt.allocPrint(gpa, "{s}-api", .{opts.template_name})
+    else
+        try gpa.dupe(u8, opts.template_name);
+    defer gpa.free(source_template);
+
+    const source_path = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ opts.template_dir, source_template });
     defer gpa.free(source_path);
 
     var source_dir = cwd.openDir(io, source_path, .{ .iterate = true }) catch {
-        try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ opts.template_name, opts.template_dir });
+        try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ source_template, opts.template_dir });
         cwd.deleteTree(io, opts.project_path) catch {};
         std.process.exit(1);
     };
     defer source_dir.close(io);
 
     copyTemplateDir(gpa, io, source_dir, cwd, opts.project_path, opts.project_name) catch {
-        try err_writer.print("zypher: failed to copy template '{s}'\n", .{opts.template_name});
+        try err_writer.print("zypher: failed to copy template '{s}'\n", .{source_template});
         cwd.deleteTree(io, opts.project_path) catch {};
         std.process.exit(1);
     };
 
-    log.info("scaffolded project '{s}' from template '{s}'", .{ opts.project_path, opts.template_name });
-    try out_writer.print("Created project '{s}' from template '{s}'\n", .{ opts.project_path, opts.template_name });
+    log.info("scaffolded project '{s}' from template '{s}'", .{ opts.project_path, source_template });
+    try out_writer.print("Created project '{s}' from template '{s}'\n", .{ opts.project_path, source_template });
     try out_writer.print("  cd {s}\n", .{opts.project_path});
     try out_writer.print("  zypher run\n", .{});
 }

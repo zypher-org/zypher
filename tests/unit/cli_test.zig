@@ -144,6 +144,27 @@ test "cli: new creates selected clean architecture template" {
     try std.testing.expect(std.mem.indexOf(u8, service_zig, project_name) != null);
 }
 
+test "cli: new --api creates selected api variant" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const project_name = try std.fmt.allocPrintSentinel(std.testing.allocator, "zypher_cli_api_{s}", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(project_name);
+    defer std.Io.Dir.cwd().deleteTree(std.testing.io, project_name) catch {};
+
+    const args = [_][:0]const u8{ "zypher", "new", project_name, "--template", "mvc", "--api" };
+    const output = try runCli(&args);
+    defer std.testing.allocator.free(output);
+
+    var root = try std.Io.Dir.cwd().openDir(std.testing.io, project_name, .{});
+    defer root.close(std.testing.io);
+    const main_zig = try root.readFileAlloc(std.testing.io, "src/main.zig", std.testing.allocator, .limited(16 * 1024));
+    defer std.testing.allocator.free(main_zig);
+
+    try std.testing.expect(std.mem.indexOf(u8, output, "mvc-api") != null);
+    try std.testing.expect(std.mem.indexOf(u8, main_zig, "res.json") != null);
+}
+
 test "cli: new accepts nested project paths" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

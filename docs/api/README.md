@@ -27,4 +27,4 @@ This directory contains the zypher web framework API reference.
 - AdminSite, Registration, setDb, setEngine
 
 ## CLI
-- Runner, RunserverConfig, project templates, scaffold runner
+- Runner, RunserverConfig, project templates, API variants, scaffold runner

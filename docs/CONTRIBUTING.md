@@ -138,6 +138,32 @@ Readable code beats short code.
 - Reference relevant spec sections
 - Mention tests added or updated
 
+---
+
+## 10. Contributing Scaffold Templates
+
+Project scaffold templates live under the repository root `templates/` directory. A new template contribution must include both variants:
+
+- `<name>` — the template-oriented app variant
+- `<name>-api` — the JSON API variant selected by `zypher new --template <name> --api`
+
+Each variant must include:
+
+- `build.zig`
+- a runnable `src/main.zig`
+- at least one Zig test reachable through `zig build test`
+- a `.gitignore` for `.zig-cache/`, `zig-out/`, and generated database files
+
+Template variants may include project HTML templates. API variants must not require project HTML templates for app routes; app-facing routes should return JSON with `Response.json`.
+
+All built-in templates must also keep the generated admin baseline:
+
+- sample ORM model registration
+- `/admin` redirecting to `/admin/login`
+- `/admin/login` authenticating against the `users` table created by `zypher createsuperuser`
+
+Use `{{project_name}}` for substitutions in file paths or file contents. The CLI replaces it with the basename of the project path.
+
 PRs that break specs will be rejected, even if they "work".
 
 ---
