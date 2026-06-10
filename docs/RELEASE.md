@@ -2,20 +2,19 @@
 
 Zypher releases are driven by annotated Git tags. Tags matching `v*` trigger the
 release workflow, which builds all supported CLI targets, publishes a GitHub
-release, publishes the npm package when npm credentials are configured, and
-renders a Homebrew formula with release checksums.
+release, publishes the npm package, renders a Homebrew formula with release
+checksums, and pushes that formula to the Homebrew tap.
 
 ## Required Secrets
 
-- `NPM_TOKEN` publishes the `zypher` package to npm.
+- `NPM_TOKEN` publishes the `@zypher-org/zypher` package to npm. The installed
+  binary command remains `zypher`.
 - `HOMEBREW_TAP_REPO` names the tap repository to update, for example
   `zypher-org/homebrew-tap`.
 - `HOMEBREW_TAP_TOKEN` pushes the rendered formula to the tap repository.
 
-The GitHub release and formula asset are created even when npm or Homebrew tap
-secrets are absent. Missing npm credentials skip npm publishing. Missing
-Homebrew tap credentials skip the tap update after uploading `zypher.rb` to the
-GitHub release.
+Missing npm or Homebrew tap credentials fail the release workflow. A green
+release run means GitHub assets, npm, and Homebrew tap publishing all completed.
 
 ## Supported Release Assets
 

@@ -171,8 +171,8 @@ jobs:
         run: |
           set -eu
           if [ -z "${NODE_AUTH_TOKEN}" ]; then
-            echo "Skipping npm publish because NPM_TOKEN is not configured."
-            exit 0
+            echo "NPM_TOKEN is required to publish the npm release."
+            exit 1
           fi
           tag=latest
           if [ "${PRERELEASE}" = "true" ]; then
@@ -200,8 +200,8 @@ jobs:
         run: |
           set -eu
           if [ -z "${HOMEBREW_TAP_REPO}" ] || [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
-            echo "Skipping Homebrew tap update because HOMEBREW_TAP_REPO or HOMEBREW_TAP_TOKEN is not configured."
-            exit 0
+            echo "HOMEBREW_TAP_REPO and HOMEBREW_TAP_TOKEN are required to publish the Homebrew release."
+            exit 1
           fi
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" homebrew-tap
           mkdir -p homebrew-tap/Formula
