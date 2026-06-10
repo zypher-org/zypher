@@ -33,6 +33,35 @@ Each release publishes these archives:
 - `SHA256SUMS`
 - `zypher.rb`
 
+## npm Installation
+
+Install the published CLI globally:
+
+```sh
+npm install -g @zypher-org/zypher@beta
+zypher help
+```
+
+Install an exact beta version:
+
+```sh
+npm install -g @zypher-org/zypher@0.1.0-beta
+zypher help
+```
+
+Run without a global install:
+
+```sh
+npx @zypher-org/zypher@beta help
+```
+
+For project-local use:
+
+```sh
+npm install --save-dev @zypher-org/zypher@beta
+npx zypher help
+```
+
 ## Beta Release
 
 Create an annotated beta tag from the commit to release, or push `main` after

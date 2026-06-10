@@ -67,6 +67,19 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 
 ## Quick Start
 
+Install the published CLI from npm:
+
+```sh
+npm install -g @zypher-org/zypher@beta
+zypher help
+```
+
+Run without a global install:
+
+```sh
+npx @zypher-org/zypher@beta help
+```
+
 Build the local CLI once from the repository root:
 
 ```sh
