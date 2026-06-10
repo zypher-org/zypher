@@ -2,6 +2,7 @@
 zig-out
 *.log
 *.tmp
+zypher_demo.db
 status.md
 task.md
 .env
