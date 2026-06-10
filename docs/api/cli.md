@@ -23,7 +23,7 @@ zypher help
 ### Commands
 - `new <path> [--template <name>] [--api] [--template-dir <dir>]` — Scaffold a new project from a template
 - `templates [--template-dir <dir>]` — List available scaffold templates
-- `run [path] [--zypher-root <path>] [--port <port>] [-- <app args...>]` — Run a scaffolded app through its `build.zig`
+- `run [path] [--zypher-root <path>] [--port <port>] [-- <app args...>]` — Run a scaffolded app through its `build.zig`; the Zypher root is inferred by default
 - `doc [--zypher-root <path>] [--host <host>] [--port <port>] [--max-requests <n>]` — Build and serve Zypher library documentation
 - `doc-user [path] [--host <host>] [--port <port>] [--max-requests <n>]` — Build and serve documentation for user code
 - `demo <path>` — Compatibility alias that scaffolds the `mvc` template
@@ -97,7 +97,7 @@ Scaffolded admin login uses `username` and `password`. Password recovery uses th
 
 ```sh
 zypher run .
-zypher run examples/blog --zypher-root ../..
+zypher run examples/blog
 zypher run . --port 9000
 ```
 
@@ -107,7 +107,7 @@ It runs:
 zig build -Dzypher-root=<path> run -- --port <port>
 ```
 
-Generated `build.zig` files default `zypher-root` to `../..`, which matches apps created under `examples/`. Pass `--zypher-root` for apps elsewhere. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port. Users should prefer `zypher run` over invoking the app build script directly.
+`zypher run` passes the Zypher source root to the generated build script automatically. It infers that root from the CLI binary when the binary lives under `zig-out/bin`, and falls back to the current framework checkout when run from the repository root. Pass `--zypher-root` only for nonstandard installs. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port. Users should prefer `zypher run` over invoking the app build script directly.
 
 ## Documentation Server
 

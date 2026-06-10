@@ -983,7 +983,7 @@ const NewOptions = struct {
 
 const RunOptions = struct {
     project_path: []const u8 = ".",
-    zypher_root: []const u8 = default_zypher_root,
+    zypher_root: ?[]const u8 = null,
     port: u16 = 8080,
     app_args_start: usize,
 };
@@ -1205,7 +1205,16 @@ fn cmdRun(
     args: []const [:0]const u8,
 ) !void {
     const opts = parseRunOptions(err_writer, args) catch return;
-    const argv = try buildRunArgv(init.gpa, opts.zypher_root, opts.port, args[opts.app_args_start..]);
+    const zypher_root = if (opts.zypher_root) |root|
+        try init.gpa.dupe(u8, root)
+    else
+        inferZypherRoot(init.gpa, init.io) catch {
+            try err_writer.print("zypher: failed to locate Zypher source tree; pass --zypher-root <path>\n", .{});
+            std.process.exit(1);
+        };
+    defer init.gpa.free(zypher_root);
+
+    const argv = try buildRunArgv(init.gpa, zypher_root, opts.port, args[opts.app_args_start..]);
     defer freeArgv(init.gpa, argv);
 
     try out_writer.print("Running app in {s}\n", .{opts.project_path});
@@ -1258,6 +1267,41 @@ fn parseRunOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !RunO
         }
     }
     return opts;
+}
+
+pub fn inferZypherRoot(gpa: std.mem.Allocator, io: std.Io) ![]const u8 {
+    const exe_dir = std.process.executableDirPathAlloc(io, gpa) catch {
+        return gpa.dupe(u8, default_zypher_root);
+    };
+    defer gpa.free(exe_dir);
+
+    if (try candidateZypherRootFromExeDir(gpa, io, exe_dir)) |root| return root;
+    if (try candidateZypherRootFromPath(gpa, io, ".")) |root| return root;
+    return gpa.dupe(u8, default_zypher_root);
+}
+
+fn candidateZypherRootFromExeDir(gpa: std.mem.Allocator, io: std.Io, exe_dir: []const u8) !?[]const u8 {
+    const bin_dir = std.fs.path.basename(exe_dir);
+    if (!std.mem.eql(u8, bin_dir, "bin")) return null;
+
+    const zig_out_dir = std.fs.path.dirname(exe_dir) orelse return null;
+    if (!std.mem.eql(u8, std.fs.path.basename(zig_out_dir), "zig-out")) return null;
+
+    const root = std.fs.path.dirname(zig_out_dir) orelse return null;
+    return candidateZypherRootFromPath(gpa, io, root);
+}
+
+fn candidateZypherRootFromPath(gpa: std.mem.Allocator, io: std.Io, root: []const u8) !?[]const u8 {
+    if (std.mem.eql(u8, root, ".")) {
+        std.Io.Dir.cwd().access(io, "src/zypher.zig", .{}) catch return null;
+        return try gpa.dupe(u8, root);
+    }
+
+    const zypher_file = try std.fs.path.join(gpa, &.{ root, "src", "zypher.zig" });
+    defer gpa.free(zypher_file);
+
+    std.Io.Dir.accessAbsolute(io, zypher_file, .{}) catch return null;
+    return try gpa.dupe(u8, root);
 }
 
 pub fn buildRunArgv(gpa: std.mem.Allocator, zypher_root: []const u8, port: u16, app_args: []const [:0]const u8) ![][]const u8 {

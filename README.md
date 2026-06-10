@@ -83,7 +83,7 @@ Use the CLI when starting a new app:
 zypher new examples/blog --template mvc
 cd examples/blog
 zypher createsuperuser --db blog.db
-zypher run . --zypher-root ../.. --port 8080
+zypher run . --port 8080
 ```
 
 `zypher new` accepts either a project name or a path. The built-in templates live in the root `templates/` directory:
@@ -106,7 +106,7 @@ zypher new apps/admin_tool --template custom --template-dir /path/to/templates
 ```
 
 Generated templates include a `build.zig`, a runnable app, a sample managed ORM model, and an admin dashboard. `/admin` redirects to `/admin/login`; create credentials with `zypher createsuperuser`, which prompts for username, email, password, and password confirmation. Scaffolded admin login includes password recovery through `/admin/forgot-password` and `/admin/reset-password`. API variants return JSON from app routes and do not include project HTML templates.
-`zypher run` accepts `--port`; if omitted, scaffolded apps default to `8080`.
+`zypher run` infers the Zypher source root from the CLI binary and accepts `--port`; if omitted, scaffolded apps default to `8080`.
 
 Serve generated documentation from the CLI:
 
@@ -123,13 +123,13 @@ See `examples/books-api/` for an MVC-style JSON API with an admin dashboard for 
 
 ```sh
 cd examples/books-api
-zypher run . --zypher-root ../..
+zypher run .
 ```
 
 The example listens on `127.0.0.1:8080` by default. Pass `--port` to choose another port:
 
 ```sh
-zypher run . --zypher-root ../.. --port 8091
+zypher run . --port 8091
 ```
 
 It exposes:

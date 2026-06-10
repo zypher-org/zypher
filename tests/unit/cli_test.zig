@@ -216,6 +216,13 @@ test "cli: run builds zig build run argv with zypher root and passthrough args" 
     try std.testing.expectEqualStrings("--verbose", argv[7]);
 }
 
+test "cli: run infers zypher root from current checkout" {
+    const root = try cli.inferZypherRoot(std.testing.allocator, std.testing.io);
+    defer std.testing.allocator.free(root);
+
+    try std.testing.expect(std.mem.eql(u8, root, ".") or std.mem.endsWith(u8, root, "/zypher"));
+}
+
 test "cli: doc builds zig build doc argv" {
     const argv = try cli.buildDocArgv(std.testing.allocator);
     defer {

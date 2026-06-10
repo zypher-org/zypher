@@ -8,7 +8,7 @@ Use the Zypher CLI for normal project workflows:
 zig build
 export PATH="$PWD/zig-out/bin:$PATH"
 zypher new examples/blog --template mvc
-zypher run examples/blog --zypher-root .
+zypher run examples/blog
 zypher doc
 zypher doc-user examples/blog
 ```
