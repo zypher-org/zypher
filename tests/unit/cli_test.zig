@@ -98,21 +98,100 @@ test "cli: new creates expected project skeleton" {
     defer root.close(std.testing.io);
     var src = try root.openDir(std.testing.io, "src", .{});
     defer src.close(std.testing.io);
-    var templates = try root.openDir(std.testing.io, "templates", .{});
-    defer templates.close(std.testing.io);
-    var tests = try root.openDir(std.testing.io, "tests", .{});
-    defer tests.close(std.testing.io);
-    var examples = try root.openDir(std.testing.io, "examples", .{});
-    defer examples.close(std.testing.io);
 
     const build_zig = try root.readFileAlloc(std.testing.io, "build.zig", std.testing.allocator, .limited(8192));
     defer std.testing.allocator.free(build_zig);
-    const main_zig = try src.readFileAlloc(std.testing.io, "main.zig", std.testing.allocator, .limited(4096));
+    const main_zig = try src.readFileAlloc(std.testing.io, "main.zig", std.testing.allocator, .limited(16 * 1024));
     defer std.testing.allocator.free(main_zig);
 
     try std.testing.expect(std.mem.indexOf(u8, output, "Created project") != null);
-    try std.testing.expect(std.mem.indexOf(u8, build_zig, "b.dependency(\"zypher\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "single-file") != null);
+    try std.testing.expect(std.mem.indexOf(u8, build_zig, "zypher-root") != null);
     try std.testing.expect(std.mem.indexOf(u8, main_zig, "@import(\"zypher\")") != null);
+    try std.testing.expect(std.mem.indexOf(u8, main_zig, project_name) != null);
+}
+
+test "cli: new creates selected clean architecture template" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const project_name = try std.fmt.allocPrintSentinel(std.testing.allocator, "zypher_cli_clean_{s}", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(project_name);
+    defer std.Io.Dir.cwd().deleteTree(std.testing.io, project_name) catch {};
+
+    const args = [_][:0]const u8{ "zypher", "new", project_name, "--template", "clean-arch" };
+    const output = try runCli(&args);
+    defer std.testing.allocator.free(output);
+
+    const cwd = std.Io.Dir.cwd();
+    var root = try cwd.openDir(std.testing.io, project_name, .{});
+    defer root.close(std.testing.io);
+    var src = try root.openDir(std.testing.io, "src", .{});
+    defer src.close(std.testing.io);
+    var domain = try src.openDir(std.testing.io, "domain", .{});
+    defer domain.close(std.testing.io);
+    var application = try src.openDir(std.testing.io, "application", .{});
+    defer application.close(std.testing.io);
+    var infrastructure = try src.openDir(std.testing.io, "infrastructure", .{});
+    defer infrastructure.close(std.testing.io);
+    var presentation = try src.openDir(std.testing.io, "presentation", .{});
+    defer presentation.close(std.testing.io);
+
+    const service_zig = try application.readFileAlloc(std.testing.io, "home_service.zig", std.testing.allocator, .limited(4096));
+    defer std.testing.allocator.free(service_zig);
+
+    try std.testing.expect(std.mem.indexOf(u8, output, "clean-arch") != null);
+    try std.testing.expect(std.mem.indexOf(u8, service_zig, project_name) != null);
+}
+
+test "cli: new accepts nested project paths" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const project_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/apps/nested_app", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(project_path);
+    defer std.Io.Dir.cwd().deleteTree(std.testing.io, project_path) catch {};
+
+    const args = [_][:0]const u8{ "zypher", "new", project_path, "--template", "single-file" };
+    const output = try runCli(&args);
+    defer std.testing.allocator.free(output);
+
+    var root = try std.Io.Dir.cwd().openDir(std.testing.io, project_path, .{});
+    defer root.close(std.testing.io);
+    const main_zig = try root.readFileAlloc(std.testing.io, "src/main.zig", std.testing.allocator, .limited(16 * 1024));
+    defer std.testing.allocator.free(main_zig);
+
+    try std.testing.expect(std.mem.indexOf(u8, output, project_path) != null);
+    try std.testing.expect(std.mem.indexOf(u8, main_zig, "nested_app.db") != null);
+}
+
+test "cli: templates lists built-in scaffold templates" {
+    const args = [_][:0]const u8{ "zypher", "templates" };
+    const output = try runCli(&args);
+    defer std.testing.allocator.free(output);
+
+    try std.testing.expect(std.mem.indexOf(u8, output, "single-file") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "clean-arch") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "mvc") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "mvp") != null);
+}
+
+test "cli: run builds zig build run argv with zypher root and passthrough args" {
+    const app_args = [_][:0]const u8{ "--port", "9090" };
+    const argv = try cli.buildRunArgv(std.testing.allocator, "/tmp/zypher", &app_args);
+    defer {
+        for (argv) |arg| std.testing.allocator.free(arg);
+        std.testing.allocator.free(argv);
+    }
+
+    try std.testing.expectEqual(@as(usize, 7), argv.len);
+    try std.testing.expectEqualStrings("zig", argv[0]);
+    try std.testing.expectEqualStrings("build", argv[1]);
+    try std.testing.expectEqualStrings("-Dzypher-root=/tmp/zypher", argv[2]);
+    try std.testing.expectEqualStrings("run", argv[3]);
+    try std.testing.expectEqualStrings("--", argv[4]);
+    try std.testing.expectEqualStrings("--port", argv[5]);
+    try std.testing.expectEqualStrings("9090", argv[6]);
 }
 
 test "cli: migrate applies SQL files in order and skips applied migrations" {

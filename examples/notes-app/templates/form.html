@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block content %}
+<section class="form-panel">
+  <h1>{{ page_title }}</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+    <label>Title</label>
+    <input type="text" name="title" value="{{ title_value }}">
+    <label>Body</label>
+    <textarea name="body">{{ body_value }}</textarea>
+    <label>Tags</label>
+    <input type="text" name="tags" value="{{ tags_value }}">
+    <div class="checks">
+      <label><input type="checkbox" name="pinned" value="1" {{ pinned_checked|safe }}> Pinned</label>
+      <label><input type="checkbox" name="archived" value="1" {{ archived_checked|safe }}> Archived</label>
+    </div>
+    <button type="submit">Save Note</button>
+    <a class="button secondary" href="/">Cancel</a>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{% block title %}{{ title }}{% endblock %}</title>
+  <meta name="viewport" content="width=device-width">
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:system-ui,sans-serif;margin:0;background:#f7f7f4;color:#202124}
+    header.app{background:#25312b;color:white;padding:1rem 1.25rem}
+    header.app nav{display:flex;gap:1rem;align-items:center;max-width:1100px;margin:0 auto}
+    header.app a{color:white;text-decoration:none}
+    main{max-width:1100px;margin:0 auto;padding:1.25rem}
+    .toolbar{display:flex;gap:.75rem;align-items:center;justify-content:space-between;margin-bottom:1rem}
+    .toolbar form{display:flex;gap:.5rem;flex:1;max-width:520px}
+    input,textarea{width:100%;padding:.65rem;border:1px solid #b8b8ae;border-radius:4px;background:white}
+    textarea{min-height:180px;resize:vertical}
+    button,.button{border:1px solid #25312b;background:#25312b;color:white;padding:.6rem .85rem;border-radius:4px;text-decoration:none;cursor:pointer}
+    button.secondary,.button.secondary{background:white;color:#25312b}
+    button.danger{border-color:#9f2d20;background:#9f2d20}
+    .note-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem}
+    .note-card{background:white;border:1px solid #dddcd4;border-radius:6px;padding:1rem;display:flex;flex-direction:column;gap:.75rem}
+    .note-card header{display:flex;justify-content:space-between;gap:.75rem}
+    .note-card h2{font-size:1.05rem;margin:0}
+    .note-card h2 a{color:inherit;text-decoration:none}
+    .note-card p{white-space:pre-wrap;margin:0;color:#343630}
+    .note-card footer{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:auto}
+    .note-card footer form{display:inline}
+    .note-card footer button{padding:.35rem .55rem}
+    .tags{font-size:.85rem;color:#59645d}
+    .pin{font-size:.75rem;background:#e9d37a;color:#2e2a10;border-radius:999px;padding:.15rem .45rem;height:max-content}
+    .empty{background:white;border:1px dashed #b8b8ae;border-radius:6px;padding:2rem;text-align:center}
+    .form-panel{background:white;border:1px solid #dddcd4;border-radius:6px;padding:1rem;max-width:760px}
+    .note-view{background:white;border:1px solid #dddcd4;border-radius:6px;padding:1rem;max-width:860px}
+    .note-view h1{margin:0 0 .35rem}.note-view .actions{display:flex;gap:.5rem;flex-wrap:wrap}.note-body{white-space:pre-wrap;line-height:1.55}
+    label{display:block;margin:.85rem 0 .35rem;font-weight:600}
+    .checks{display:flex;gap:1rem;margin:1rem 0}.checks label{display:flex;align-items:center;gap:.4rem;margin:0}.checks input{width:auto}
+    .error{background:#fff0ed;color:#7a271a;border:1px solid #e6b7af;padding:.75rem;border-radius:4px}
+  </style>
+</head>
+<body>
+  <header class="app">
+    <nav>
+      <strong>Notes</strong>
+      <a href="/">Inbox</a>
+      <a href="/archived">Archive</a>
+      <a href="/notes/new">New</a>
+      <a href="/admin/">Admin</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{{ content|safe }}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+{% block title %}Admin Login{% endblock %}
+{% block content %}
+<section class="form-panel">
+  <h1>Admin Login</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/admin/login">
+    <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+    <label>Username</label>
+    <input type="text" name="username" value="admin">
+    <label>Password</label>
+    <input type="password" name="password">
+    <button type="submit">Log In</button>
+  </form>
+</section>
+{% endblock %}

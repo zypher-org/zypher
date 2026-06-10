@@ -39,6 +39,10 @@ pub fn dispatchInner(
         try cmdMigrate(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "new")) {
         try cmdNew(out_writer, err_writer, init, args);
+    } else if (std.mem.eql(u8, cmd, "templates")) {
+        try cmdTemplates(out_writer, err_writer, init, args);
+    } else if (std.mem.eql(u8, cmd, "run")) {
+        try cmdRun(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "demo")) {
         try cmdDemo(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "makemigrations")) {
@@ -99,7 +103,9 @@ fn printHelp(w: *std.Io.Writer) !void {
     try w.print("zypher — Django-inspired web framework for Zig\n", .{});
     try w.print("Usage: zypher <command> [options]\n\n", .{});
     try w.print("Commands:\n", .{});
-    try w.print("  new <name>         Create a new project\n", .{});
+    try w.print("  new <name>         Create a new project from a scaffold template\n", .{});
+    try w.print("  templates          List scaffold templates\n", .{});
+    try w.print("  run [path]         Run a scaffolded app via its build.zig\n", .{});
     try w.print("  demo <name>        Create a demo project with template rendering\n", .{});
     try w.print("  runserver          Start the HTTP server\n", .{});
     try w.print("  migrate            Run pending migrations\n", .{});
@@ -838,7 +844,24 @@ fn recordCliMigration(db: *sqlite.Db, id: i64, name: []const u8) !void {
     _ = try stmt.step();
 }
 
-// ── new (scaffold) ────────────────────────────────────────────────────────
+// ── project scaffolding ───────────────────────────────────────────────────
+
+const default_template_name = "single-file";
+const default_template_dir = "templates";
+const default_zypher_root = "../..";
+
+const NewOptions = struct {
+    project_path: []const u8,
+    project_name: []const u8,
+    template_name: []const u8 = default_template_name,
+    template_dir: []const u8 = default_template_dir,
+};
+
+const RunOptions = struct {
+    project_path: []const u8 = ".",
+    zypher_root: []const u8 = default_zypher_root,
+    app_args_start: usize,
+};
 
 fn cmdNew(
     out_writer: *std.Io.Writer,
@@ -846,13 +869,60 @@ fn cmdNew(
     init: std.process.Init,
     args: []const [:0]const u8,
 ) !void {
+    const opts = parseNewOptions(err_writer, args) catch return;
+    try validateProjectName(err_writer, opts.project_name);
+    try scaffoldProject(out_writer, err_writer, init, opts);
+}
+
+fn parseNewOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !NewOptions {
     if (args.len < 3) {
         try err_writer.print("zypher: new requires a project name\n", .{});
         std.process.exit(1);
     }
-    const project_name = args[2];
-    const io = init.io;
+    const project_path = std.mem.trim(u8, args[2], std.fs.path.sep_str);
+    if (project_path.len == 0) {
+        try err_writer.print("zypher: project path cannot be empty\n", .{});
+        std.process.exit(1);
+    }
+    var opts = NewOptions{
+        .project_path = project_path,
+        .project_name = projectBaseName(project_path),
+    };
+    var i: usize = 3;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--template") or std.mem.eql(u8, args[i], "--style")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: {s} requires a value\n", .{args[i - 1]});
+                std.process.exit(1);
+            }
+            opts.template_name = args[i];
+        } else if (std.mem.eql(u8, args[i], "--template-dir")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --template-dir requires a value\n", .{});
+                std.process.exit(1);
+            }
+            opts.template_dir = args[i];
+        } else {
+            try err_writer.print("zypher: unknown new option '{s}'\n", .{args[i]});
+            std.process.exit(1);
+        }
+    }
+    return opts;
+}
 
+fn projectBaseName(project_path: []const u8) []const u8 {
+    return std.fs.path.basename(project_path);
+}
+
+fn projectDirName(project_path: []const u8) ?[]const u8 {
+    const dirname = std.fs.path.dirname(project_path) orelse return null;
+    if (dirname.len == 0 or std.mem.eql(u8, dirname, ".")) return null;
+    return dirname;
+}
+
+fn validateProjectName(err_writer: *std.Io.Writer, project_name: []const u8) !void {
     if (project_name.len == 0) {
         try err_writer.print("zypher: project name cannot be empty\n", .{});
         std.process.exit(1);
@@ -863,100 +933,203 @@ fn cmdNew(
             std.process.exit(1);
         }
     }
+}
+
+fn scaffoldProject(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    opts: NewOptions,
+) !void {
+    const io = init.io;
+    const gpa = init.gpa;
 
     const cwd = std.Io.Dir.cwd();
-    cwd.createDir(io, project_name, .default_dir) catch {
-        try err_writer.print("zypher: failed to create directory '{s}'\n", .{project_name});
+    if (projectDirName(opts.project_path)) |parent| cwd.createDirPath(io, parent) catch {
+        try err_writer.print("zypher: failed to create parent directory '{s}'\n", .{parent});
+        std.process.exit(1);
+    };
+    cwd.createDir(io, opts.project_path, .default_dir) catch {
+        try err_writer.print("zypher: failed to create directory '{s}'\n", .{opts.project_path});
         std.process.exit(1);
     };
 
-    {
-        const path = try std.fmt.allocPrint(init.gpa, "{s}/build.zig", .{project_name});
-        defer init.gpa.free(path);
-        cwd.writeFile(io, .{ .sub_path = path, .data =
-            \\const std = @import("std");
-            \\
-            \\pub fn build(b: *std.Build) void {
-            \\    const target = b.standardTargetOptions(.{});
-            \\    const optimize = b.standardOptimizeOption(.{});
-            \\
-            \\    const zypher_mod = b.dependency("zypher", .{
-            \\        .target = target,
-            \\        .optimize = optimize,
-            \\    }).module("zypher");
-            \\
-            \\    const exe = b.addExecutable(.{
-            \\        .name = "{s}",
-            \\        .root_module = b.createModule(.{
-            \\            .root_source_file = b.path("src/main.zig"),
-            \\            .target = target,
-            \\            .optimize = optimize,
-            \\            .imports = &.{.{ .name = "zypher", .module = zypher_mod }},
-            \\        }),
-            \\    });
-            \\    b.installArtifact(exe);
-            \\
-            \\    const run_cmd = b.addRunArtifact(exe);
-            \\    run_cmd.step.dependOn(b.getInstallStep());
-            \\    run_cmd.addPassthruArgs();
-            \\
-            \\    const run_step = b.step("run", "Run the app");
-            \\    run_step.dependOn(&run_cmd.step);
-            \\}
-            \\
-        }) catch {
-            try err_writer.print("zypher: failed to write build.zig\n", .{});
+    const source_path = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ opts.template_dir, opts.template_name });
+    defer gpa.free(source_path);
+
+    var source_dir = cwd.openDir(io, source_path, .{ .iterate = true }) catch {
+        try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ opts.template_name, opts.template_dir });
+        cwd.deleteTree(io, opts.project_path) catch {};
+        std.process.exit(1);
+    };
+    defer source_dir.close(io);
+
+    copyTemplateDir(gpa, io, source_dir, cwd, opts.project_path, opts.project_name) catch {
+        try err_writer.print("zypher: failed to copy template '{s}'\n", .{opts.template_name});
+        cwd.deleteTree(io, opts.project_path) catch {};
+        std.process.exit(1);
+    };
+
+    log.info("scaffolded project '{s}' from template '{s}'", .{ opts.project_path, opts.template_name });
+    try out_writer.print("Created project '{s}' from template '{s}'\n", .{ opts.project_path, opts.template_name });
+    try out_writer.print("  cd {s}\n", .{opts.project_path});
+    try out_writer.print("  zypher run\n", .{});
+}
+
+fn copyTemplateDir(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    source_dir: std.Io.Dir,
+    dest_root: std.Io.Dir,
+    project_root: []const u8,
+    project_name: []const u8,
+) !void {
+    var walker = try source_dir.walk(gpa);
+    defer walker.deinit();
+
+    while (try walker.next(io)) |entry| {
+        const replaced_rel = try replaceProjectName(gpa, entry.path, project_name);
+        defer gpa.free(replaced_rel);
+        const dest_path = try std.fs.path.join(gpa, &.{ project_root, replaced_rel });
+        defer gpa.free(dest_path);
+
+        switch (entry.kind) {
+            .directory => try dest_root.createDirPath(io, dest_path),
+            .file => {
+                const data = try entry.dir.readFileAlloc(io, entry.basename, gpa, .limited(1024 * 1024));
+                defer gpa.free(data);
+                const rendered = try replaceProjectName(gpa, data, project_name);
+                defer gpa.free(rendered);
+                try dest_root.writeFile(io, .{ .sub_path = dest_path, .data = rendered });
+            },
+            else => {},
+        }
+    }
+}
+
+fn replaceProjectName(gpa: std.mem.Allocator, input: []const u8, project_name: []const u8) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(gpa);
+
+    var rest = input;
+    while (std.mem.indexOf(u8, rest, "{{project_name}}")) |idx| {
+        try out.appendSlice(gpa, rest[0..idx]);
+        try out.appendSlice(gpa, project_name);
+        rest = rest[idx + "{{project_name}}".len ..];
+    }
+    try out.appendSlice(gpa, rest);
+    return out.toOwnedSlice(gpa);
+}
+
+fn cmdTemplates(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    args: []const [:0]const u8,
+) !void {
+    const io = init.io;
+    var template_dir: []const u8 = default_template_dir;
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--template-dir")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --template-dir requires a value\n", .{});
+                std.process.exit(1);
+            }
+            template_dir = args[i];
+        } else {
+            try err_writer.print("zypher: unknown templates option '{s}'\n", .{args[i]});
             std.process.exit(1);
-        };
+        }
     }
 
-    {
-        const path = try std.fmt.allocPrint(init.gpa, "{s}/src", .{project_name});
-        defer init.gpa.free(path);
-        cwd.createDirPath(io, path) catch {};
+    var dir = std.Io.Dir.cwd().openDir(io, template_dir, .{ .iterate = true }) catch {
+        try err_writer.print("zypher: template directory '{s}' not found\n", .{template_dir});
+        std.process.exit(1);
+    };
+    defer dir.close(io);
+
+    try out_writer.print("Available templates in {s}:\n", .{template_dir});
+    var it = dir.iterate();
+    while (try it.next(io)) |entry| {
+        if (entry.kind == .directory) try out_writer.print("  {s}\n", .{entry.name});
     }
-    {
-        const path = try std.fmt.allocPrint(init.gpa, "{s}/templates", .{project_name});
-        defer init.gpa.free(path);
-        cwd.createDirPath(io, path) catch {};
+}
+
+fn cmdRun(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    args: []const [:0]const u8,
+) !void {
+    const opts = parseRunOptions(err_writer, args) catch return;
+    const argv = try buildRunArgv(init.gpa, opts.zypher_root, args[opts.app_args_start..]);
+    defer freeArgv(init.gpa, argv);
+
+    try out_writer.print("Running app in {s}\n", .{opts.project_path});
+    var child = std.process.spawn(init.io, .{
+        .argv = argv,
+        .cwd = .{ .path = opts.project_path },
+    }) catch {
+        try err_writer.print("zypher: failed to spawn zig build run\n", .{});
+        std.process.exit(1);
+    };
+    const term = child.wait(init.io) catch {
+        try err_writer.print("zypher: failed while waiting for app process\n", .{});
+        std.process.exit(1);
+    };
+    if (!term.success()) {
+        try err_writer.print("zypher: app process {t}\n", .{term});
+        std.process.exit(1);
     }
-    {
-        const path = try std.fmt.allocPrint(init.gpa, "{s}/tests", .{project_name});
-        defer init.gpa.free(path);
-        cwd.createDirPath(io, path) catch {};
-    }
-    {
-        const path = try std.fmt.allocPrint(init.gpa, "{s}/examples", .{project_name});
-        defer init.gpa.free(path);
-        cwd.createDirPath(io, path) catch {};
-    }
-    {
-        const path = try std.fmt.allocPrint(init.gpa, "{s}/src/main.zig", .{project_name});
-        defer init.gpa.free(path);
-        cwd.writeFile(io, .{ .sub_path = path, .data =
-            \\const std = @import("std");
-            \\const zypher = @import("zypher");
-            \\
-            \\pub fn main() !void {
-            \\    var gpa = std.heap.DebugAllocator(.{}){};
-            \\    const alloc = gpa.allocator();
-            \\    _ = alloc;
-            \\    std.log.info("zypher app started", .{});
-            \\}
-            \\
-        }) catch {
-            try err_writer.print("zypher: failed to write src/main.zig\n", .{});
+}
+
+fn parseRunOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !RunOptions {
+    var opts = RunOptions{ .app_args_start = args.len };
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--")) {
+            opts.app_args_start = i + 1;
+            break;
+        } else if (std.mem.eql(u8, args[i], "--zypher-root")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --zypher-root requires a value\n", .{});
+                std.process.exit(1);
+            }
+            opts.zypher_root = args[i];
+        } else if (std.mem.startsWith(u8, args[i], "--")) {
+            try err_writer.print("zypher: unknown run option '{s}'\n", .{args[i]});
             std.process.exit(1);
-        };
+        } else {
+            opts.project_path = args[i];
+        }
+    }
+    return opts;
+}
+
+pub fn buildRunArgv(gpa: std.mem.Allocator, zypher_root: []const u8, app_args: []const [:0]const u8) ![][]const u8 {
+    var argv: std.ArrayList([]const u8) = .empty;
+    errdefer {
+        for (argv.items) |arg| gpa.free(arg);
+        argv.deinit(gpa);
     }
 
-    log.info("scaffolded project '{s}'", .{project_name});
-    try out_writer.print("Created project '{s}'\n", .{project_name});
-    try out_writer.print("  {s}/build.zig\n", .{project_name});
-    try out_writer.print("  {s}/src/main.zig\n", .{project_name});
-    try out_writer.print("  {s}/templates/\n", .{project_name});
-    try out_writer.print("  {s}/tests/\n", .{project_name});
-    try out_writer.print("  {s}/examples/\n", .{project_name});
+    try argv.append(gpa, try gpa.dupe(u8, "zig"));
+    try argv.append(gpa, try gpa.dupe(u8, "build"));
+    try argv.append(gpa, try std.fmt.allocPrint(gpa, "-Dzypher-root={s}", .{zypher_root}));
+    try argv.append(gpa, try gpa.dupe(u8, "run"));
+    if (app_args.len > 0) {
+        try argv.append(gpa, try gpa.dupe(u8, "--"));
+        for (app_args) |arg| try argv.append(gpa, try gpa.dupe(u8, arg));
+    }
+    return argv.toOwnedSlice(gpa);
+}
+
+fn freeArgv(gpa: std.mem.Allocator, argv: [][]const u8) void {
+    for (argv) |arg| gpa.free(arg);
+    gpa.free(argv);
 }
 
 // ── demo (scaffold a small demo project) ──────────────────────────────────
@@ -971,126 +1144,10 @@ fn cmdDemo(
         try err_writer.print("zypher: demo requires a project name\n", .{});
         std.process.exit(1);
     }
-    const project_name = args[2];
-    const io = init.io;
-    const gpa = init.gpa;
-
-    const cwd = std.Io.Dir.cwd();
-    cwd.createDir(io, project_name, .default_dir) catch {
-        try err_writer.print("zypher: failed to create directory '{s}'\n", .{project_name});
-        std.process.exit(1);
-    };
-
-    {
-        const path = try std.fmt.allocPrint(gpa, "{s}/build.zig", .{project_name});
-        defer gpa.free(path);
-        cwd.writeFile(io, .{ .sub_path = path, .data = buildZigScaffold(project_name) }) catch {
-            try err_writer.print("zypher: failed to write build.zig\n", .{});
-            std.process.exit(1);
-        };
-    }
-    {
-        const path = try std.fmt.allocPrint(gpa, "{s}/src", .{project_name});
-        defer gpa.free(path);
-        cwd.createDirPath(io, path) catch {};
-    }
-    {
-        const path = try std.fmt.allocPrint(gpa, "{s}/templates", .{project_name});
-        defer gpa.free(path);
-        cwd.createDirPath(io, path) catch {};
-    }
-    {
-        const path = try std.fmt.allocPrint(gpa, "{s}/templates/index.html", .{project_name});
-        defer gpa.free(path);
-        cwd.writeFile(io, .{ .sub_path = path, .data =
-            \\<!DOCTYPE html>
-            \\<html>
-            \\<head><title>{{ title }}</title></head>
-            \\<body>
-            \\<h1>{{ title }}</h1>
-            \\<p>{{ message }}</p>
-            \\</body>
-            \\</html>
-            \\
-        }) catch {};
-    }
-    {
-        const path = try std.fmt.allocPrint(gpa, "{s}/src/main.zig", .{project_name});
-        defer gpa.free(path);
-        cwd.writeFile(io, .{ .sub_path = path, .data =
-            \\const std = @import("std");
-            \\const zypher = @import("zypher");
-            \\
-            \\const Request = zypher.core.Request;
-            \\const Response = zypher.core.Response;
-            \\
-            \\fn helloHandler(req: *Request, res: *Response) void {
-            \\    _ = req;
-            \\    var ctx = zypher.template.renderer.Context.init(res.allocator);
-            \\    defer ctx.deinit();
-            \\    ctx.put("title", .{ .string = "Zypher Demo" }) catch {};
-            \\    ctx.put("message", .{ .string = "Hello from zypher!" }) catch {};
-            \\    var engine = zypher.template.renderer.TemplateEngine.init(res.allocator);
-            \\    defer engine.deinit();
-            \\    engine.load("index.html", @embedFile("../templates/index.html")) catch {};
-            \\    var aw = std.Io.Writer.Allocating.init(res.allocator);
-            \\    defer aw.deinit();
-            \\    engine.render("index.html", &ctx, &aw.writer) catch {};
-            \\    res.html(aw.written()) catch {};
-            \\}
-            \\
-            \\pub fn main() !void {
-            \\    var gpa = std.heap.DebugAllocator(.{}){};
-            \\    const alloc = gpa.allocator();
-            \\    var app = zypher.core.App.init(alloc, .{ .host = "127.0.0.1", .port = 8080 });
-            \\    defer app.deinit();
-            \\    app.get("/", helloHandler);
-            \\    try app.listenAndServe(std.io);
-            \\}
-            \\
-        }) catch {
-            try err_writer.print("zypher: failed to write src/main.zig\n", .{});
-            std.process.exit(1);
-        };
-    }
-
-    log.info("scaffolded demo project '{s}'", .{project_name});
-    try out_writer.print("Created demo project '{s}'\n", .{project_name});
-    try out_writer.print("  {s}/build.zig\n", .{project_name});
-    try out_writer.print("  {s}/src/main.zig\n", .{project_name});
-    try out_writer.print("  {s}/templates/index.html\n", .{project_name});
-    try out_writer.print("  cd {s} && zig build run\n", .{project_name});
-}
-
-fn buildZigScaffold(project_name: []const u8) []const u8 {
-    _ = project_name;
-    return
-    \\const std = @import("std");
-    \\
-    \\pub fn build(b: *std.Build) void {
-    \\    const target = b.standardTargetOptions(.{});
-    \\    const optimize = b.standardOptimizeOption(.{});
-    \\    const zypher_mod = b.dependency("zypher", .{
-    \\        .target = target,
-    \\        .optimize = optimize,
-    \\    }).module("zypher");
-    \\    const exe = b.addExecutable(.{
-    \\        .name = "demo",
-    \\        .root_module = b.createModule(.{
-    \\            .root_source_file = b.path("src/main.zig"),
-    \\            .target = target,
-    \\            .optimize = optimize,
-    \\            .imports = &.{.{ .name = "zypher", .module = zypher_mod }},
-    \\        }),
-    \\    });
-    \\    b.installArtifact(exe);
-    \\    const run_cmd = b.addRunArtifact(exe);
-    \\    run_cmd.step.dependOn(b.getInstallStep());
-    \\    const run_step = b.step("run", "Run the app");
-    \\    run_step.dependOn(&run_cmd.step);
-    \\}
-    \\
-    ;
+    const project_path = std.mem.trim(u8, args[2], std.fs.path.sep_str);
+    const opts = NewOptions{ .project_path = project_path, .project_name = projectBaseName(project_path), .template_name = "mvc" };
+    try validateProjectName(err_writer, opts.project_name);
+    try scaffoldProject(out_writer, err_writer, init, opts);
 }
 
 // ── runserver ─────────────────────────────────────────────────────────────
