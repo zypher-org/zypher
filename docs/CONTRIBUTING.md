@@ -162,6 +162,7 @@ All built-in templates must also keep the generated admin baseline:
 - sample ORM model registration
 - `/admin` redirecting to `/admin/login`
 - `/admin/login` authenticating against the `users` table created by `zypher createsuperuser`
+- `/admin/forgot-password` and `/admin/reset-password` for 6-digit recovery-code password resets
 
 Use `{{project_name}}` for substitutions in file paths or file contents. The CLI replaces it with the basename of the project path.
 

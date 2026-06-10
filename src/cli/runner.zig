@@ -561,18 +561,26 @@ fn cmdCreatesuperuser(
     const gpa = init.gpa;
 
     var username: ?[]const u8 = null;
+    var email: ?[]const u8 = null;
     var plain_password: ?[]const u8 = null;
     var db_path: [:0]const u8 = "db.sqlite";
 
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
-        if (std.mem.eql(u8, args[i], "--username") or std.mem.eql(u8, args[i], "--email")) {
+        if (std.mem.eql(u8, args[i], "--username")) {
             i += 1;
             if (i >= args.len) {
-                try err_writer.print("zypher: {s} requires a value\n", .{args[i - 1]});
+                try err_writer.print("zypher: --username requires a value\n", .{});
                 std.process.exit(1);
             }
             username = args[i];
+        } else if (std.mem.eql(u8, args[i], "--email")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --email requires a value\n", .{});
+                std.process.exit(1);
+            }
+            email = args[i];
         } else if (std.mem.eql(u8, args[i], "--password")) {
             i += 1;
             if (i >= args.len) {
@@ -593,31 +601,42 @@ fn cmdCreatesuperuser(
         }
     }
 
-    if (username == null or plain_password == null) {
+    if (username == null or email == null or plain_password == null) {
         var stdin_buffer: [4096]u8 = undefined;
         var stdin_reader = std.Io.File.stdin().reader(init.io, &stdin_buffer);
-        runCreatesuperuserPrompt(gpa, db_path, &stdin_reader.interface, out_writer, err_writer) catch |err| {
+        runCreatesuperuserInteractive(gpa, db_path, &stdin_reader.interface, out_writer, err_writer) catch |err| {
             try printSuperuserError(err_writer, err);
             std.process.exit(1);
         };
         return;
     }
 
-    const row_id = createSuperuser(gpa, db_path, username.?, plain_password.?) catch |err| {
+    const row_id = createSuperuser(gpa, db_path, .{
+        .username = username.?,
+        .email = email.?,
+        .password = plain_password.?,
+    }) catch |err| {
         try printSuperuserError(err_writer, err);
         std.process.exit(1);
     };
     try out_writer.print("Superuser '{s}' created (id={d})\n", .{ username.?, row_id });
 }
 
+pub const SuperuserInput = struct {
+    username: []const u8,
+    email: []const u8,
+    password: []const u8,
+};
+
 /// Validate createsuperuser credentials before writing to the database.
-pub fn validateSuperuserCredentials(email: []const u8, plain_password: []const u8) !void {
-    if (validators.email(email) != null) return error.InvalidEmail;
-    if (plain_password.len < 8) return error.WeakPassword;
+pub fn validateSuperuserCredentials(input: SuperuserInput) !void {
+    if (std.mem.trim(u8, input.username, " \t\r\n").len == 0) return error.InvalidUsername;
+    if (validators.email(input.email) != null) return error.InvalidEmail;
+    if (input.password.len < 8) return error.WeakPassword;
 
     var has_letter = false;
     var has_digit = false;
-    for (plain_password) |ch| {
+    for (input.password) |ch| {
         if (std.ascii.isAlphabetic(ch)) has_letter = true;
         if (std.ascii.isDigit(ch)) has_digit = true;
     }
@@ -633,15 +652,64 @@ pub fn runCreatesuperuserPrompt(
     err_writer: *std.Io.Writer,
 ) !void {
     _ = err_writer;
+    try out_writer.writeAll("Username: ");
+    try out_writer.flush();
+    const username = try readPromptLine(gpa, reader);
+    defer gpa.free(username);
     try out_writer.writeAll("Email: ");
+    try out_writer.flush();
     const email = try readPromptLine(gpa, reader);
     defer gpa.free(email);
     try out_writer.writeAll("Password: ");
+    try out_writer.flush();
     const plain_password = try readPromptLine(gpa, reader);
     defer gpa.free(plain_password);
+    try out_writer.writeAll("Confirm password: ");
+    try out_writer.flush();
+    const confirm_password = try readPromptLine(gpa, reader);
+    defer gpa.free(confirm_password);
+    if (!std.mem.eql(u8, plain_password, confirm_password)) return error.PasswordMismatch;
 
-    const row_id = try createSuperuser(gpa, db_path, email, plain_password);
-    try out_writer.print("Superuser '{s}' created (id={d})\n", .{ email, row_id });
+    const row_id = try createSuperuser(gpa, db_path, .{
+        .username = username,
+        .email = email,
+        .password = plain_password,
+    });
+    try out_writer.print("Superuser '{s}' created (id={d})\n", .{ username, row_id });
+}
+
+fn runCreatesuperuserInteractive(
+    gpa: std.mem.Allocator,
+    db_path: [:0]const u8,
+    reader: *std.Io.Reader,
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+) !void {
+    _ = err_writer;
+    try out_writer.writeAll("Username: ");
+    try out_writer.flush();
+    const username = try readPromptLine(gpa, reader);
+    defer gpa.free(username);
+    try out_writer.writeAll("Email: ");
+    try out_writer.flush();
+    const email = try readPromptLine(gpa, reader);
+    defer gpa.free(email);
+    try out_writer.writeAll("Password: ");
+    try out_writer.flush();
+    const plain_password = try readHiddenPromptLine(gpa, reader, out_writer);
+    defer gpa.free(plain_password);
+    try out_writer.writeAll("Confirm password: ");
+    try out_writer.flush();
+    const confirm_password = try readHiddenPromptLine(gpa, reader, out_writer);
+    defer gpa.free(confirm_password);
+    if (!std.mem.eql(u8, plain_password, confirm_password)) return error.PasswordMismatch;
+
+    const row_id = try createSuperuser(gpa, db_path, .{
+        .username = username,
+        .email = email,
+        .password = plain_password,
+    });
+    try out_writer.print("Superuser '{s}' created (id={d})\n", .{ username, row_id });
 }
 
 fn readPromptLine(gpa: std.mem.Allocator, reader: *std.Io.Reader) ![]u8 {
@@ -651,38 +719,79 @@ fn readPromptLine(gpa: std.mem.Allocator, reader: *std.Io.Reader) ![]u8 {
     return gpa.dupe(u8, trimmed);
 }
 
-fn createSuperuser(gpa: std.mem.Allocator, db_path: [:0]const u8, email: []const u8, plain_password: []const u8) !i64 {
-    try validateSuperuserCredentials(email, plain_password);
+fn readHiddenPromptLine(gpa: std.mem.Allocator, reader: *std.Io.Reader, out_writer: *std.Io.Writer) ![]u8 {
+    if (supports_posix_terminal) {
+        const stdin_fd = std.Io.File.stdin().handle;
+        var term = std.posix.tcgetattr(stdin_fd) catch return readPromptLine(gpa, reader);
+        const old = term;
+        term.lflag.ECHO = false;
+        std.posix.tcsetattr(stdin_fd, .NOW, term) catch return readPromptLine(gpa, reader);
+        defer std.posix.tcsetattr(stdin_fd, .NOW, old) catch {};
+        const line = try readPromptLine(gpa, reader);
+        try out_writer.writeAll("\n");
+        return line;
+    }
+    return readPromptLine(gpa, reader);
+}
+
+const supports_posix_terminal = builtin.os.tag != .windows and builtin.os.tag != .wasi;
+
+fn ensureUserSchema(db: *sqlite.Db) !void {
+    db.exec(
+        \\CREATE TABLE IF NOT EXISTS users (
+        \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
+        \\  username TEXT NOT NULL UNIQUE,
+        \\  email TEXT UNIQUE,
+        \\  password_hash TEXT NOT NULL,
+        \\  role TEXT NOT NULL DEFAULT 'user',
+        \\  is_active INTEGER NOT NULL DEFAULT 1,
+        \\  reset_code TEXT,
+        \\  reset_code_expires_at INTEGER
+        \\)
+    ) catch {
+        return error.CreateUserTableFailed;
+    };
+    if (!userColumnExists(db, "email")) db.exec("ALTER TABLE users ADD COLUMN email TEXT") catch {};
+    if (!userColumnExists(db, "reset_code")) db.exec("ALTER TABLE users ADD COLUMN reset_code TEXT") catch {};
+    if (!userColumnExists(db, "reset_code_expires_at")) db.exec("ALTER TABLE users ADD COLUMN reset_code_expires_at INTEGER") catch {};
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email)") catch {};
+}
+
+fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
+    var stmt = db.prepare("PRAGMA table_info(users)") catch return false;
+    defer stmt.finalize();
+    while (stmt.step() catch false) {
+        const column_name = stmt.column(.text, 1) catch continue;
+        if (std.mem.eql(u8, column_name.text, name)) return true;
+    }
+    return false;
+}
+
+fn createSuperuser(gpa: std.mem.Allocator, db_path: [:0]const u8, input: SuperuserInput) !i64 {
+    try validateSuperuserCredentials(input);
 
     var db = sqlite.Db.open(gpa, db_path) catch {
         return error.OpenDatabaseFailed;
     };
     defer db.close();
 
-    db.exec(
-        \\CREATE TABLE IF NOT EXISTS users (
-        \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
-        \\  username TEXT NOT NULL UNIQUE,
-        \\  password_hash TEXT NOT NULL,
-        \\  role TEXT NOT NULL DEFAULT 'user',
-        \\  is_active INTEGER NOT NULL DEFAULT 1
-        \\)
-    ) catch {
-        return error.CreateUserTableFailed;
-    };
+    try ensureUserSchema(&db);
 
-    const hash_str = password.hash(gpa, plain_password) catch return error.HashPasswordFailed;
+    const hash_str = password.hash(gpa, input.password) catch return error.HashPasswordFailed;
     defer gpa.free(hash_str);
 
-    var stmt = db.prepare("INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, 'admin', 1)") catch {
+    var stmt = db.prepare("INSERT INTO users (username, email, password_hash, role, is_active) VALUES (?, ?, ?, 'admin', 1)") catch {
         return error.PrepareUserInsertFailed;
     };
     defer stmt.finalize();
 
-    stmt.bind(.{ .text = email }, 1) catch {
+    stmt.bind(.{ .text = input.username }, 1) catch {
         return error.BindUserInsertFailed;
     };
-    stmt.bind(.{ .text = hash_str }, 2) catch {
+    stmt.bind(.{ .text = input.email }, 2) catch {
+        return error.BindUserInsertFailed;
+    };
+    stmt.bind(.{ .text = hash_str }, 3) catch {
         return error.BindUserInsertFailed;
     };
 
@@ -691,21 +800,23 @@ fn createSuperuser(gpa: std.mem.Allocator, db_path: [:0]const u8, email: []const
     };
 
     const row_id = db.lastInsertRowId();
-    log.info("created superuser '{s}' (id={d}, role=admin)", .{ email, row_id });
+    log.info("created superuser '{s}' (id={d}, role=admin)", .{ input.username, row_id });
     return row_id;
 }
 
 fn printSuperuserError(err_writer: *std.Io.Writer, err: anyerror) !void {
     switch (err) {
+        error.InvalidUsername => try err_writer.writeAll("zypher: username is required\n"),
         error.InvalidEmail => try err_writer.writeAll("zypher: invalid email address\n"),
         error.WeakPassword => try err_writer.writeAll("zypher: password must be at least 8 characters and include a letter and a digit\n"),
-        error.MissingPromptValue => try err_writer.writeAll("zypher: email and password are required\n"),
+        error.PasswordMismatch => try err_writer.writeAll("zypher: passwords do not match\n"),
+        error.MissingPromptValue => try err_writer.writeAll("zypher: username, email, and password are required\n"),
         error.OpenDatabaseFailed => try err_writer.writeAll("zypher: failed to open database\n"),
         error.CreateUserTableFailed => try err_writer.writeAll("zypher: failed to create users table\n"),
         error.HashPasswordFailed => try err_writer.writeAll("zypher: failed to hash password\n"),
         error.PrepareUserInsertFailed => try err_writer.writeAll("zypher: failed to prepare insert\n"),
         error.BindUserInsertFailed => try err_writer.writeAll("zypher: failed to bind user data\n"),
-        error.CreateUserFailed => try err_writer.writeAll("zypher: failed to create user (email may already exist)\n"),
+        error.CreateUserFailed => try err_writer.writeAll("zypher: failed to create user (username or email may already exist)\n"),
         else => try err_writer.writeAll("zypher: failed to create superuser\n"),
     }
 }

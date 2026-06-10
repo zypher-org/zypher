@@ -16,6 +16,7 @@ const Session = zypher.auth.session.Session;
 const SessionStore = zypher.auth.session.SessionStore;
 const TemplateEngine = zypher.template.renderer.TemplateEngine;
 const sqlite = zypher.orm.sqlite;
+const password = zypher.auth.password;
 const AdminSite = zypher.admin.AdminSite;
 const Registration = zypher.admin.Registration;
 
@@ -257,23 +258,193 @@ fn loginFormHandler(_: *Request, res: *Response) void {
 
 fn loginHandler(req: *Request, res: *Response) void {
     const username = req.formValue("username") orelse "";
-    const password = req.formValue("password") orelse "";
-    if (!std.mem.eql(u8, username, "admin") or !std.mem.eql(u8, password, "admin123")) {
+    const plain = req.formValue("password") orelse "";
+    const db = app_context.get().db;
+    ensureAuthRecoverySchema(db);
+    var stmt = db.prepare("SELECT password_hash, role, is_active FROM users WHERE username = ?") catch {
         _ = res.status(401);
         var ctx = Context.init(res.allocator);
         defer ctx.deinit();
         ctx.put("error", .{ .string = "Invalid admin credentials." }) catch {};
         html.render(app_context.get().engine, res, "login.html", &ctx);
         return;
-    }
+    };
+    defer stmt.finalize();
+    stmt.bind(.{ .text = username }, 1) catch return;
+    if (!(stmt.step() catch false)) return invalidLogin(res);
+    const hash = stmt.column(.text, 0) catch return;
+    const role = stmt.column(.text, 1) catch return;
+    const active = stmt.column(.integer, 2) catch return;
+    if (active.int != 1 or !std.mem.eql(u8, role.text, "admin") or !(password.verify(hash.text, plain) catch false)) return invalidLogin(res);
 
     if (req.user) |user_ptr| {
         const session: *Session = @ptrCast(@alignCast(user_ptr));
-        session.put(req.allocator, "username", "admin") catch {};
+        session.put(req.allocator, "username", username) catch {};
         session.put(req.allocator, "role", "admin") catch {};
         app_context.get().sessions.save(session) catch {};
     }
     redirect(res, "/admin/");
+}
+
+fn invalidLogin(res: *Response) void {
+    _ = res.status(401);
+    var ctx = Context.init(res.allocator);
+    defer ctx.deinit();
+    ctx.put("error", .{ .string = "Invalid admin credentials." }) catch {};
+    html.render(app_context.get().engine, res, "login.html", &ctx);
+}
+
+fn ensureAuthRecoverySchema(db: *sqlite.Db) void {
+    db.exec(
+        \\CREATE TABLE IF NOT EXISTS users (
+        \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
+        \\  username TEXT NOT NULL UNIQUE,
+        \\  email TEXT UNIQUE,
+        \\  password_hash TEXT NOT NULL,
+        \\  role TEXT NOT NULL DEFAULT 'user',
+        \\  is_active INTEGER NOT NULL DEFAULT 1,
+        \\  reset_code TEXT,
+        \\  reset_code_expires_at INTEGER
+        \\)
+    ) catch {};
+    if (!userColumnExists(db, "email")) db.exec("ALTER TABLE users ADD COLUMN email TEXT") catch {};
+    if (!userColumnExists(db, "reset_code")) db.exec("ALTER TABLE users ADD COLUMN reset_code TEXT") catch {};
+    if (!userColumnExists(db, "reset_code_expires_at")) db.exec("ALTER TABLE users ADD COLUMN reset_code_expires_at INTEGER") catch {};
+}
+
+fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
+    var stmt = db.prepare("PRAGMA table_info(users)") catch return false;
+    defer stmt.finalize();
+    while (stmt.step() catch false) {
+        const column_name = stmt.column(.text, 1) catch continue;
+        if (std.mem.eql(u8, column_name.text, name)) return true;
+    }
+    return false;
+}
+
+fn generateRecoveryCode(gpa: std.mem.Allocator, req: *Request) ![]u8 {
+    var seed: u64 = @intFromPtr(req);
+    seed ^= @intFromPtr(gpa.ptr);
+    var prng = std.Random.DefaultPrng.init(seed);
+    const n = prng.random().uintLessThan(u32, 1_000_000);
+    return std.fmt.allocPrint(gpa, "{d:0>6}", .{n});
+}
+
+fn passwordStrong(plain: []const u8) bool {
+    if (plain.len < 8) return false;
+    var has_letter = false;
+    var has_digit = false;
+    for (plain) |ch| {
+        if (std.ascii.isAlphabetic(ch)) has_letter = true;
+        if (std.ascii.isDigit(ch)) has_digit = true;
+    }
+    return has_letter and has_digit;
+}
+
+fn forgotPasswordFormHandler(_: *Request, res: *Response) void {
+    renderLayout(res, "Forgot Password",
+        \\<section class="form-panel">
+        \\  <h1>Forgot Password</h1>
+        \\  <form method="post" action="/admin/forgot-password">
+        \\    <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+        \\    <label>Email</label>
+        \\    <input type="email" name="email">
+        \\    <button type="submit">Send Recovery Code</button>
+        \\  </form>
+        \\</section>
+    );
+}
+
+fn forgotPasswordHandler(req: *Request, res: *Response) void {
+    const email = req.formValue("email") orelse "";
+    const db = app_context.get().db;
+    ensureAuthRecoverySchema(db);
+    var stmt = db.prepare("SELECT username FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch {
+        renderLayout(res, "Recovery Code", "<p>If an admin account exists for that email, a recovery code was sent.</p>");
+        return;
+    };
+    defer stmt.finalize();
+    stmt.bind(.{ .text = email }, 1) catch return;
+    if (!(stmt.step() catch false)) {
+        renderLayout(res, "Recovery Code", "<p>If an admin account exists for that email, a recovery code was sent.</p>");
+        return;
+    }
+    const code = generateRecoveryCode(req.allocator, req) catch return;
+    defer req.allocator.free(code);
+    var update = db.prepare("UPDATE users SET reset_code = ?, reset_code_expires_at = 0 WHERE email = ?") catch return;
+    defer update.finalize();
+    update.bind(.{ .text = code }, 1) catch return;
+    update.bind(.{ .text = email }, 2) catch return;
+    _ = update.step() catch return;
+    const body = std.fmt.allocPrint(req.allocator,
+        \\<section class="form-panel">
+        \\  <p>A 6-digit recovery code was sent for {s}.</p>
+        \\  <p>Development code: <strong>{s}</strong></p>
+        \\  <p><a href="/admin/reset-password">Reset password</a></p>
+        \\</section>
+    , .{ email, code }) catch return;
+    defer req.allocator.free(body);
+    renderLayout(res, "Recovery Code", body);
+}
+
+fn resetPasswordFormHandler(_: *Request, res: *Response) void {
+    renderLayout(res, "Reset Password",
+        \\<section class="form-panel">
+        \\  <h1>Reset Password</h1>
+        \\  <form method="post" action="/admin/reset-password">
+        \\    <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+        \\    <label>Email</label>
+        \\    <input type="email" name="email">
+        \\    <label>Recovery Code</label>
+        \\    <input type="text" name="code" inputmode="numeric" maxlength="6">
+        \\    <label>New Password</label>
+        \\    <input type="password" name="password">
+        \\    <label>Confirm Password</label>
+        \\    <input type="password" name="confirm_password">
+        \\    <button type="submit">Reset Password</button>
+        \\  </form>
+        \\</section>
+    );
+}
+
+fn resetPasswordHandler(req: *Request, res: *Response) void {
+    const email = req.formValue("email") orelse "";
+    const code = req.formValue("code") orelse "";
+    const plain = req.formValue("password") orelse "";
+    const confirm = req.formValue("confirm_password") orelse "";
+    if (!std.mem.eql(u8, plain, confirm) or !passwordStrong(plain)) {
+        _ = res.status(400);
+        renderLayout(res, "Reset Password", "<p>Password must match confirmation and include at least 8 characters, a letter, and a digit.</p>");
+        return;
+    }
+    const db = app_context.get().db;
+    ensureAuthRecoverySchema(db);
+    var stmt = db.prepare("SELECT reset_code FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch return;
+    defer stmt.finalize();
+    stmt.bind(.{ .text = email }, 1) catch return;
+    if (!(stmt.step() catch false)) {
+        _ = res.status(400);
+        renderLayout(res, "Reset Password", "<p>Invalid recovery code.</p>");
+        return;
+    }
+    const stored = stmt.column(.text, 0) catch {
+        _ = res.status(400);
+        renderLayout(res, "Reset Password", "<p>Invalid recovery code.</p>");
+        return;
+    };
+    if (!std.mem.eql(u8, stored.text, code)) {
+        _ = res.status(400);
+        renderLayout(res, "Reset Password", "<p>Invalid recovery code.</p>");
+        return;
+    }
+    const hash = password.hash(req.allocator, plain) catch return;
+    defer req.allocator.free(hash);
+    var update = db.prepare("UPDATE users SET password_hash = ?, reset_code = NULL, reset_code_expires_at = NULL WHERE email = ?") catch return;
+    defer update.finalize();
+    update.bind(.{ .text = hash }, 1) catch return;
+    update.bind(.{ .text = email }, 2) catch return;
+    _ = update.step() catch return;
+    redirect(res, "/admin/login");
 }
 
 fn logoutHandler(req: *Request, res: *Response) void {
@@ -348,6 +519,10 @@ pub fn main(init: std.process.Init) !void {
         Router.route(.post, "/notes/:id/delete", deleteNoteHandler),
         Router.route(.get, "/admin/login", loginFormHandler),
         Router.route(.post, "/admin/login", loginHandler),
+        Router.route(.get, "/admin/forgot-password", forgotPasswordFormHandler),
+        Router.route(.post, "/admin/forgot-password", forgotPasswordHandler),
+        Router.route(.get, "/admin/reset-password", resetPasswordFormHandler),
+        Router.route(.post, "/admin/reset-password", resetPasswordHandler),
         Router.route(.post, "/logout", logoutHandler),
     };
     const routes = app_routes ++ admin_routes;

@@ -267,10 +267,10 @@ zypher doc [--zypher-root <path>] [--host <host>] [--port <port>]
 zypher doc-user [path] [--host <host>] [--port <port>]
 zypher migrate [--db <path>] [--dir <dir>]
 zypher makemigrations [--schema <path>] [--state <path>] [--dir <dir>]
-zypher createsuperuser [--username <email>] [--password <password>] [--db <path>]
+zypher createsuperuser [--username <name>] [--email <email>] [--password <password>] [--db <path>]
 ```
 
-Scaffold templates live in the repository root `templates/` directory. Third-party templates can be used by pointing `--template-dir` at another directory. Built-in styles have paired template and API variants, such as `mvc` and `mvc-api`; `--api` selects the API sibling. Built-in templates generate a runnable `build.zig`, a sample managed ORM model, and an admin dashboard protected by `/admin/login`. Users should start scaffolded apps through `zypher run`, which delegates to the generated build script and forwards runtime options such as `--port`.
+Scaffold templates live in the repository root `templates/` directory. Third-party templates can be used by pointing `--template-dir` at another directory. Built-in styles have paired template and API variants, such as `mvc` and `mvc-api`; `--api` selects the API sibling. Built-in templates generate a runnable `build.zig`, a sample managed ORM model, and an admin dashboard protected by `/admin/login`. `zypher createsuperuser` defaults to an interactive prompt for username, email, hidden password, and hidden password confirmation; noninteractive callers must pass username, email, and password together. Scaffolded admin login also includes `/admin/forgot-password` and `/admin/reset-password` for 6-digit password recovery codes. Users should start scaffolded apps through `zypher run`, which delegates to the generated build script and forwards runtime options such as `--port`.
 
 `zypher doc` builds and serves Zypher library documentation. `zypher doc-user` builds and serves documentation for a user project by running `zig build doc` in that project.
 

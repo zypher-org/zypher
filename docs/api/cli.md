@@ -30,7 +30,7 @@ zypher help
 - `runserver [--host <host>] [--port <port>] [--max-requests <n>]` — Start the framework health-check server
 - `migrate [--db <path>] [--dir <dir>]` — Run database migrations
 - `makemigrations [--schema <path>] [--state <path>] [--dir <dir>]` — Generate migration files
-- `createsuperuser [--username <email>] [--password <password>] [--db <path>]` — Create an admin user
+- `createsuperuser [--username <name>] [--email <email>] [--password <password>] [--db <path>]` — Create an admin user
 - `shell` — Interactive REPL
 - `help` — Show help
 
@@ -69,8 +69,27 @@ Every built-in template includes:
 - `zypher.admin.AdminSite` registration
 - `/admin` redirecting to `/admin/login`
 - `/admin/login` credentials backed by the `users` table created by `zypher createsuperuser`
+- `/admin/forgot-password` and `/admin/reset-password` for 6-digit recovery codes
 
 API variants do not include project HTML templates for app routes. Their app routes return JSON with `Response.json`; the admin dashboard still uses the framework's built-in admin templates.
+
+## Superusers
+
+`zypher createsuperuser` creates the admin row used by scaffolded `/admin/login` routes. The default flow is interactive:
+
+```sh
+zypher createsuperuser --db app.db
+```
+
+It prompts for username, email, password, and password confirmation. Password input is hidden in an interactive terminal.
+
+For scripts or fixtures, pass all account fields explicitly:
+
+```sh
+zypher createsuperuser --username admin --email admin@example.com --password Passw0rd --db app.db
+```
+
+Scaffolded admin login uses `username` and `password`. Password recovery uses the stored email address: `POST /admin/forgot-password` creates a 6-digit code, and `POST /admin/reset-password` accepts `email`, `code`, `password`, and `confirm_password`.
 
 ## Running Scaffolded Apps
 

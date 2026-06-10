@@ -274,7 +274,7 @@ test "cli: createsuperuser prompt creates active admin with hashed password" {
     const db_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/superuser.sqlite", .{tmp.sub_path}, 0);
     defer std.testing.allocator.free(db_path);
 
-    var input = std.Io.Reader.fixed("admin@example.com\nStr0ngPass\n");
+    var input = std.Io.Reader.fixed("admin\nadmin@example.com\nStr0ngPass\nStr0ngPass\n");
     var out = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer out.deinit();
     var err = std.Io.Writer.Allocating.init(std.testing.allocator);
@@ -283,21 +283,25 @@ test "cli: createsuperuser prompt creates active admin with hashed password" {
     try cli.runCreatesuperuserPrompt(std.testing.allocator, db_path, &input, &out.writer, &err.writer);
 
     try std.testing.expectEqual(@as(usize, 0), err.written().len);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Username:") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "Email:") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "Password:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Confirm password:") != null);
 
     var db = try sqlite.Db.open(std.testing.allocator, db_path);
     defer db.close();
-    var stmt = try db.prepare("SELECT username, password_hash, role, is_active FROM users WHERE username = ?");
+    var stmt = try db.prepare("SELECT username, email, password_hash, role, is_active FROM users WHERE username = ?");
     defer stmt.finalize();
-    try stmt.bind(.{ .text = "admin@example.com" }, 1);
+    try stmt.bind(.{ .text = "admin" }, 1);
     try std.testing.expect(try stmt.step());
     const username = try stmt.column(.text, 0);
-    const password_hash = try stmt.column(.text, 1);
-    const role = try stmt.column(.text, 2);
-    const active = try stmt.column(.integer, 3);
+    const email = try stmt.column(.text, 1);
+    const password_hash = try stmt.column(.text, 2);
+    const role = try stmt.column(.text, 3);
+    const active = try stmt.column(.integer, 4);
 
-    try std.testing.expectEqualStrings("admin@example.com", username.text);
+    try std.testing.expectEqualStrings("admin", username.text);
+    try std.testing.expectEqualStrings("admin@example.com", email.text);
     try std.testing.expect(!std.mem.eql(u8, password_hash.text, "Str0ngPass"));
     try std.testing.expect(try password.verify(password_hash.text, "Str0ngPass"));
     try std.testing.expectEqualStrings("admin", role.text);
@@ -305,8 +309,9 @@ test "cli: createsuperuser prompt creates active admin with hashed password" {
 }
 
 test "cli: createsuperuser validates email and password strength" {
-    try std.testing.expectError(error.InvalidEmail, cli.validateSuperuserCredentials("not-email", "Str0ngPass"));
-    try std.testing.expectError(error.WeakPassword, cli.validateSuperuserCredentials("admin@example.com", "weakpass"));
+    try std.testing.expectError(error.InvalidUsername, cli.validateSuperuserCredentials(.{ .username = "", .email = "admin@example.com", .password = "Str0ngPass" }));
+    try std.testing.expectError(error.InvalidEmail, cli.validateSuperuserCredentials(.{ .username = "admin", .email = "not-email", .password = "Str0ngPass" }));
+    try std.testing.expectError(error.WeakPassword, cli.validateSuperuserCredentials(.{ .username = "admin", .email = "admin@example.com", .password = "weakpass" }));
 }
 
 test "cli: runserver parses host and port options" {
@@ -479,12 +484,13 @@ test "cli: logs command invocation with redacted args and outcome" {
     log.startCapture(std.testing.allocator, &buf);
     defer log.stopCapture();
 
-    const args = [_][:0]const u8{ "zypher", "createsuperuser", "--db", db_path, "--email", "logged@example.com", "--password", "Secr3tPass" };
+    const args = [_][:0]const u8{ "zypher", "createsuperuser", "--db", db_path, "--username", "logged", "--email", "logged@example.com", "--password", "Secr3tPass" };
     const output = try runCli(&args);
     defer std.testing.allocator.free(output);
 
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "command invoked: createsuperuser") != null);
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "command completed: createsuperuser") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "--username logged") != null);
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "--email logged@example.com") != null);
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "--password <redacted>") != null);
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "Secr3tPass") == null);

@@ -21,7 +21,7 @@ threadlocal var tl_db: ?*sqlite.Db = null;
 threadlocal var tl_router: ?*const Router = null;
 
 fn loginInfo(_: *Request, res: *Response) void {
-    res.json(.{ .login = "/admin/login", .method = "POST", .fields = "username,password" }) catch {};
+    res.json(.{ .login = "/admin/login", .method = "POST", .fields = "username,password", .forgot_password = "/admin/forgot-password", .reset_password = "/admin/reset-password" }) catch {};
 }
 
 fn login(req: *Request, res: *Response) void {
@@ -42,6 +42,104 @@ fn login(req: *Request, res: *Response) void {
         session.put(req.allocator, "role", "admin") catch {};
     }
     res.json(.{ .ok = true, .redirect = "/admin/" }) catch {};
+}
+
+fn ensureAuthRecoverySchema(db: *sqlite.Db) void {
+    if (!userColumnExists(db, "email")) db.exec("ALTER TABLE users ADD COLUMN email TEXT") catch {};
+    if (!userColumnExists(db, "reset_code")) db.exec("ALTER TABLE users ADD COLUMN reset_code TEXT") catch {};
+    if (!userColumnExists(db, "reset_code_expires_at")) db.exec("ALTER TABLE users ADD COLUMN reset_code_expires_at INTEGER") catch {};
+}
+
+fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
+    var stmt = db.prepare("PRAGMA table_info(users)") catch return false;
+    defer stmt.finalize();
+    while (stmt.step() catch false) {
+        const column_name = stmt.column(.text, 1) catch continue;
+        if (std.mem.eql(u8, column_name.text, name)) return true;
+    }
+    return false;
+}
+
+fn generateRecoveryCode(gpa: std.mem.Allocator, req: *Request) ![]u8 {
+    var seed: u64 = @intFromPtr(req);
+    seed ^= @intFromPtr(gpa.ptr);
+    var prng = std.Random.DefaultPrng.init(seed);
+    const n = prng.random().uintLessThan(u32, 1_000_000);
+    return std.fmt.allocPrint(gpa, "{d:0>6}", .{n});
+}
+
+fn passwordStrong(plain: []const u8) bool {
+    if (plain.len < 8) return false;
+    var has_letter = false;
+    var has_digit = false;
+    for (plain) |ch| {
+        if (std.ascii.isAlphabetic(ch)) has_letter = true;
+        if (std.ascii.isDigit(ch)) has_digit = true;
+    }
+    return has_letter and has_digit;
+}
+
+fn forgotPasswordInfo(_: *Request, res: *Response) void {
+    res.json(.{ .forgot_password = "/admin/forgot-password", .method = "POST", .fields = "email" }) catch {};
+}
+
+fn forgotPassword(req: *Request, res: *Response) void {
+    const email = req.formValue("email") orelse "";
+    const db = tl_db orelse return;
+    ensureAuthRecoverySchema(db);
+    var stmt = db.prepare("SELECT username FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch return genericRecoveryResponse(res);
+    defer stmt.finalize();
+    stmt.bind(.{ .text = email }, 1) catch return;
+    if (!(stmt.step() catch false)) return genericRecoveryResponse(res);
+    const code = generateRecoveryCode(req.allocator, req) catch return;
+    defer req.allocator.free(code);
+    var update = db.prepare("UPDATE users SET reset_code = ?, reset_code_expires_at = 0 WHERE email = ?") catch return;
+    defer update.finalize();
+    update.bind(.{ .text = code }, 1) catch return;
+    update.bind(.{ .text = email }, 2) catch return;
+    _ = update.step() catch return;
+    res.json(.{ .ok = true, .message = "recovery_code_sent", .development_code = code }) catch {};
+}
+
+fn resetPasswordInfo(_: *Request, res: *Response) void {
+    res.json(.{ .reset_password = "/admin/reset-password", .method = "POST", .fields = "email,code,password,confirm_password" }) catch {};
+}
+
+fn resetPassword(req: *Request, res: *Response) void {
+    const email = req.formValue("email") orelse "";
+    const code = req.formValue("code") orelse "";
+    const plain = req.formValue("password") orelse "";
+    const confirm = req.formValue("confirm_password") orelse "";
+    if (!std.mem.eql(u8, plain, confirm) or !passwordStrong(plain)) {
+        _ = res.status(400);
+        res.json(.{ .message = "weak_or_mismatched_password" }) catch {};
+        return;
+    }
+    const db = tl_db orelse return;
+    ensureAuthRecoverySchema(db);
+    var stmt = db.prepare("SELECT reset_code FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch return invalidRecoveryCode(res);
+    defer stmt.finalize();
+    stmt.bind(.{ .text = email }, 1) catch return;
+    if (!(stmt.step() catch false)) return invalidRecoveryCode(res);
+    const stored = stmt.column(.text, 0) catch return invalidRecoveryCode(res);
+    if (!std.mem.eql(u8, stored.text, code)) return invalidRecoveryCode(res);
+    const hash = password.hash(req.allocator, plain) catch return;
+    defer req.allocator.free(hash);
+    var update = db.prepare("UPDATE users SET password_hash = ?, reset_code = NULL, reset_code_expires_at = NULL WHERE email = ?") catch return;
+    defer update.finalize();
+    update.bind(.{ .text = hash }, 1) catch return;
+    update.bind(.{ .text = email }, 2) catch return;
+    _ = update.step() catch return;
+    res.json(.{ .ok = true, .message = "password_reset" }) catch {};
+}
+
+fn genericRecoveryResponse(res: *Response) void {
+    res.json(.{ .ok = true, .message = "if_account_exists_code_was_sent" }) catch {};
+}
+
+fn invalidRecoveryCode(res: *Response) void {
+    _ = res.status(400);
+    res.json(.{ .message = "invalid_recovery_code" }) catch {};
 }
 
 fn unauthorized(res: *Response) void {
@@ -98,6 +196,10 @@ pub fn serve(init: std.process.Init) !void {
         Router.route(.get, "/admin", adminEntry),
         Router.route(.get, "/admin/login", loginInfo),
         Router.route(.post, "/admin/login", login),
+        Router.route(.get, "/admin/forgot-password", forgotPasswordInfo),
+        Router.route(.post, "/admin/forgot-password", forgotPassword),
+        Router.route(.get, "/admin/reset-password", resetPasswordInfo),
+        Router.route(.post, "/admin/reset-password", resetPassword),
     };
     const routes = app_routes ++ admin_routes;
     var router = Router.initFromSlice(&routes, notFound);

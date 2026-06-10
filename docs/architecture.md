@@ -232,6 +232,8 @@ These are enforced by regression tests using `std.testing.allocator` for allocat
 - generated app opens its SQLite database and registers ORM models with `AdminSite`
 - `/admin` redirects to `/admin/login`
 - `/admin/login` verifies password hash and writes `role=admin` to the session
+- `/admin/forgot-password` records a 6-digit recovery code for the stored email address
+- `/admin/reset-password` verifies the code and replaces the password hash
 - admin CRUD routes require that session role before serving `/admin/` and model routes
 
 **Data flow (template rendering):**

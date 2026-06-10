@@ -82,7 +82,7 @@ Use the CLI when starting a new app:
 ```sh
 zypher new examples/blog --template mvc
 cd examples/blog
-zypher createsuperuser --username admin@example.com --password Passw0rd --db blog.db
+zypher createsuperuser --db blog.db
 zypher run . --zypher-root ../.. --port 8080
 ```
 
@@ -105,7 +105,7 @@ Third-party templates can be used with `--template-dir`:
 zypher new apps/admin_tool --template custom --template-dir /path/to/templates
 ```
 
-Generated templates include a `build.zig`, a runnable app, a sample managed ORM model, and an admin dashboard. `/admin` redirects to `/admin/login`; create credentials with `zypher createsuperuser`. API variants return JSON from app routes and do not include project HTML templates.
+Generated templates include a `build.zig`, a runnable app, a sample managed ORM model, and an admin dashboard. `/admin` redirects to `/admin/login`; create credentials with `zypher createsuperuser`, which prompts for username, email, password, and password confirmation. Scaffolded admin login includes password recovery through `/admin/forgot-password` and `/admin/reset-password`. API variants return JSON from app routes and do not include project HTML templates.
 `zypher run` accepts `--port`; if omitted, scaffolded apps default to `8080`.
 
 Serve generated documentation from the CLI:
@@ -143,7 +143,13 @@ It exposes:
 Create admin credentials for the example with:
 
 ```sh
-zypher createsuperuser --username admin@example.com --password Passw0rd --db books_api.db
+zypher createsuperuser --db books_api.db
+```
+
+For noninteractive setup, pass all account fields:
+
+```sh
+zypher createsuperuser --username admin --email admin@example.com --password Passw0rd --db books_api.db
 ```
 
 ### Manual App
