@@ -25,8 +25,11 @@ pub fn apply(gpa: std.mem.Allocator, name: []const u8, value: Value) !FilterResu
     if (std.mem.eql(u8, name, "upper")) return filterUpper(gpa, value);
     if (std.mem.eql(u8, name, "lower")) return filterLower(gpa, value);
     if (std.mem.eql(u8, name, "capitalize")) return filterCapitalize(gpa, value);
+    if (std.mem.eql(u8, name, "title")) return filterTitle(gpa, value);
     if (std.mem.eql(u8, name, "trim")) return filterTrim(gpa, value);
     if (std.mem.eql(u8, name, "length")) return filterLength(value);
+    if (std.mem.eql(u8, name, "reverse")) return filterReverse(gpa, value);
+    if (std.mem.eql(u8, name, "escape")) return filterEscape(gpa, value);
     if (std.mem.eql(u8, name, "join")) return filterJoin(gpa, value, ", ");
 
     log.warn("unknown filter '{s}', passing through", .{name});
@@ -36,16 +39,26 @@ pub fn apply(gpa: std.mem.Allocator, name: []const u8, value: Value) !FilterResu
 pub fn applyWithArg(gpa: std.mem.Allocator, name: []const u8, value: Value, arg: []const u8) !FilterResult {
     if (std.mem.eql(u8, name, "join")) return filterJoin(gpa, value, arg);
     if (std.mem.eql(u8, name, "truncate")) return filterTruncate(gpa, value, arg);
+    if (std.mem.eql(u8, name, "default")) return filterDefaultArg(gpa, value, arg);
     if (std.mem.eql(u8, name, "date")) return filterDate(gpa, value, arg);
     return apply(gpa, name, value);
 }
 
 pub fn applyDefault(gpa: std.mem.Allocator, value: Value, fallback: Value) !FilterResult {
     _ = gpa;
-    if (value == .null_val) {
+    if (isEmpty(value)) {
         return .{ .value = fallback, .owned = false };
     }
     return .{ .value = value, .owned = false };
+}
+
+fn isEmpty(value: Value) bool {
+    return switch (value) {
+        .null_val => true,
+        .string => |s| s.len == 0,
+        .list => |items| items.len == 0,
+        else => false,
+    };
 }
 
 fn filterUpper(gpa: std.mem.Allocator, value: Value) !FilterResult {
@@ -83,6 +96,28 @@ fn filterCapitalize(gpa: std.mem.Allocator, value: Value) !FilterResult {
     }
 }
 
+fn filterTitle(gpa: std.mem.Allocator, value: Value) !FilterResult {
+    switch (value) {
+        .string => |s| {
+            const buf = try gpa.alloc(u8, s.len);
+            var at_word_start = true;
+            for (s, 0..) |c, i| {
+                if (std.ascii.isWhitespace(c)) {
+                    buf[i] = c;
+                    at_word_start = true;
+                } else if (at_word_start) {
+                    buf[i] = std.ascii.toUpper(c);
+                    at_word_start = false;
+                } else {
+                    buf[i] = std.ascii.toLower(c);
+                }
+            }
+            return .{ .value = .{ .string = buf }, .owned = true };
+        },
+        else => return .{ .value = value, .owned = false },
+    }
+}
+
 fn filterTrim(gpa: std.mem.Allocator, value: Value) !FilterResult {
     switch (value) {
         .string => |s| {
@@ -91,6 +126,40 @@ fn filterTrim(gpa: std.mem.Allocator, value: Value) !FilterResult {
             const buf = try gpa.alloc(u8, trimmed.len);
             @memcpy(buf, trimmed);
             return .{ .value = .{ .string = buf }, .owned = true };
+        },
+        else => return .{ .value = value, .owned = false },
+    }
+}
+
+fn filterReverse(gpa: std.mem.Allocator, value: Value) !FilterResult {
+    switch (value) {
+        .string => |s| {
+            const buf = try gpa.alloc(u8, s.len);
+            for (s, 0..) |_, i| {
+                buf[i] = s[s.len - 1 - i];
+            }
+            return .{ .value = .{ .string = buf }, .owned = true };
+        },
+        else => return .{ .value = value, .owned = false },
+    }
+}
+
+fn filterEscape(gpa: std.mem.Allocator, value: Value) !FilterResult {
+    switch (value) {
+        .string => |s| {
+            var buf: std.ArrayList(u8) = .empty;
+            errdefer buf.deinit(gpa);
+            for (s) |c| {
+                switch (c) {
+                    '<' => try buf.appendSlice(gpa, "&lt;"),
+                    '>' => try buf.appendSlice(gpa, "&gt;"),
+                    '&' => try buf.appendSlice(gpa, "&amp;"),
+                    '"' => try buf.appendSlice(gpa, "&quot;"),
+                    '\'' => try buf.appendSlice(gpa, "&#x27;"),
+                    else => try buf.append(gpa, c),
+                }
+            }
+            return .{ .value = .{ .string = try buf.toOwnedSlice(gpa) }, .owned = true };
         },
         else => return .{ .value = value, .owned = false },
     }
@@ -121,6 +190,17 @@ fn filterJoin(gpa: std.mem.Allocator, value: Value, sep: []const u8) !FilterResu
         },
         else => return .{ .value = value, .owned = false },
     }
+}
+
+fn filterDefaultArg(gpa: std.mem.Allocator, value: Value, arg: []const u8) !FilterResult {
+    _ = gpa;
+    if (!isEmpty(value)) return .{ .value = value, .owned = false };
+    const trimmed = std.mem.trim(u8, arg, " \t");
+    const fallback = if (trimmed.len >= 2 and ((trimmed[0] == '"' and trimmed[trimmed.len - 1] == '"') or (trimmed[0] == '\'' and trimmed[trimmed.len - 1] == '\'')))
+        trimmed[1 .. trimmed.len - 1]
+    else
+        trimmed;
+    return .{ .value = .{ .string = fallback }, .owned = false };
 }
 
 fn filterTruncate(gpa: std.mem.Allocator, value: Value, arg: []const u8) !FilterResult {

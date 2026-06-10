@@ -36,5 +36,9 @@ Template filter functions.
 - `trim` — Strip whitespace
 - `length` — Get string length
 - `reverse` — Reverse string
+- `escape` — HTML-escape a string explicitly
+- `safe` — Renderer-level bypass for auto-escaping
+- `join(sep)` — Join list items with a separator
 - `truncate(n)` — Truncate to n characters
 - `default(val)` — Default value if empty
+- `date(format)` — Format an integer Unix timestamp as `YYYY-MM-DD`

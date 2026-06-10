@@ -11,6 +11,8 @@ A single route definition.
 - `/users/:id` — Named parameter
 - `/users/:id[u64]` — Typed parameter (validates as u64)
 - `/static/*` — Wildcard (matches remaining path)
+- If multiple routes match the same method/path, dispatch chooses the most specific route: static segments first, then named parameters, then wildcards. Equal specificity preserves registration order.
+- Wildcard captures are available under the `"*"` parameter name.
 
 ## RouteParams
 Zero-allocation URL parameter storage.

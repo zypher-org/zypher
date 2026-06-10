@@ -1,8 +1,8 @@
 /// zypher auth — session management with in-memory store.
 const std = @import("std");
+const builtin = @import("builtin");
 const log = std.log.scoped(.session);
 const posix = std.posix;
-const Random = std.Random;
 
 /// Session ID length in bytes (256-bit random).
 pub const SESSION_ID_LEN = 32;
@@ -30,21 +30,34 @@ fn unixTimestamp() i64 {
     return ts.sec;
 }
 
-/// Fill buffer with cryptographically random bytes.
-/// Uses ChaCha CSPRNG seeded from POSIX clock_gettime for entropy.
-fn randomBytes(buf: []u8) void {
-    var seed: [32]u8 = undefined;
-    var ts: posix.timespec = undefined;
-    _ = posix.system.clock_gettime(posix.CLOCK.REALTIME, &ts);
-    @memcpy(seed[0..8], std.mem.asBytes(&ts.sec));
-    @memcpy(seed[8..16], std.mem.asBytes(&ts.nsec));
-    // Fill remaining with repeating pattern of timestamp bytes
-    var i: usize = 16;
-    while (i < 32) : (i += 8) {
-        @memcpy(seed[i..@min(i + 8, 32)], seed[0..@min(8, 32 - i)]);
+/// Fill buffer with entropy from the operating system.
+fn randomBytes(buf: []u8) !void {
+    if (buf.len == 0) return;
+
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const remaining = buf[filled..];
+            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
+            switch (posix.errno(rc)) {
+                .SUCCESS => {
+                    const n: usize = @intCast(rc);
+                    if (n == 0) return error.EntropyUnavailable;
+                    filled += n;
+                },
+                .INTR => continue,
+                else => return error.EntropyUnavailable,
+            }
+        }
+        return;
     }
-    var csprng = Random.DefaultCsprng.init(seed);
-    csprng.random().bytes(buf);
+
+    if (builtin.link_libc and @TypeOf(posix.system.arc4random_buf) != void) {
+        posix.system.arc4random_buf(buf.ptr, buf.len);
+        return;
+    }
+
+    return error.EntropyUnavailable;
 }
 
 /// A single session with ID, data, and expiry.
@@ -126,7 +139,7 @@ pub const SessionStore = struct {
     /// Create a new session with a specific expiry timestamp.
     pub fn createWithExpiry(self: *Self, expires_at: i64) !Session {
         var id: [SESSION_ID_LEN]u8 = undefined;
-        randomBytes(&id);
+        try randomBytes(&id);
 
         const s = Session{
             .id = id,

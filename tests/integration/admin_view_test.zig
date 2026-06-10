@@ -221,8 +221,7 @@ test "admin views: create handler inserts record" {
 
     const handler = findHandler("/admin/products/add/", .post) orelse return error.SkipZigTest;
 
-    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
-    try query_map.put("_csrf", csrf.generateToken());
+    const query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
 
     var req = Request{
         .method = .post,
@@ -238,6 +237,7 @@ test "admin views: create handler inserts record" {
         admin_session.deinit(std.testing.allocator);
         std.testing.allocator.destroy(admin_session);
     }
+    try req.query.put("_csrf", try csrf.ensureToken(&req));
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -362,8 +362,7 @@ test "admin views: delete handler removes record" {
     defer params.deinit();
     try params.put("id", "1");
 
-    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
-    try query_map.put("_csrf", csrf.generateToken());
+    const query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
 
     var req = Request{
         .method = .post,
@@ -380,6 +379,7 @@ test "admin views: delete handler removes record" {
         admin_session.deinit(std.testing.allocator);
         std.testing.allocator.destroy(admin_session);
     }
+    try req.query.put("_csrf", try csrf.ensureToken(&req));
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();

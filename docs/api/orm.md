@@ -37,7 +37,7 @@ Runtime query execution.
 ```zig
 var qs = QuerySet(Model).init(&db, gpa);
 defer qs.deinit();
-var results = qs.filter("name LIKE ?", &.{.{.text = "%foo%"}})
+var results = qs.filterBy("name LIKE ?", &.{.{ .text = "%foo%" }})
     .orderBy("name ASC")
     .limit(10)
     .offset(0)
@@ -49,5 +49,7 @@ Manage database schema migrations.
 
 - `MigrationRunner.init(db)` — Create a runner
 - `runner.ensureHistoryTable()` — Create migration tracking table
-- `runner.isApplied(id)` — Check if migration was applied
-- `runner.markApplied(id, name)` — Record migration as applied
+- `runner.countApplied()` — Count applied migrations
+- `runner.migrate(migrations)` — Apply pending migrations
+- `runner.status(gpa, migrations)` — Return migration application status
+- `runner.rollback(migrations, n)` — Roll back the most recent `n` migrations that provide `down_sql`

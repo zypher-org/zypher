@@ -82,6 +82,58 @@ fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
     return try bytes.toOwnedSlice(allocator);
 }
 
+fn httpDate(buf: []u8, timestamp: std.Io.Timestamp) ![]const u8 {
+    const secs = timestamp.toSeconds();
+    if (secs < 0) return error.InvalidTimestamp;
+    const unix_secs: u64 = @intCast(secs);
+    const epoch_secs = std.time.epoch.EpochSeconds{ .secs = unix_secs };
+    const epoch_day = epoch_secs.getEpochDay();
+    const day_secs = epoch_secs.getDaySeconds();
+    const year_day = epoch_day.calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+
+    const weekdays = [_][]const u8{ "Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed" };
+    const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    const weekday = weekdays[epoch_day.day % 7];
+    const month = months[@intFromEnum(month_day.month) - 1];
+
+    return std.fmt.bufPrint(
+        buf,
+        "{s}, {d:0>2} {s} {d:0>4} {d:0>2}:{d:0>2}:{d:0>2} GMT",
+        .{
+            weekday,
+            month_day.day_index + 1,
+            month,
+            year_day.year,
+            day_secs.getHoursIntoDay(),
+            day_secs.getMinutesIntoHour(),
+            day_secs.getSecondsIntoMinute(),
+        },
+    );
+}
+
+fn fileMtime(gpa: std.mem.Allocator, path: []const u8) !std.Io.Timestamp {
+    if (@import("builtin").os.tag != .linux) return error.UnsupportedPlatform;
+    const path_z = try gpa.dupeSentinel(u8, path, 0);
+    defer gpa.free(path_z);
+
+    var stx: std.os.linux.Statx = undefined;
+    const rc = std.os.linux.statx(
+        std.posix.AT.FDCWD,
+        path_z.ptr,
+        std.os.linux.AT.NO_AUTOMOUNT,
+        .{ .MTIME = true },
+        &stx,
+    );
+    switch (std.posix.errno(rc)) {
+        .SUCCESS => {
+            const nanos = @as(i96, @intCast(stx.mtime.sec)) * std.time.ns_per_s + @as(i96, @intCast(stx.mtime.nsec));
+            return std.Io.Timestamp.fromNanoseconds(nanos);
+        },
+        else => return error.StatFailed,
+    }
+}
+
 fn relativeStaticPath(comptime config: Config, path: []const u8) ?[]const u8 {
     var rel = path[config.prefix.len..];
     while (std.mem.startsWith(u8, rel, "/")) {
@@ -156,6 +208,16 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                 next(req, res);
                 return;
             };
+            errdefer res.allocator.free(owned_body);
+
+            const mtime = fileMtime(res.allocator, fs_path) catch |err| {
+                log.err("failed to stat static file {s}: {}", .{ fs_path, err });
+                _ = res.status(500);
+                res.text("Internal Server Error") catch {};
+                return;
+            };
+            var last_modified_buf: [40]u8 = undefined;
+            const last_modified = httpDate(&last_modified_buf, mtime) catch "";
 
             // Compute ETag (simple hash of content)
             var hasher = std.hash.XxHash32.init(0);
@@ -169,14 +231,25 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                 if (std.mem.eql(u8, inm, etag_str)) {
                     _ = res.status(304);
                     _ = res.header("ETag", etag_str);
+                    if (last_modified.len > 0) _ = res.header("Last-Modified", last_modified);
                     res.allocator.free(owned_body);
                     log.debug("static file not modified: {s}", .{fs_path});
                     return;
                 }
             }
 
-            // Set Last-Modified from file metadata (unix timestamp approximation)
-            _ = res.header("Last-Modified", "Wed, 21 Oct 2026 07:28:00 GMT");
+            if (last_modified.len > 0) {
+                _ = res.header("Last-Modified", last_modified);
+                if (req.header("If-Modified-Since")) |ims| {
+                    if (std.mem.eql(u8, ims, last_modified)) {
+                        _ = res.status(304);
+                        _ = res.header("ETag", etag_str);
+                        res.allocator.free(owned_body);
+                        log.debug("static file not modified by Last-Modified: {s}", .{fs_path});
+                        return;
+                    }
+                }
+            }
 
             if (res.body) |old| res.allocator.free(old);
             res.body = owned_body;

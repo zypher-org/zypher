@@ -1,6 +1,8 @@
 /// zypher forms — comptime-defined form structs with validation.
 const std = @import("std");
 const validators = @import("validators.zig");
+const Request = @import("../core/request.zig").Request;
+const csrf = @import("../middleware/csrf.zig");
 
 const log = std.log.scoped(.form);
 
@@ -80,6 +82,28 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
             };
         }
 
+        /// Bind form data from a Request. Text fields use form/query values;
+        /// file fields use multipart uploads keyed by field name.
+        pub fn bindRequest(gpa: std.mem.Allocator, req: *const Request) !BoundForm {
+            var values = std.StringHashMap([]const u8).init(gpa);
+            errdefer values.deinit();
+
+            inline for (0..fields_len) |i| {
+                const f = comptime fieldAt(i);
+                const val = switch (f.kind) {
+                    .file => if (req.file(f.name)) |upload| upload.data else "",
+                    else => req.formValue(f.name) orelse "",
+                };
+                try values.put(f.name, val);
+            }
+
+            return BoundForm{
+                .gpa = gpa,
+                .values = values,
+                .errors = std.StringHashMap([]const u8).init(gpa),
+            };
+        }
+
         /// A bound form with values and validation errors.
         pub const BoundForm = struct {
             gpa: std.mem.Allocator,
@@ -130,6 +154,11 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
             /// Return an HTML hidden input field with CSRF token for use in forms.
             pub fn csrfField(_: *BoundForm) []const u8 {
                 return "<input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\">\n";
+            }
+
+            /// Return an owned CSRF hidden input using the request/session token.
+            pub fn csrfFieldForRequest(_: *BoundForm, req: *Request) ![]u8 {
+                return csrf.formFieldForRequest(req.allocator, req);
             }
 
             /// Return typed cleaned data after validation.

@@ -1129,6 +1129,8 @@ fn copyTemplateDir(
     defer walker.deinit();
 
     while (try walker.next(io)) |entry| {
+        if (isGeneratedTemplatePath(entry.path)) continue;
+
         const replaced_rel = try replaceProjectName(gpa, entry.path, project_name);
         defer gpa.free(replaced_rel);
         const dest_path = try std.fs.path.join(gpa, &.{ project_root, replaced_rel });
@@ -1137,7 +1139,10 @@ fn copyTemplateDir(
         switch (entry.kind) {
             .directory => try dest_root.createDirPath(io, dest_path),
             .file => {
-                const data = try entry.dir.readFileAlloc(io, entry.basename, gpa, .limited(1024 * 1024));
+                if (std.fs.path.dirname(dest_path)) |parent| {
+                    try dest_root.createDirPath(io, parent);
+                }
+                const data = try source_dir.readFileAlloc(io, entry.path, gpa, .limited(1024 * 1024));
                 defer gpa.free(data);
                 const rendered = try replaceProjectName(gpa, data, project_name);
                 defer gpa.free(rendered);
@@ -1146,6 +1151,15 @@ fn copyTemplateDir(
             else => {},
         }
     }
+}
+
+fn isGeneratedTemplatePath(path: []const u8) bool {
+    var parts = std.mem.splitScalar(u8, path, std.fs.path.sep);
+    while (parts.next()) |part| {
+        if (std.mem.eql(u8, part, ".zig-cache")) return true;
+        if (std.mem.eql(u8, part, "zig-out")) return true;
+    }
+    return false;
 }
 
 fn replaceProjectName(gpa: std.mem.Allocator, input: []const u8, project_name: []const u8) ![]u8 {

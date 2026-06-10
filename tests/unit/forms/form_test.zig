@@ -5,6 +5,7 @@ const validators = @import("zypher").forms.validators;
 const Form = form.Form;
 const FieldDef = form.FieldDef;
 const Field = form.Field;
+const Request = @import("zypher").core.Request;
 
 // ── Test form definitions ────────────────────────────────────────────────
 
@@ -20,6 +21,12 @@ const RegistrationFormFields = struct {
     age: FieldDef = Field("age", .integer, .{}),
 };
 const RegistrationForm = Form("RegistrationForm", RegistrationFormFields);
+
+const UploadFormFields = struct {
+    title: FieldDef = Field("title", .text, .{ .required = true }),
+    attachment: FieldDef = Field("attachment", .file, .{ .required = true }),
+};
+const UploadForm = Form("UploadForm", UploadFormFields);
 
 // ── bind ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +52,35 @@ test "form: bind with missing optional field returns empty string" {
     var bound = try RegistrationForm.bind(std.testing.allocator, &data);
     defer bound.deinit();
     try std.testing.expectEqualStrings("", bound.getValue("age"));
+}
+
+test "form: bindRequest populates file field from multipart request upload" {
+    var req: Request = .{
+        .method = .post,
+        .path = "/upload",
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = &.{},
+        .allocator = std.testing.allocator,
+        .files = std.StringHashMap(Request.FileUpload).init(std.testing.allocator),
+        .files_owned = true,
+    };
+    defer req.deinit();
+
+    try req.query.put("title", "Report");
+    try req.files.put(try std.testing.allocator.dupe(u8, "attachment"), .{
+        .filename = try std.testing.allocator.dupe(u8, "report.txt"),
+        .content_type = try std.testing.allocator.dupe(u8, "text/plain"),
+        .data = try std.testing.allocator.dupe(u8, "file bytes"),
+    });
+
+    var bound = try UploadForm.bindRequest(std.testing.allocator, &req);
+    defer bound.deinit();
+    try std.testing.expect(bound.validate());
+
+    const cleaned = bound.cleanedData();
+    try std.testing.expectEqualStrings("Report", cleaned[0]);
+    try std.testing.expectEqualStrings("file bytes", cleaned[1]);
 }
 
 // ── validate ──────────────────────────────────────────────────────────────
