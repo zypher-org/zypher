@@ -158,14 +158,22 @@ fn filterDate(gpa: std.mem.Allocator, value: Value, arg: []const u8) !FilterResu
             var pos: usize = 0;
             @memcpy(buf[pos..][0..y_str.len], y_str);
             pos += y_str.len;
-            buf[pos] = '-'; pos += 1;
+            buf[pos] = '-';
+            pos += 1;
             const m_str = std.fmt.bufPrint(&tmp, "{d}", .{m}) catch "01";
-            if (m_str.len < 2) { buf[pos] = '0'; pos += 1; }
+            if (m_str.len < 2) {
+                buf[pos] = '0';
+                pos += 1;
+            }
             @memcpy(buf[pos..][0..m_str.len], m_str);
             pos += m_str.len;
-            buf[pos] = '-'; pos += 1;
+            buf[pos] = '-';
+            pos += 1;
             const d_str = std.fmt.bufPrint(&tmp, "{d}", .{d}) catch "01";
-            if (d_str.len < 2) { buf[pos] = '0'; pos += 1; }
+            if (d_str.len < 2) {
+                buf[pos] = '0';
+                pos += 1;
+            }
             @memcpy(buf[pos..][0..d_str.len], d_str);
             pos += d_str.len;
             return .{ .value = .{ .string = try gpa.dupe(u8, buf[0..pos]) }, .owned = true };

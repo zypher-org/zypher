@@ -175,7 +175,7 @@ pub fn build(b: *std.Build) void {
     const bench_mod = b.createModule(.{
         .root_source_file = b.path("tests/bench/main.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = optimize,
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
         },
