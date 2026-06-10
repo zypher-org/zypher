@@ -4,7 +4,25 @@ const Method = @import("../core/method.zig").Method;
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const RouteParams = @import("params.zig").RouteParams;
+const errors = @import("../errors.zig");
 const log = std.log.scoped(.route);
+
+/// Supported typed parameter constraints.
+pub const ParamType = enum {
+    u64,
+    str,
+};
+
+/// Parse a param segment like `:id[u64]` into name and optional type.
+pub fn parseParamSegment(segment: []const u8) struct { name: []const u8, param_type: ParamType } {
+    if (std.mem.indexOfScalar(u8, segment, '[')) |bracket| {
+        const name = segment[1..bracket];
+        const type_str = segment[bracket + 1 .. segment.len - 1];
+        const param_type: ParamType = if (std.mem.eql(u8, type_str, "u64")) .u64 else .str;
+        return .{ .name = name, .param_type = param_type };
+    }
+    return .{ .name = segment[1..], .param_type = .str };
+}
 
 pub const Route = struct {
     method: Method,
@@ -26,7 +44,6 @@ pub const Route = struct {
         var after_wildcard = false;
 
         var it = std.mem.splitScalar(u8, pattern, '/');
-        // Skip the first empty segment (pattern starts with /)
         _ = it.next();
         while (it.next()) |segment| {
             if (segment.len == 0) continue;
@@ -38,7 +55,8 @@ pub const Route = struct {
             }
 
             if (segment[0] == ':') {
-                const name = segment[1..];
+                const parsed = parseParamSegment(segment);
+                const name = parsed.name;
                 for (seen_names[0..seen_count]) |existing| {
                     if (std.mem.eql(u8, existing, name)) return error.DuplicateParam;
                 }
@@ -93,8 +111,15 @@ pub const Route = struct {
 
             // Named param — extract value
             if (pat_seg[0] == ':') {
-                const name = pat_seg[1..];
-                params.put(name, act_seg) catch return false;
+                const parsed = parseParamSegment(pat_seg);
+                // Type validation
+                switch (parsed.param_type) {
+                    .u64 => {
+                        _ = std.fmt.parseInt(u64, act_seg, 10) catch return false;
+                    },
+                    .str => {},
+                }
+                params.put(parsed.name, act_seg) catch return false;
                 continue;
             }
 

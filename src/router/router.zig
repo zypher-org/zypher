@@ -7,6 +7,28 @@ const Route = @import("route.zig").Route;
 const RouteParams = @import("params.zig").RouteParams;
 const log = std.log.scoped(.router);
 
+/// Route group — prepends a prefix to all route patterns.
+pub fn Group(comptime prefix: []const u8, comptime routes: anytype) []const Route {
+    comptime {
+        const type_info = @typeInfo(@TypeOf(routes));
+        const len = if (type_info == .@"struct") std.meta.fields(@TypeOf(routes)).len else routes.len;
+        var prefixed: [len]Route = undefined;
+        if (type_info == .@"struct") {
+            const field_names = std.meta.fieldNames(@TypeOf(routes));
+            for (field_names, 0..) |name, i| {
+                const r = @field(routes, name);
+                prefixed[i] = Route.init(r.method, prefix ++ r.pattern, r.handler);
+            }
+        } else {
+            for (0..len) |i| {
+                const r = routes[i];
+                prefixed[i] = Route.init(r.method, prefix ++ r.pattern, r.handler);
+            }
+        }
+        return &prefixed;
+    }
+}
+
 pub const Router = struct {
     routes: []const Route,
     not_found_handler: *const fn (*Request, *Response) void,
@@ -14,6 +36,11 @@ pub const Router = struct {
     /// Create a route entry for use in a comptime routes tuple.
     pub fn route(m: Method, pattern: []const u8, handler: *const fn (*Request, *Response) void) Route {
         return Route.init(m, pattern, handler);
+    }
+
+    /// Create a grouped set of routes with a common prefix.
+    pub fn group(comptime prefix: []const u8, comptime routes: anytype) []const Route {
+        return Group(prefix, routes);
     }
 
     /// Initialise the router with a comptime routes tuple/array and a 404 handler.

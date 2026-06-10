@@ -23,8 +23,19 @@ pub fn requiredOptional(value: ?[]const u8) ValidatorResult {
 
 pub fn minLength(comptime n: usize) fn ([]const u8) ValidatorResult {
     return struct {
+        const buf: [128]u8 = blk: {
+            var tmp: [128]u8 = undefined;
+            _ = std.fmt.bufPrint(&tmp, "must be at least {d} characters", .{n}) catch {};
+            break :blk tmp;
+        };
+        const msg_len: usize = blk: {
+            var tmp: [128]u8 = undefined;
+            const printed = std.fmt.bufPrint(&tmp, "must be at least {d} characters", .{n}) catch unreachable;
+            break :blk printed.len;
+        };
+
         fn validate(value: []const u8) ValidatorResult {
-            if (value.len < n) return "must be at least {d} characters";
+            if (value.len < n) return buf[0..msg_len];
             return null;
         }
     }.validate;
@@ -32,8 +43,19 @@ pub fn minLength(comptime n: usize) fn ([]const u8) ValidatorResult {
 
 pub fn maxLength(comptime n: usize) fn ([]const u8) ValidatorResult {
     return struct {
+        const buf: [128]u8 = blk: {
+            var tmp: [128]u8 = undefined;
+            _ = std.fmt.bufPrint(&tmp, "must be at most {d} characters", .{n}) catch {};
+            break :blk tmp;
+        };
+        const msg_len: usize = blk: {
+            var tmp: [128]u8 = undefined;
+            const printed = std.fmt.bufPrint(&tmp, "must be at most {d} characters", .{n}) catch unreachable;
+            break :blk printed.len;
+        };
+
         fn validate(value: []const u8) ValidatorResult {
-            if (value.len > n) return "must be at most {d} characters";
+            if (value.len > n) return buf[0..msg_len];
             return null;
         }
     }.validate;

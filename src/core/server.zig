@@ -198,6 +198,8 @@ pub const Server = struct {
                 err_res.deinit();
                 continue;
             };
+            defer req.deinit();
+            req.query_owned = true;
 
             // ── Read POST body and parse URL-encoded form data ──────────
             if (server_req.head.method.requestHasBody()) {
@@ -208,6 +210,7 @@ pub const Server = struct {
                     return;
                 };
                 req.body = body;
+                req.body_owned = true;
 
                 if (body.len > 0) {
                     const content_type = Request.getHeaderCI(&req.headers, "content-type") orelse "";
@@ -236,8 +239,6 @@ pub const Server = struct {
             try res.send(gpa, &res_buf);
             try stream_writer.interface.writeAll(res_buf.items);
             try stream_writer.interface.flush();
-
-            req.deinit();
         }
     }
 

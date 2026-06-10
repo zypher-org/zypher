@@ -5,7 +5,7 @@ const validators = @import("validators.zig");
 const log = std.log.scoped(.form);
 
 /// Field kind — determines how values are parsed and validated.
-pub const FieldKind = enum { text, integer, boolean };
+pub const FieldKind = enum { text, integer, boolean, file };
 
 /// Field definition — used as default struct field values.
 pub const FieldDef = struct {
@@ -39,6 +39,7 @@ pub fn DataType(comptime F: type) type {
                 .text => []const u8,
                 .integer => i64,
                 .boolean => bool,
+                .file => []const u8,
             };
         }
         return @Tuple(&types);
@@ -126,6 +127,11 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
                 return all_valid;
             }
 
+            /// Return an HTML hidden input field with CSRF token for use in forms.
+            pub fn csrfField(_: *BoundForm) []const u8 {
+                return "<input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\">\n";
+            }
+
             /// Return typed cleaned data after validation.
             pub fn cleanedData(self: *BoundForm) Data {
                 var result: Data = undefined;
@@ -136,6 +142,7 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
                         .text => result[i] = value,
                         .integer => result[i] = std.fmt.parseInt(i64, value, 10) catch 0,
                         .boolean => result[i] = (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "1")),
+                        .file => result[i] = value,
                     }
                 }
                 return result;

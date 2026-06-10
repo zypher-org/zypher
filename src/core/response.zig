@@ -67,6 +67,7 @@ pub const Response = struct {
     reason_phrase: ?[]const u8 = "OK",
     headers: std.StringHashMap([]const u8),
     body: ?[]const u8 = null,
+    use_chunked: bool = false,
     allocator: std.mem.Allocator,
 
     // ───────────── Lifecycle ─────────────
@@ -158,6 +159,16 @@ pub const Response = struct {
         _ = self.header("Content-Type", "application/json");
     }
 
+    /// Set a streaming (chunked) response.
+    /// The body is sent as the initial chunk data; set Transfer-Encoding: chunked.
+    pub fn stream(self: *Response, content: []const u8) !void {
+        if (self.body) |b| self.allocator.free(b);
+        self.body = try self.allocator.dupe(u8, content);
+        self.use_chunked = true;
+        _ = self.header("Transfer-Encoding", "chunked");
+        _ = self.header("Content-Type", "text/plain; charset=utf-8");
+    }
+
     /// Set a redirect response with the given status code and Location header.
     pub fn redirect(self: *Response, url: []const u8, code: u16) !void {
         _ = self.status(code);
@@ -230,12 +241,14 @@ pub const Response = struct {
         try out.appendSlice(gpa, phrase);
         try out.appendSlice(gpa, "\r\n");
 
-        try out.appendSlice(gpa, "Content-Length: ");
-        var len_buf: [16]u8 = undefined;
-        const len = if (self.body) |b| b.len else 0;
-        const len_str = try std.fmt.bufPrint(&len_buf, "{d}", .{len});
-        try out.appendSlice(gpa, len_str);
-        try out.appendSlice(gpa, "\r\n");
+        if (!self.use_chunked) {
+            try out.appendSlice(gpa, "Content-Length: ");
+            var len_buf: [16]u8 = undefined;
+            const len = if (self.body) |b| b.len else 0;
+            const len_str = try std.fmt.bufPrint(&len_buf, "{d}", .{len});
+            try out.appendSlice(gpa, len_str);
+            try out.appendSlice(gpa, "\r\n");
+        }
 
         // Write all headers
         var it = self.headers.iterator();
