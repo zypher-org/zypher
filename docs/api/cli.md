@@ -3,6 +3,14 @@
 ## Runner
 CLI command dispatcher.
 
+Build the CLI once from the repository root, then use `zypher` for project workflows:
+
+```sh
+zig build
+export PATH="$PWD/zig-out/bin:$PATH"
+zypher help
+```
+
 - `dispatchInner(out, err, init, cmd, args)` — Dispatch a CLI command
 - `buildRunArgv(gpa, zypher_root, app_args)` — Build the `zig build run` argv used by `zypher run`
 - `buildDocArgv(gpa)` — Build the `zig build doc` argv used by documentation commands
@@ -66,7 +74,7 @@ API variants do not include project HTML templates for app routes. Their app rou
 
 ## Running Scaffolded Apps
 
-`zypher run` delegates to the generated app build script:
+`zypher run` is the supported way to start scaffolded apps from the CLI. It delegates to the generated app build script and forwards runtime options:
 
 ```sh
 zypher run .
@@ -80,18 +88,18 @@ It runs:
 zig build -Dzypher-root=<path> run -- --port <port>
 ```
 
-Generated `build.zig` files default `zypher-root` to `../..`, which matches apps created under `examples/`. Pass `--zypher-root` for apps elsewhere. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port.
+Generated `build.zig` files default `zypher-root` to `../..`, which matches apps created under `examples/`. Pass `--zypher-root` for apps elsewhere. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port. Users should prefer `zypher run` over invoking the app build script directly.
 
 ## Documentation Server
 
-`zypher doc` builds the framework documentation by running `zig build doc` in the Zypher root and serves the generated `zig-out/docs` directory:
+`zypher doc` is the CLI entrypoint for framework documentation. It builds the framework docs and serves the generated `zig-out/docs` directory:
 
 ```sh
 zypher doc
 zypher doc --zypher-root /path/to/zypher --port 9000
 ```
 
-`zypher doc-user` builds documentation for the current project or a selected project path:
+`zypher doc-user` is the CLI entrypoint for user-project documentation. It builds docs for the current project or a selected project path and serves that project's `zig-out/docs` directory:
 
 ```sh
 zypher doc-user

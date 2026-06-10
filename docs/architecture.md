@@ -144,6 +144,7 @@ All zypher subsystem errors are namespaced under `ZypherError` (defined in `src/
 | `new` command | Directory strings, file contents | Freed on scope exit | Copies root or third-party templates recursively |
 | `templates` command | Directory iterator state | Freed on scope exit | Lists template directories |
 | `run` command | Child argv strings | Freed after child exits | Delegates to generated `build.zig` |
+| `doc` / `doc-user` | Child argv strings, docs root path | Freed after docs server exits | Builds docs and serves `zig-out/docs` |
 | `runserver` | Server config | Server lifetime | |
 | `migrate` / `makemigrations` | SQL strings, file paths | Per-command: freed before return | |
 | `createsuperuser` | User credentials, hash | Per-command: freed before return | |

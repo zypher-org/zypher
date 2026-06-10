@@ -67,15 +67,23 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 
 ## Quick Start
 
+Build the local CLI once from the repository root:
+
+```sh
+zig build
+export PATH="$PWD/zig-out/bin:$PATH"
+zypher help
+```
+
 ### Scaffolded App
 
 Use the CLI when starting a new app:
 
 ```sh
-zig build run -- new examples/blog --template mvc
+zypher new examples/blog --template mvc
 cd examples/blog
-../../zig-out/bin/zypher createsuperuser --username admin@example.com --password Passw0rd --db blog.db
-../../zig-out/bin/zypher run . --zypher-root ../.. --port 8080
+zypher createsuperuser --username admin@example.com --password Passw0rd --db blog.db
+zypher run . --zypher-root ../.. --port 8080
 ```
 
 `zypher new` accepts either a project name or a path. The built-in templates live in the root `templates/` directory:
@@ -88,7 +96,7 @@ cd examples/blog
 Use `--api` to scaffold the JSON API variant of any built-in style:
 
 ```sh
-zig build run -- new examples/books-api --template mvc --api
+zypher new examples/books-api --template mvc --api
 ```
 
 Third-party templates can be used with `--template-dir`:
@@ -103,11 +111,11 @@ Generated templates include a `build.zig`, a runnable app, a sample managed ORM 
 Serve generated documentation from the CLI:
 
 ```sh
-zig build run -- doc --port 8080
-zig build run -- doc-user examples/books-api --port 8081
+zypher doc --port 8080
+zypher doc-user examples/books-api --port 8081
 ```
 
-`doc` serves the Zypher library docs; `doc-user` serves docs for the selected user project after running that project's `zig build doc`.
+`doc` serves the Zypher library docs; `doc-user` builds and serves docs for the selected user project.
 
 ### API Example
 
@@ -115,14 +123,13 @@ See `examples/books-api/` for an MVC-style JSON API with an admin dashboard for 
 
 ```sh
 cd examples/books-api
-zig build test
-zig build run
+zypher run . --zypher-root ../..
 ```
 
 The example listens on `127.0.0.1:8080` by default. Pass `--port` to choose another port:
 
 ```sh
-zig build run -- --port 8091
+zypher run . --zypher-root ../.. --port 8091
 ```
 
 It exposes:
@@ -136,7 +143,7 @@ It exposes:
 Create admin credentials for the example with:
 
 ```sh
-../../zig-out/bin/zypher createsuperuser --username admin@example.com --password Passw0rd --db books_api.db
+zypher createsuperuser --username admin@example.com --password Passw0rd --db books_api.db
 ```
 
 ### Manual App

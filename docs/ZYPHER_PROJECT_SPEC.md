@@ -256,6 +256,8 @@ const User = orm.Model("users", struct {
 
 ### 7.12 CLI (`src/cli/`)
 
+The CLI is the user-facing entrypoint for creating projects, running apps, administering local state, and serving documentation. Build it once from the repository root with `zig build`, then run `zypher` from `zig-out/bin` or your `PATH`.
+
 **Commands**:
 ```bash
 zypher new <path> [--template single-file|clean-arch|mvc|mvp] [--api] [--template-dir <dir>]
@@ -268,7 +270,7 @@ zypher makemigrations [--schema <path>] [--state <path>] [--dir <dir>]
 zypher createsuperuser [--username <email>] [--password <password>] [--db <path>]
 ```
 
-Scaffold templates live in the repository root `templates/` directory. Third-party templates can be used by pointing `--template-dir` at another directory. Built-in styles have paired template and API variants, such as `mvc` and `mvc-api`; `--api` selects the API sibling. Built-in templates generate a runnable `build.zig`, a sample managed ORM model, and an admin dashboard protected by `/admin/login`.
+Scaffold templates live in the repository root `templates/` directory. Third-party templates can be used by pointing `--template-dir` at another directory. Built-in styles have paired template and API variants, such as `mvc` and `mvc-api`; `--api` selects the API sibling. Built-in templates generate a runnable `build.zig`, a sample managed ORM model, and an admin dashboard protected by `/admin/login`. Users should start scaffolded apps through `zypher run`, which delegates to the generated build script and forwards runtime options such as `--port`.
 
 `zypher doc` builds and serves Zypher library documentation. `zypher doc-user` builds and serves documentation for a user project by running `zig build doc` in that project.
 

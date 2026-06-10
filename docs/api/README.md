@@ -2,6 +2,17 @@
 
 This directory contains the zypher web framework API reference.
 
+Use the Zypher CLI for normal project workflows:
+
+```sh
+zig build
+export PATH="$PWD/zig-out/bin:$PATH"
+zypher new examples/blog --template mvc
+zypher run examples/blog --zypher-root .
+zypher doc
+zypher doc-user examples/blog
+```
+
 ## Core
 - App, Request, Response, Server, Method, Cookie, SameSite
 
@@ -27,4 +38,4 @@ This directory contains the zypher web framework API reference.
 - AdminSite, Registration, setDb, setEngine
 
 ## CLI
-- Runner, RunserverConfig, project templates, API variants, scaffold runner
+- Runner, RunserverConfig, project templates, API variants, scaffold runner, docs server

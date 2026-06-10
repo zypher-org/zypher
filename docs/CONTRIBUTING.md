@@ -152,6 +152,7 @@ Each variant must include:
 - `build.zig`
 - a runnable `src/main.zig`
 - at least one Zig test reachable through `zig build test`
+- a documentation step reachable through `zig build doc` so `zypher doc-user <path>` can serve project docs
 - a `.gitignore` for `.zig-cache/`, `zig-out/`, and generated database files
 
 Template variants may include project HTML templates. API variants must not require project HTML templates for app routes; app-facing routes should return JSON with `Response.json`.
@@ -163,6 +164,8 @@ All built-in templates must also keep the generated admin baseline:
 - `/admin/login` authenticating against the `users` table created by `zypher createsuperuser`
 
 Use `{{project_name}}` for substitutions in file paths or file contents. The CLI replaces it with the basename of the project path.
+
+Template examples should demonstrate user workflows with `zypher new`, `zypher run`, `zypher createsuperuser`, and `zypher doc-user`. Use raw `zig build` commands only for framework development tasks or template verification.
 
 PRs that break specs will be rejected, even if they "work".
 
