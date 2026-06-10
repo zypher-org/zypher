@@ -53,6 +53,14 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
     }
 }
 
+/// Returns an HTML hidden input field with the CSRF token.
+/// Use this to inject CSRF protection into forms:
+///   {{ form_fields|safe }}
+///   <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+pub fn formField() []const u8 {
+    return "<input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\">\n";
+}
+
 test {
     std.testing.refAllDecls(@This());
 }

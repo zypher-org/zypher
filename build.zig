@@ -172,5 +172,21 @@ pub fn build(b: *std.Build) void {
     docs_step.dependOn(&install_docs.step);
 
     // ── Bench ───────────────────────────────────────────────────────
-    _ = b.step("bench", "Run benchmarks (not yet implemented)");
+    const bench_mod = b.createModule(.{
+        .root_source_file = b.path("tests/bench/main.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+        .imports = &.{
+            .{ .name = "zypher", .module = lib_mod },
+        },
+    });
+
+    const bench_exe = b.addExecutable(.{
+        .name = "zypher-bench",
+        .root_module = bench_mod,
+    });
+
+    const run_bench_cmd = b.addRunArtifact(bench_exe);
+    const bench_step = b.step("bench", "Run performance benchmarks");
+    bench_step.dependOn(&run_bench_cmd.step);
 }

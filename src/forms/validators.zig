@@ -132,6 +132,43 @@ pub fn choices(valid_values: []const []const u8) fn ([]const u8) ValidatorResult
     }.validate;
 }
 
+// ── regex (pattern matching: * = any sequence, ? = any char) ─────────────
+
+/// Compile a pattern into a validator function.
+/// Supports `*` (match any sequence) and `?` (match any single character).
+/// Other characters match literally.
+pub fn regex(comptime pattern: []const u8) fn ([]const u8) ValidatorResult {
+    return struct {
+        fn validate(value: []const u8) ValidatorResult {
+            if (matchPattern(pattern, value)) return null;
+            return "value does not match required pattern";
+        }
+    }.validate;
+}
+
+/// Match a glob-style pattern against a value.
+fn matchPattern(pattern: []const u8, value: []const u8) bool {
+    if (pattern.len == 0) return value.len == 0;
+    return matchImpl(pattern, 0, value, 0);
+}
+
+fn matchImpl(pattern: []const u8, pi: usize, value: []const u8, vi: usize) bool {
+    if (pi >= pattern.len) return vi >= value.len;
+    if (pattern[pi] == '*') {
+        // Try matching empty, one char, two chars, etc.
+        var i: usize = 0;
+        while (vi + i <= value.len) : (i += 1) {
+            if (matchImpl(pattern, pi + 1, value, vi + i)) return true;
+        }
+        return false;
+    }
+    if (vi >= value.len) return false;
+    if (pattern[pi] == '?' or pattern[pi] == value[vi]) {
+        return matchImpl(pattern, pi + 1, value, vi + 1);
+    }
+    return false;
+}
+
 // ── custom ────────────────────────────────────────────────────────────────
 
 pub fn custom(comptime T: type, comptime validate_fn: fn (T) ValidatorResult) fn (T) ValidatorResult {

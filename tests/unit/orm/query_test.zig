@@ -184,6 +184,60 @@ test "query: filter with LIMIT and OFFSET" {
     try std.testing.expectEqualStrings("c", rows.items[1][1]);
 }
 
+test "query: filter with ORDER BY" {
+    var db = try openTestDb();
+    defer db.close();
+    try createItemsTable(&db);
+
+    _ = try query.create(Item, &db, &.{ .{ .text = "c" }, .{ .int = 3 } });
+    _ = try query.create(Item, &db, &.{ .{ .text = "a" }, .{ .int = 1 } });
+    _ = try query.create(Item, &db, &.{ .{ .text = "b" }, .{ .int = 2 } });
+
+    var rows = try query.filterOrderLimitOffset(Item, &db, std.testing.allocator, "", &.{}, "name ASC", 10, 0);
+    defer freeItemRows(&rows);
+    try std.testing.expectEqual(@as(usize, 3), rows.items.len);
+    try std.testing.expectEqualStrings("a", rows.items[0][1]);
+    try std.testing.expectEqualStrings("b", rows.items[1][1]);
+    try std.testing.expectEqualStrings("c", rows.items[2][1]);
+}
+
+test "query: first returns first matching row" {
+    var db = try openTestDb();
+    defer db.close();
+    try createItemsTable(&db);
+
+    _ = try query.create(Item, &db, &.{ .{ .text = "a" }, .{ .int = 1 } });
+    _ = try query.create(Item, &db, &.{ .{ .text = "b" }, .{ .int = 2 } });
+
+    var row = try query.first(Item, &db, std.testing.allocator, "name = ?", &.{.{ .text = "a" }});
+    defer if (row) |*r| query.freeRow(Item, std.testing.allocator, r);
+    try std.testing.expect(row != null);
+    try std.testing.expectEqualStrings("a", row.?[1]);
+}
+
+test "query: first returns null on no match" {
+    var db = try openTestDb();
+    defer db.close();
+    try createItemsTable(&db);
+
+    const row = try query.first(Item, &db, std.testing.allocator, "name = ?", &.{.{ .text = "nonexistent" }});
+    try std.testing.expect(row == null);
+}
+
+test "query: save inserts new record" {
+    var db = try openTestDb();
+    defer db.close();
+    try createItemsTable(&db);
+
+    var row: ItemRow = undefined;
+    row[0] = 0;
+    row[1] = "saved";
+    row[2] = 42;
+    const row_id = try query.save(Item, &db, std.testing.allocator, &row);
+    try std.testing.expect(row_id > 0);
+    try std.testing.expectEqual(@as(i64, @intCast(row_id)), row[0]);
+}
+
 test "query: SQL injection is safely bound, not injected" {
     var db = try openTestDb();
     defer db.close();
