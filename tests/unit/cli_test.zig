@@ -198,14 +198,14 @@ test "cli: templates lists built-in scaffold templates" {
 }
 
 test "cli: run builds zig build run argv with zypher root and passthrough args" {
-    const app_args = [_][:0]const u8{ "--port", "9090" };
-    const argv = try cli.buildRunArgv(std.testing.allocator, "/tmp/zypher", &app_args);
+    const app_args = [_][:0]const u8{"--verbose"};
+    const argv = try cli.buildRunArgv(std.testing.allocator, "/tmp/zypher", 9090, &app_args);
     defer {
         for (argv) |arg| std.testing.allocator.free(arg);
         std.testing.allocator.free(argv);
     }
 
-    try std.testing.expectEqual(@as(usize, 7), argv.len);
+    try std.testing.expectEqual(@as(usize, 8), argv.len);
     try std.testing.expectEqualStrings("zig", argv[0]);
     try std.testing.expectEqualStrings("build", argv[1]);
     try std.testing.expectEqualStrings("-Dzypher-root=/tmp/zypher", argv[2]);
@@ -213,6 +213,20 @@ test "cli: run builds zig build run argv with zypher root and passthrough args" 
     try std.testing.expectEqualStrings("--", argv[4]);
     try std.testing.expectEqualStrings("--port", argv[5]);
     try std.testing.expectEqualStrings("9090", argv[6]);
+    try std.testing.expectEqualStrings("--verbose", argv[7]);
+}
+
+test "cli: doc builds zig build doc argv" {
+    const argv = try cli.buildDocArgv(std.testing.allocator);
+    defer {
+        for (argv) |arg| std.testing.allocator.free(arg);
+        std.testing.allocator.free(argv);
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), argv.len);
+    try std.testing.expectEqualStrings("zig", argv[0]);
+    try std.testing.expectEqualStrings("build", argv[1]);
+    try std.testing.expectEqualStrings("doc", argv[2]);
 }
 
 test "cli: migrate applies SQL files in order and skips applied migrations" {

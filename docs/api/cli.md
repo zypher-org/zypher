@@ -5,6 +5,7 @@ CLI command dispatcher.
 
 - `dispatchInner(out, err, init, cmd, args)` — Dispatch a CLI command
 - `buildRunArgv(gpa, zypher_root, app_args)` — Build the `zig build run` argv used by `zypher run`
+- `buildDocArgv(gpa)` — Build the `zig build doc` argv used by documentation commands
 - `RunserverConfig` — Server configuration struct
 - `parseRunserverConfig(args)` — Parse runserver arguments
 - `runserverDefaultHandler(req, res)` — Default health check handler
@@ -14,7 +15,9 @@ CLI command dispatcher.
 ### Commands
 - `new <path> [--template <name>] [--api] [--template-dir <dir>]` — Scaffold a new project from a template
 - `templates [--template-dir <dir>]` — List available scaffold templates
-- `run [path] [--zypher-root <path>] [-- <app args...>]` — Run a scaffolded app through its `build.zig`
+- `run [path] [--zypher-root <path>] [--port <port>] [-- <app args...>]` — Run a scaffolded app through its `build.zig`
+- `doc [--zypher-root <path>] [--host <host>] [--port <port>] [--max-requests <n>]` — Build and serve Zypher library documentation
+- `doc-user [path] [--host <host>] [--port <port>] [--max-requests <n>]` — Build and serve documentation for user code
 - `demo <path>` — Compatibility alias that scaffolds the `mvc` template
 - `runserver [--host <host>] [--port <port>] [--max-requests <n>]` — Start the framework health-check server
 - `migrate [--db <path>] [--dir <dir>]` — Run database migrations
@@ -68,13 +71,31 @@ API variants do not include project HTML templates for app routes. Their app rou
 ```sh
 zypher run .
 zypher run examples/blog --zypher-root ../..
-zypher run . -- --port 9000
+zypher run . --port 9000
 ```
 
 It runs:
 
 ```sh
-zig build -Dzypher-root=<path> run
+zig build -Dzypher-root=<path> run -- --port <port>
 ```
 
-Generated `build.zig` files default `zypher-root` to `../..`, which matches apps created under `examples/`. Pass `--zypher-root` for apps elsewhere.
+Generated `build.zig` files default `zypher-root` to `../..`, which matches apps created under `examples/`. Pass `--zypher-root` for apps elsewhere. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port.
+
+## Documentation Server
+
+`zypher doc` builds the framework documentation by running `zig build doc` in the Zypher root and serves the generated `zig-out/docs` directory:
+
+```sh
+zypher doc
+zypher doc --zypher-root /path/to/zypher --port 9000
+```
+
+`zypher doc-user` builds documentation for the current project or a selected project path:
+
+```sh
+zypher doc-user
+zypher doc-user examples/books-api --port 9001
+```
+
+Both commands default to `127.0.0.1:8080` and accept `--max-requests` for tests or one-shot smoke checks.

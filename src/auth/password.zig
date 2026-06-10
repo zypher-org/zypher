@@ -1,6 +1,7 @@
 /// zypher auth — password hashing and verification.
 /// Uses PBKDF2-HMAC-SHA256 with random salt.
 const std = @import("std");
+const builtin = @import("builtin");
 const log = std.log.scoped(.password);
 const pbkdf2 = std.crypto.pwhash.pbkdf2;
 const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
@@ -24,14 +25,21 @@ pub const PasswordError = error{
 pub fn hash(gpa: std.mem.Allocator, plaintext: []const u8) ![]const u8 {
     // Generate random salt
     var salt: [SALT_LEN]u8 = undefined;
-    var seed: [32]u8 = undefined;
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
-    @memcpy(seed[0..8], std.mem.asBytes(&ts.sec));
-    @memcpy(seed[8..16], std.mem.asBytes(&ts.nsec));
-    var i: usize = 16;
-    while (i < 32) : (i += 8) {
-        @memcpy(seed[i..@min(i + 8, 32)], seed[0..@min(8, 32 - i)]);
+    var seed: [Random.DefaultCsprng.secret_seed_length]u8 = undefined;
+    if (builtin.os.tag == .windows) {
+        @memset(&seed, 0);
+        var pc: std.os.windows.LARGE_INTEGER = undefined;
+        _ = std.os.windows.ntdll.RtlQueryPerformanceCounter(&pc);
+        @memcpy(seed[0..@sizeOf(std.os.windows.LARGE_INTEGER)], std.mem.asBytes(&pc));
+    } else {
+        var ts: std.c.timespec = undefined;
+        _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
+        @memcpy(seed[0..8], std.mem.asBytes(&ts.sec));
+        @memcpy(seed[8..16], std.mem.asBytes(&ts.nsec));
+        var i: usize = 16;
+        while (i < seed.len) : (i += 8) {
+            @memcpy(seed[i..@min(i + 8, seed.len)], seed[0..@min(8, seed.len - i)]);
+        }
     }
     var csprng = Random.DefaultCsprng.init(seed);
     csprng.random().bytes(&salt);

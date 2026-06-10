@@ -7,27 +7,13 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // ── Vendored SQLite3 ─────────────────────────────────────────────
-    const sqlite3_mod = b.createModule(.{
-        .target = target,
-        .optimize = optimize,
-    });
-    sqlite3_mod.addCSourceFiles(.{
-        .root = b.path("vendor/sqlite-amalgamation-3530000"),
-        .files = &.{"sqlite3.c"},
-        .flags = &.{ "-std=c11", "-DSQLITE_THREADSAFE=0", "-DSQLITE_OMIT_LOAD_EXTENSION" },
-    });
-    sqlite3_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
-    sqlite3_mod.link_libc = true;
-
-    const sqlite3_lib = b.addLibrary(.{
-        .name = "sqlite3",
-        .root_module = sqlite3_mod,
-    });
+    const sqlite3_lib = createSqlite3Library(b, target, optimize);
 
     // ── Library module ──────────────────────────────────────────────
     const lib_mod = b.addModule("zypher", .{
         .root_source_file = b.path("src/zypher.zig"),
         .target = target,
+        .optimize = optimize,
     });
     lib_mod.linkLibrary(sqlite3_lib);
     lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
@@ -46,6 +32,21 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(exe);
+
+    // ── Cross-target CLI binaries ──────────────────────────────────
+    const all_targets_step = b.step("all-targets", "Build zypher CLI binaries for all supported targets");
+    for (release_targets) |release_target| {
+        const release_resolved_target = b.resolveTargetQuery(release_target.query);
+        const release_sqlite3_lib = createSqlite3Library(b, release_resolved_target, optimize);
+        const release_lib_mod = createZypherModule(b, release_resolved_target, optimize, release_sqlite3_lib);
+        const release_exe = createCliExecutable(b, release_resolved_target, optimize, release_lib_mod);
+        const install_release_exe = b.addInstallArtifact(release_exe, .{
+            .dest_sub_path = b.fmt("{s}/zypher{s}", .{ release_target.name, release_target.exe_suffix }),
+        });
+
+        all_targets_step.dependOn(&install_release_exe.step);
+        b.getInstallStep().dependOn(&install_release_exe.step);
+    }
 
     // ── Run the CLI ─────────────────────────────────────────────────
     const run_cmd = b.addRunArtifact(exe);
@@ -160,16 +161,29 @@ pub fn build(b: *std.Build) void {
     test_e2e_step.dependOn(&b.addRunArtifact(e2e_tests).step);
 
     // ── Docs ────────────────────────────────────────────────────────
-    const docs_step = b.step("docs", "Generate documentation");
-    const lib_test_for_docs = b.addTest(.{
-        .root_module = lib_mod,
+    const doc_mod = b.createModule(.{
+        .root_source_file = b.path("src/docs.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "zypher", .module = lib_mod },
+        },
     });
+
+    const project_docs = b.addTest(.{
+        .root_module = doc_mod,
+    });
+
     const install_docs = b.addInstallDirectory(.{
-        .source_dir = lib_test_for_docs.getEmittedDocs(),
+        .source_dir = project_docs.getEmittedDocs(),
         .install_dir = .prefix,
         .install_subdir = "docs",
     });
-    docs_step.dependOn(&install_docs.step);
+    const doc_step = b.step("doc", "Generate documentation for the whole project");
+    doc_step.dependOn(&install_docs.step);
+
+    const docs_step = b.step("docs", "Alias for doc");
+    docs_step.dependOn(doc_step);
 
     // ── Bench ───────────────────────────────────────────────────────
     const bench_mod = b.createModule(.{
@@ -189,4 +203,78 @@ pub fn build(b: *std.Build) void {
     const run_bench_cmd = b.addRunArtifact(bench_exe);
     const bench_step = b.step("bench", "Run performance benchmarks");
     bench_step.dependOn(&run_bench_cmd.step);
+}
+
+const ReleaseTarget = struct {
+    name: []const u8,
+    query: std.Target.Query,
+    exe_suffix: []const u8 = "",
+};
+
+const release_targets = [_]ReleaseTarget{
+    .{ .name = "x86_64-linux-musl", .query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl } },
+    .{ .name = "aarch64-linux-musl", .query = .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl } },
+    .{ .name = "x86_64-macos", .query = .{ .cpu_arch = .x86_64, .os_tag = .macos } },
+    .{ .name = "aarch64-macos", .query = .{ .cpu_arch = .aarch64, .os_tag = .macos } },
+    .{ .name = "x86_64-windows-gnu", .query = .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu }, .exe_suffix = ".exe" },
+    .{ .name = "aarch64-windows-gnu", .query = .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .gnu }, .exe_suffix = ".exe" },
+};
+
+fn createSqlite3Library(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.Compile {
+    const sqlite3_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+    sqlite3_mod.addCSourceFiles(.{
+        .root = b.path("vendor/sqlite-amalgamation-3530000"),
+        .files = &.{"sqlite3.c"},
+        .flags = &.{ "-std=c11", "-DSQLITE_THREADSAFE=0", "-DSQLITE_OMIT_LOAD_EXTENSION" },
+    });
+    sqlite3_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
+    sqlite3_mod.link_libc = true;
+
+    return b.addLibrary(.{
+        .name = "sqlite3",
+        .root_module = sqlite3_mod,
+    });
+}
+
+fn createZypherModule(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    sqlite3_lib: *std.Build.Step.Compile,
+) *std.Build.Module {
+    const lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/zypher.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    lib_mod.linkLibrary(sqlite3_lib);
+    lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
+    lib_mod.link_libc = true;
+    return lib_mod;
+}
+
+fn createCliExecutable(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    lib_mod: *std.Build.Module,
+) *std.Build.Step.Compile {
+    return b.addExecutable(.{
+        .name = "zypher",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/cli/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zypher", .module = lib_mod },
+            },
+        }),
+    });
 }

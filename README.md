@@ -75,7 +75,7 @@ Use the CLI when starting a new app:
 zig build run -- new examples/blog --template mvc
 cd examples/blog
 ../../zig-out/bin/zypher createsuperuser --username admin@example.com --password Passw0rd --db blog.db
-../../zig-out/bin/zypher run . --zypher-root ../..
+../../zig-out/bin/zypher run . --zypher-root ../.. --port 8080
 ```
 
 `zypher new` accepts either a project name or a path. The built-in templates live in the root `templates/` directory:
@@ -98,6 +98,46 @@ zypher new apps/admin_tool --template custom --template-dir /path/to/templates
 ```
 
 Generated templates include a `build.zig`, a runnable app, a sample managed ORM model, and an admin dashboard. `/admin` redirects to `/admin/login`; create credentials with `zypher createsuperuser`. API variants return JSON from app routes and do not include project HTML templates.
+`zypher run` accepts `--port`; if omitted, scaffolded apps default to `8080`.
+
+Serve generated documentation from the CLI:
+
+```sh
+zig build run -- doc --port 8080
+zig build run -- doc-user examples/books-api --port 8081
+```
+
+`doc` serves the Zypher library docs; `doc-user` serves docs for the selected user project after running that project's `zig build doc`.
+
+### API Example
+
+See `examples/books-api/` for an MVC-style JSON API with an admin dashboard for the `Book` model.
+
+```sh
+cd examples/books-api
+zig build test
+zig build run
+```
+
+The example listens on `127.0.0.1:8080` by default. Pass `--port` to choose another port:
+
+```sh
+zig build run -- --port 8091
+```
+
+It exposes:
+
+- `GET /api/books`
+- `POST /api/books`
+- `GET /api/books/:id`
+- `POST /api/books/:id`
+- `POST /api/books/:id/delete`
+
+Create admin credentials for the example with:
+
+```sh
+../../zig-out/bin/zypher createsuperuser --username admin@example.com --password Passw0rd --db books_api.db
+```
 
 ### Manual App
 

@@ -260,13 +260,17 @@ const User = orm.Model("users", struct {
 ```bash
 zypher new <path> [--template single-file|clean-arch|mvc|mvp] [--api] [--template-dir <dir>]
 zypher templates [--template-dir <dir>]
-zypher run [path] [--zypher-root <path>] [-- <app args...>]
+zypher run [path] [--zypher-root <path>] [--port <port>] [-- <app args...>]
+zypher doc [--zypher-root <path>] [--host <host>] [--port <port>]
+zypher doc-user [path] [--host <host>] [--port <port>]
 zypher migrate [--db <path>] [--dir <dir>]
 zypher makemigrations [--schema <path>] [--state <path>] [--dir <dir>]
 zypher createsuperuser [--username <email>] [--password <password>] [--db <path>]
 ```
 
 Scaffold templates live in the repository root `templates/` directory. Third-party templates can be used by pointing `--template-dir` at another directory. Built-in styles have paired template and API variants, such as `mvc` and `mvc-api`; `--api` selects the API sibling. Built-in templates generate a runnable `build.zig`, a sample managed ORM model, and an admin dashboard protected by `/admin/login`.
+
+`zypher doc` builds and serves Zypher library documentation. `zypher doc-user` builds and serves documentation for a user project by running `zig build doc` in that project.
 
 ---
 

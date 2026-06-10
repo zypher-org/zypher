@@ -698,6 +698,19 @@ fn mwHandler(req: *Request, res: *Response) void {
     MwChain.run(req, res, dispatchWrapper);
 }
 
+fn parsePort(init: std.process.Init) u16 {
+    var args = std.process.Args.Iterator.init(init.minimal.args);
+    defer args.deinit();
+    _ = args.skip();
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--port")) {
+            const raw = args.next() orelse return 8080;
+            return std.fmt.parseInt(u16, raw, 10) catch 8080;
+        }
+    }
+    return 8080;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 
 pub fn main(init: std.process.Init) !void {
@@ -806,7 +819,7 @@ pub fn main(init: std.process.Init) !void {
     tlrouter = &router;
 
     // ── App ─────────────────────────────────────────────────────────────
-    var app = zypher.core.App.init(allocator, .{ .port = 8080 });
+    var app = zypher.core.App.init(allocator, .{ .port = parsePort(init) });
     defer app.deinit();
     app.database(&db);
     app.middlewareHandler(mwHandler);

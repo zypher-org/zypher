@@ -100,6 +100,19 @@ fn runChain(req: *Request, res: *Response) void {
     Chain.run(req, res, dispatch);
 }
 
+fn parsePort(init: std.process.Init) u16 {
+    var args = std.process.Args.Iterator.init(init.minimal.args);
+    defer args.deinit();
+    _ = args.skip();
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--port")) {
+            const raw = args.next() orelse return 8080;
+            return std.fmt.parseInt(u16, raw, 10) catch 8080;
+        }
+    }
+    return 8080;
+}
+
 pub fn main(init: std.process.Init) !void {
     var db = try sqlite.Db.open(init.gpa, "{{project_name}}.db");
     defer db.close();
@@ -129,7 +142,7 @@ pub fn main(init: std.process.Init) !void {
     tl_sessions = &sessions;
     tl_router = &router;
 
-    var app = zypher.core.App.init(init.gpa, .{ .host = "127.0.0.1", .port = 8080 });
+    var app = zypher.core.App.init(init.gpa, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();
     app.middlewareHandler(runChain);
     try app.listenAndServe(init.io);

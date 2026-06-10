@@ -37,5 +37,13 @@ pub fn build(b: *std.Build) void {
     run_cmd.step.dependOn(b.getInstallStep());
     run_cmd.addPassthruArgs();
     b.step("run", "Run the books API").dependOn(&run_cmd.step);
+    const app_docs = b.addTest(.{ .root_module = exe.root_module });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = app_docs.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    b.step("doc", "Generate app documentation").dependOn(&install_docs.step);
+
     b.step("test", "Run books API tests").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = exe.root_module })).step);
 }

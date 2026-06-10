@@ -298,6 +298,19 @@ fn middlewareDispatch(req: *Request, res: *Response) void {
     MiddlewareChain.run(req, res, routerDispatch);
 }
 
+fn parsePort(init: std.process.Init) u16 {
+    var args = std.process.Args.Iterator.init(init.minimal.args);
+    defer args.deinit();
+    _ = args.skip();
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--port")) {
+            const raw = args.next() orelse return 8080;
+            return std.fmt.parseInt(u16, raw, 10) catch 8080;
+        }
+    }
+    return 8080;
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
 
@@ -350,7 +363,7 @@ pub fn main(init: std.process.Init) !void {
     zypher.admin.setDb(&db);
     zypher.admin.setEngine(&engine);
 
-    var app = zypher.core.App.init(allocator, .{ .host = "127.0.0.1", .port = 8090 });
+    var app = zypher.core.App.init(allocator, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();
     app.database(&db);
     app.middlewareHandler(middlewareDispatch);

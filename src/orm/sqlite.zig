@@ -18,7 +18,7 @@ const c = struct {
     pub const SQLITE_NULL = 5;
     pub const SQLITE_CONSTRAINT = 19;
 
-    const destructor_type = *const fn (?*anyopaque) callconv(.c) void;
+    const destructor_type = *align(1) const fn (?*anyopaque) callconv(.c) void;
     pub const SQLITE_TRANSIENT: destructor_type = @ptrFromInt(std.math.maxInt(usize));
 
     pub extern fn sqlite3_open(path: [*:0]const u8, handle: *?*sqlite3) c_int;

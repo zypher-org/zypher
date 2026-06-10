@@ -52,6 +52,17 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the notes app");
     run_step.dependOn(&run_cmd.step);
 
+    const app_docs = b.addTest(.{
+        .root_module = app_mod,
+    });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = app_docs.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    const doc_step = b.step("doc", "Generate notes app documentation");
+    doc_step.dependOn(&install_docs.step);
+
     const app_tests = b.addTest(.{
         .root_module = app_mod,
     });

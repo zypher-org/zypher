@@ -1,5 +1,6 @@
 /// CLI dispatch logic — testable separately from the binary entry point.
 const std = @import("std");
+const builtin = @import("builtin");
 const App = @import("../core/app.zig").App;
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
@@ -7,6 +8,7 @@ const sqlite = @import("../orm/sqlite.zig");
 const migration = @import("../orm/migration.zig");
 const password = @import("../auth/password.zig");
 const validators = @import("../forms/validators.zig");
+const static_files = @import("../middleware/static.zig");
 const zypher_log = @import("../log.zig");
 const log = std.log.scoped(.cli);
 
@@ -18,6 +20,10 @@ pub const RunserverConfig = struct {
 
 var runserver_signal_app: ?*App = null;
 var runserver_signal_io: ?std.Io = null;
+const supports_posix_signals = builtin.os.tag != .windows and builtin.os.tag != .wasi;
+const RunserverSigintState = if (supports_posix_signals) std.posix.Sigaction else void;
+var docs_server_root: []const u8 = "zig-out/docs";
+var docs_server_io: ?std.Io = null;
 
 pub fn dispatchInner(
     out_writer: *std.Io.Writer,
@@ -43,6 +49,10 @@ pub fn dispatchInner(
         try cmdTemplates(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "run")) {
         try cmdRun(out_writer, err_writer, init, args);
+    } else if (std.mem.eql(u8, cmd, "doc")) {
+        try cmdDoc(out_writer, err_writer, init, args);
+    } else if (std.mem.eql(u8, cmd, "doc-user")) {
+        try cmdDocUser(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "demo")) {
         try cmdDemo(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "makemigrations")) {
@@ -105,7 +115,9 @@ fn printHelp(w: *std.Io.Writer) !void {
     try w.print("Commands:\n", .{});
     try w.print("  new <path>         Create a new project from a scaffold template\n", .{});
     try w.print("  templates          List scaffold templates\n", .{});
-    try w.print("  run [path]         Run a scaffolded app via its build.zig\n", .{});
+    try w.print("  run [path]         Run a scaffolded app via its build.zig (--port defaults to 8080)\n", .{});
+    try w.print("  doc                Build and serve zypher library documentation\n", .{});
+    try w.print("  doc-user [path]    Build and serve documentation for user code\n", .{});
     try w.print("  demo <name>        Create a demo project with template rendering\n", .{});
     try w.print("  runserver          Start the HTTP server\n", .{});
     try w.print("  migrate            Run pending migrations\n", .{});
@@ -861,7 +873,16 @@ const NewOptions = struct {
 const RunOptions = struct {
     project_path: []const u8 = ".",
     zypher_root: []const u8 = default_zypher_root,
+    port: u16 = 8080,
     app_args_start: usize,
+};
+
+const DocOptions = struct {
+    project_path: []const u8 = ".",
+    zypher_root: []const u8 = ".",
+    host: []const u8 = "127.0.0.1",
+    port: u16 = 8080,
+    max_requests: ?usize = null,
 };
 
 fn cmdNew(
@@ -1073,7 +1094,7 @@ fn cmdRun(
     args: []const [:0]const u8,
 ) !void {
     const opts = parseRunOptions(err_writer, args) catch return;
-    const argv = try buildRunArgv(init.gpa, opts.zypher_root, args[opts.app_args_start..]);
+    const argv = try buildRunArgv(init.gpa, opts.zypher_root, opts.port, args[opts.app_args_start..]);
     defer freeArgv(init.gpa, argv);
 
     try out_writer.print("Running app in {s}\n", .{opts.project_path});
@@ -1108,6 +1129,16 @@ fn parseRunOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !RunO
                 std.process.exit(1);
             }
             opts.zypher_root = args[i];
+        } else if (std.mem.eql(u8, args[i], "--port")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --port requires a value\n", .{});
+                std.process.exit(1);
+            }
+            opts.port = std.fmt.parseInt(u16, args[i], 10) catch {
+                try err_writer.print("zypher: invalid --port value '{s}'\n", .{args[i]});
+                std.process.exit(1);
+            };
         } else if (std.mem.startsWith(u8, args[i], "--")) {
             try err_writer.print("zypher: unknown run option '{s}'\n", .{args[i]});
             std.process.exit(1);
@@ -1118,7 +1149,7 @@ fn parseRunOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !RunO
     return opts;
 }
 
-pub fn buildRunArgv(gpa: std.mem.Allocator, zypher_root: []const u8, app_args: []const [:0]const u8) ![][]const u8 {
+pub fn buildRunArgv(gpa: std.mem.Allocator, zypher_root: []const u8, port: u16, app_args: []const [:0]const u8) ![][]const u8 {
     var argv: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (argv.items) |arg| gpa.free(arg);
@@ -1129,16 +1160,211 @@ pub fn buildRunArgv(gpa: std.mem.Allocator, zypher_root: []const u8, app_args: [
     try argv.append(gpa, try gpa.dupe(u8, "build"));
     try argv.append(gpa, try std.fmt.allocPrint(gpa, "-Dzypher-root={s}", .{zypher_root}));
     try argv.append(gpa, try gpa.dupe(u8, "run"));
+    try argv.append(gpa, try gpa.dupe(u8, "--"));
+    try argv.append(gpa, try gpa.dupe(u8, "--port"));
+    try argv.append(gpa, try std.fmt.allocPrint(gpa, "{d}", .{port}));
     if (app_args.len > 0) {
-        try argv.append(gpa, try gpa.dupe(u8, "--"));
         for (app_args) |arg| try argv.append(gpa, try gpa.dupe(u8, arg));
     }
+    return argv.toOwnedSlice(gpa);
+}
+
+pub fn buildDocArgv(gpa: std.mem.Allocator) ![][]const u8 {
+    var argv: std.ArrayList([]const u8) = .empty;
+    errdefer {
+        for (argv.items) |arg| gpa.free(arg);
+        argv.deinit(gpa);
+    }
+
+    try argv.append(gpa, try gpa.dupe(u8, "zig"));
+    try argv.append(gpa, try gpa.dupe(u8, "build"));
+    try argv.append(gpa, try gpa.dupe(u8, "doc"));
     return argv.toOwnedSlice(gpa);
 }
 
 fn freeArgv(gpa: std.mem.Allocator, argv: [][]const u8) void {
     for (argv) |arg| gpa.free(arg);
     gpa.free(argv);
+}
+
+fn cmdDoc(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    args: []const [:0]const u8,
+) !void {
+    const opts = parseDocOptions(err_writer, args, .framework) catch return;
+    try buildAndServeDocs(out_writer, err_writer, init, opts.zypher_root, opts);
+}
+
+fn cmdDocUser(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    args: []const [:0]const u8,
+) !void {
+    const opts = parseDocOptions(err_writer, args, .user) catch return;
+    try buildAndServeDocs(out_writer, err_writer, init, opts.project_path, opts);
+}
+
+const DocMode = enum {
+    framework,
+    user,
+};
+
+fn parseDocOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8, mode: DocMode) !DocOptions {
+    var opts = DocOptions{};
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--zypher-root")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --zypher-root requires a value\n", .{});
+                std.process.exit(1);
+            }
+            opts.zypher_root = args[i];
+        } else if (std.mem.eql(u8, args[i], "--host")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --host requires a value\n", .{});
+                std.process.exit(1);
+            }
+            opts.host = args[i];
+        } else if (std.mem.eql(u8, args[i], "--port")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --port requires a value\n", .{});
+                std.process.exit(1);
+            }
+            opts.port = std.fmt.parseInt(u16, args[i], 10) catch {
+                try err_writer.print("zypher: invalid --port value '{s}'\n", .{args[i]});
+                std.process.exit(1);
+            };
+        } else if (std.mem.eql(u8, args[i], "--max-requests")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --max-requests requires a value\n", .{});
+                std.process.exit(1);
+            }
+            opts.max_requests = std.fmt.parseInt(usize, args[i], 10) catch {
+                try err_writer.print("zypher: invalid --max-requests value '{s}'\n", .{args[i]});
+                std.process.exit(1);
+            };
+        } else if (std.mem.startsWith(u8, args[i], "--")) {
+            try err_writer.print("zypher: unknown documentation option '{s}'\n", .{args[i]});
+            std.process.exit(1);
+        } else if (mode == .user) {
+            opts.project_path = args[i];
+        } else {
+            try err_writer.print("zypher: doc does not accept a project path; use --zypher-root\n", .{});
+            std.process.exit(1);
+        }
+    }
+    return opts;
+}
+
+fn buildAndServeDocs(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    build_cwd: []const u8,
+    opts: DocOptions,
+) !void {
+    const argv = try buildDocArgv(init.gpa);
+    defer freeArgv(init.gpa, argv);
+
+    try out_writer.print("Building documentation in {s}\n", .{build_cwd});
+    var child = std.process.spawn(init.io, .{
+        .argv = argv,
+        .cwd = .{ .path = build_cwd },
+    }) catch {
+        try err_writer.print("zypher: failed to spawn zig build doc\n", .{});
+        std.process.exit(1);
+    };
+    const term = child.wait(init.io) catch {
+        try err_writer.print("zypher: failed while waiting for documentation build\n", .{});
+        std.process.exit(1);
+    };
+    if (!term.success()) {
+        try err_writer.print("zypher: documentation build {t}\n", .{term});
+        std.process.exit(1);
+    }
+
+    const docs_root = try std.fs.path.join(init.gpa, &.{ build_cwd, "zig-out", "docs" });
+    defer init.gpa.free(docs_root);
+    docs_server_root = docs_root;
+    docs_server_io = init.io;
+    defer docs_server_io = null;
+
+    try out_writer.print("Serving documentation at http://{s}:{d}/\n", .{ opts.host, opts.port });
+    var app = App.init(init.gpa, .{
+        .host = opts.host,
+        .port = opts.port,
+        .max_requests = opts.max_requests,
+    });
+    defer app.deinit();
+    app.handler_fn = docsHandler;
+
+    bindRunserverSignalTarget(&app, init.io);
+    defer clearRunserverSignalTarget();
+    const old_sigint = installRunserverSigintHandler();
+    defer restoreRunserverSigintHandler(old_sigint);
+
+    try app.listenAndServe(init.io);
+}
+
+fn docsHandler(req: *Request, res: *Response) void {
+    if (req.method != .get and req.method != .head) {
+        _ = res.status(405);
+        res.text("Method Not Allowed") catch {};
+        return;
+    }
+
+    var rel = req.path;
+    while (std.mem.startsWith(u8, rel, "/")) rel = rel[1..];
+    if (rel.len == 0) rel = "index.html";
+    if (hasPathTraversal(rel)) {
+        _ = res.status(403);
+        res.text("Forbidden") catch {};
+        return;
+    }
+
+    const fs_path = std.fs.path.join(res.allocator, &.{ docs_server_root, rel }) catch {
+        _ = res.status(500);
+        res.text("Internal Server Error") catch {};
+        return;
+    };
+    defer res.allocator.free(fs_path);
+
+    const io = docs_server_io orelse {
+        _ = res.status(500);
+        res.text("Internal Server Error") catch {};
+        return;
+    };
+    const body = std.Io.Dir.cwd().readFileAlloc(io, fs_path, res.allocator, .limited(32 * 1024 * 1024)) catch |err| switch (err) {
+        error.FileNotFound, error.NotDir, error.IsDir => {
+            _ = res.status(404);
+            res.text("Not Found") catch {};
+            return;
+        },
+        else => {
+            _ = res.status(500);
+            res.text("Internal Server Error") catch {};
+            return;
+        },
+    };
+
+    if (res.body) |old| res.allocator.free(old);
+    res.body = body;
+    _ = res.header("Content-Type", static_files.detectMime(rel));
+}
+
+fn hasPathTraversal(path: []const u8) bool {
+    var iter = std.mem.splitSequence(u8, path, "/");
+    while (iter.next()) |segment| {
+        if (std.mem.eql(u8, segment, "..")) return true;
+    }
+    return false;
 }
 
 // ── demo (scaffold a small demo project) ──────────────────────────────────
@@ -1205,18 +1431,27 @@ pub fn clearRunserverSignalTarget() void {
     runserver_signal_io = null;
 }
 
-pub fn runserverSigintHandler(sig: std.posix.SIG, info: *const std.posix.siginfo_t, context: ?*anyopaque) callconv(.c) void {
-    _ = sig;
-    _ = info;
-    _ = context;
-    if (runserver_signal_app) |app| {
-        if (runserver_signal_io) |io| {
-            app.shutdown(io);
+pub const runserverSigintHandler = if (supports_posix_signals)
+    struct {
+        fn handle(sig: std.posix.SIG, info: *const std.posix.siginfo_t, context: ?*anyopaque) callconv(.c) void {
+            _ = sig;
+            _ = info;
+            _ = context;
+            if (runserver_signal_app) |app| {
+                if (runserver_signal_io) |io| {
+                    app.shutdown(io);
+                }
+            }
         }
-    }
-}
+    }.handle
+else
+    struct {
+        fn handle() void {}
+    }.handle;
 
-fn installRunserverSigintHandler() std.posix.Sigaction {
+fn installRunserverSigintHandler() RunserverSigintState {
+    if (!supports_posix_signals) return {};
+
     const act: std.posix.Sigaction = .{
         .handler = .{ .sigaction = runserverSigintHandler },
         .mask = std.posix.sigemptyset(),
@@ -1227,7 +1462,9 @@ fn installRunserverSigintHandler() std.posix.Sigaction {
     return old;
 }
 
-fn restoreRunserverSigintHandler(old: std.posix.Sigaction) void {
+fn restoreRunserverSigintHandler(old: RunserverSigintState) void {
+    if (!supports_posix_signals) return;
+
     var previous: std.posix.Sigaction = undefined;
     std.posix.sigaction(.INT, &old, &previous);
 }
