@@ -1,0 +1,213 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build, for example v0.1.0-beta"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  ZYPHER_REPOSITORY: zypher-org/zypher
+
+jobs:
+  test:
+    name: Verify release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Verify Zig installation
+        run: zig version
+
+      - name: Run tests
+        run: zig build test
+
+      - name: Check formatting
+        run: zig fmt --check .
+
+  github-release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs: test
+
+    outputs:
+      version: ${{ steps.release-vars.outputs.version }}
+      prerelease: ${{ steps.release-vars.outputs.prerelease }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Resolve release variables
+        id: release-vars
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          fi
+          version="${tag#v}"
+          prerelease=false
+          case "${version}" in
+            *-*) prerelease=true ;;
+          esac
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build release binaries
+        run: zig build all-targets -Doptimize=ReleaseSafe
+
+      - name: Package release artifacts
+        env:
+          VERSION: ${{ steps.release-vars.outputs.version }}
+        run: |
+          set -eu
+          mkdir -p dist
+          for target in \
+            x86_64-linux-musl \
+            aarch64-linux-musl \
+            x86_64-macos \
+            aarch64-macos \
+            x86_64-windows-gnu \
+            aarch64-windows-gnu
+          do
+            exe="zypher"
+            case "${target}" in
+              *windows*) exe="zypher.exe" ;;
+            esac
+            package="zypher-v${VERSION}-${target}"
+            mkdir -p "dist/${package}"
+            cp "zig-out/bin/${target}/${exe}" "dist/${package}/${exe}"
+            cp README.md LICENSE "dist/${package}/"
+            tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          done
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS
+
+      - name: Render Homebrew formula
+        env:
+          VERSION: ${{ steps.release-vars.outputs.version }}
+        run: |
+          set -eu
+          base_url="https://github.com/${ZYPHER_REPOSITORY}/releases/download/v${VERSION}"
+          sha_x86_64_linux="$(sha256sum "dist/zypher-v${VERSION}-x86_64-linux-musl.tar.gz" | cut -d ' ' -f 1)"
+          sha_aarch64_linux="$(sha256sum "dist/zypher-v${VERSION}-aarch64-linux-musl.tar.gz" | cut -d ' ' -f 1)"
+          sha_x86_64_macos="$(sha256sum "dist/zypher-v${VERSION}-x86_64-macos.tar.gz" | cut -d ' ' -f 1)"
+          sha_aarch64_macos="$(sha256sum "dist/zypher-v${VERSION}-aarch64-macos.tar.gz" | cut -d ' ' -f 1)"
+          sed \
+            -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{BASE_URL}}|${base_url}|g" \
+            -e "s|{{SHA_X86_64_LINUX}}|${sha_x86_64_linux}|g" \
+            -e "s|{{SHA_AARCH64_LINUX}}|${sha_aarch64_linux}|g" \
+            -e "s|{{SHA_X86_64_MACOS}}|${sha_x86_64_macos}|g" \
+            -e "s|{{SHA_AARCH64_MACOS}}|${sha_aarch64_macos}|g" \
+            packaging/homebrew/zypher.rb.template > dist/zypher.rb
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release-vars.outputs.tag }}
+          prerelease: ${{ steps.release-vars.outputs.prerelease }}
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/zypher.rb
+
+  npm-release:
+    name: Publish npm package
+    runs-on: ubuntu-latest
+    needs: github-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Prepare npm metadata
+        env:
+          VERSION: ${{ needs.github-release.outputs.version }}
+        run: npm --prefix npm version "${VERSION}" --no-git-tag-version
+
+      - name: Publish npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PRERELEASE: ${{ needs.github-release.outputs.prerelease }}
+        run: |
+          set -eu
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "Skipping npm publish because NPM_TOKEN is not configured."
+            exit 0
+          fi
+          tag=latest
+          if [ "${PRERELEASE}" = "true" ]; then
+            tag=beta
+          fi
+          npm publish ./npm --access public --tag "${tag}"
+
+  homebrew-release:
+    name: Publish Homebrew formula
+    runs-on: ubuntu-latest
+    needs: github-release
+
+    steps:
+      - name: Download rendered formula
+        uses: robinraju/release-downloader@v1
+        with:
+          repository: ${{ env.ZYPHER_REPOSITORY }}
+          tag: v${{ needs.github-release.outputs.version }}
+          fileName: zypher.rb
+          out-file-path: dist
+
+      - name: Upload formula to tap
+        env:
+          HOMEBREW_TAP_REPO: ${{ secrets.HOMEBREW_TAP_REPO }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.github-release.outputs.version }}
+        run: |
+          set -eu
+          if [ -z "${HOMEBREW_TAP_REPO}" ] || [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "Skipping Homebrew tap update because HOMEBREW_TAP_REPO or HOMEBREW_TAP_TOKEN is not configured."
+            exit 0
+          fi
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" homebrew-tap
+          mkdir -p homebrew-tap/Formula
+          cp dist/zypher.rb homebrew-tap/Formula/zypher.rb
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/zypher.rb
+          if git diff --cached --quiet; then
+            echo "Homebrew formula is already current."
+            exit 0
+          fi
+          git commit -m "Update zypher to v${VERSION}"
+          git push
