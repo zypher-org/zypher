@@ -4,9 +4,9 @@ Zypher releases are driven from `main`, annotated Git tags, or manual dispatch.
 Pushes to `main` read `npm/package.json`, move `v<VERSION>` to the pushed
 commit, and run the full release workflow. Tags matching `v*` and manual
 dispatches use the selected tag directly. The full release workflow builds all
-supported CLI targets, publishes a GitHub release, publishes the npm package,
-renders a Homebrew formula with release checksums, and optionally pushes that
-formula to the Homebrew tap.
+supported CLI targets, publishes a normal/latest GitHub release, publishes the
+npm package, renders a Homebrew formula with release checksums, and optionally
+pushes that formula to the Homebrew tap.
 
 ## Required Secrets
 
@@ -45,4 +45,6 @@ git push origin v0.1.0-beta
 ```
 
 Prerelease versions containing a hyphen publish to npm with the `beta` dist-tag.
-Stable versions publish with the `latest` dist-tag.
+Stable versions publish with the `latest` dist-tag. GitHub releases are still
+published as normal/latest releases so they appear in repository release
+surfaces.

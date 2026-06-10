@@ -151,7 +151,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release-vars.outputs.tag }}
-          prerelease: ${{ steps.release-vars.outputs.prerelease }}
+          prerelease: false
+          make_latest: true
           generate_release_notes: true
           overwrite_files: true
           files: |
