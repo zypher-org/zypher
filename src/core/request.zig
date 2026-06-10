@@ -19,6 +19,12 @@ pub const Request = struct {
     /// Raw request body
     body: []const u8,
 
+    /// Whether body was allocated and must be freed in deinit
+    body_owned: bool = false,
+
+    /// Whether query/form entries were allocated by decodeUrlEncoded
+    query_owned: bool = false,
+
     /// Route-extracted URL parameters (populated by Router.dispatch)
     params: RouteParams = .{ .names = undefined, .values = undefined, .len = 0, .allocator = undefined },
 
@@ -63,7 +69,14 @@ pub const Request = struct {
     /// Free all owned memory.
     pub fn deinit(self: *Request) void {
         self.headers.deinit();
-        self.query.deinit();
+        if (self.query_owned) {
+            deinitQueryString(&self.query, self.allocator);
+        } else {
+            self.query.deinit();
+        }
+        if (self.body_owned) {
+            self.allocator.free(@constCast(self.body));
+        }
     }
 
     // ───────────── Static parsing helpers ─────────────

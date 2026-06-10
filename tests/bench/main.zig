@@ -4,6 +4,8 @@ const zypher = @import("zypher");
 
 const runs = 5000;
 const template_run_count = 500;
+const router_run_count = 10000;
+const orm_run_count = 1000;
 
 fn nowMs() i64 {
     var ts: std.posix.timespec = undefined;
@@ -45,6 +47,92 @@ fn benchTemplateRender(allocator: std.mem.Allocator) !u64 {
     return elapsed;
 }
 
+fn benchRouterDispatch(allocator: std.mem.Allocator) !u64 {
+    _ = allocator;
+    const Route = zypher.router.Route;
+    const Router = zypher.router.Router;
+    const Request = zypher.core.Request;
+    const Response = zypher.core.Response;
+
+    fn h1(_: *Request, _: *Response) void {}
+    fn h2(_: *Request, _: *Response) void {}
+    fn h3(_: *Request, _: *Response) void {}
+    fn h4(_: *Request, _: *Response) void {}
+    fn h5(_: *Request, _: *Response) void {}
+    fn hf(_: *Request, _: *Response) void {}
+
+    const routes = .{
+        Route.init(.get, "/", h1),
+        Route.init(.get, "/users/:id", h2),
+        Route.init(.post, "/users", h3),
+        Route.init(.get, "/users/:id/posts", h4),
+        Route.init(.get, "/static/*", h5),
+    };
+
+    var req = Request{
+        .method = .get,
+        .path = "/users/42",
+        .query = std.StringHashMap([]const u8).init(allocator),
+        .headers = std.StringHashMap([]const u8).init(allocator),
+        .body = "",
+        .params = undefined,
+        .allocator = allocator,
+    };
+    defer req.headers.deinit();
+    defer req.query.deinit();
+
+    var res = Response.init(allocator);
+    defer res.deinit();
+
+    const router = Router.init(&routes, hf);
+
+    const start = nowMs();
+    var i: u64 = 0;
+    while (i < router_run_count) : (i += 1) {
+        router.dispatch(&req, &res);
+    }
+    const elapsed = @as(u64, @intCast(nowMs() - start));
+    return elapsed;
+}
+
+fn benchOrmQuery(allocator: std.mem.Allocator) !u64 {
+    const sqlite = zypher.orm.sqlite;
+    const query = zypher.orm.query;
+    const schema = zypher.orm.schema;
+
+    const TestModel = schema.Model("test_bench", &.{
+        schema.Field("id", .integer, .{ .primary = true }),
+        schema.Field("name", .text, .{}),
+    });
+
+    const db_path = try std.fmt.allocPrint(allocator, "/tmp/zypher_bench_{d}.db", .{std.time.milliTimestamp()});
+    defer allocator.free(db_path);
+
+    // Clean up previous bench db
+    _ = std.fs.cwd().deleteFile(db_path) catch {};
+
+    var db = try sqlite.Db.open(allocator, db_path);
+    defer db.close();
+
+    db.exec(TestModel.create_table_sql) catch {};
+    var i: u64 = 0;
+    while (i < 100) : (i += 1) {
+        _ = query.create(TestModel, &db, &.{ .{ .text = "bench" } }) catch {};
+    }
+
+    const start = nowMs();
+    i = 0;
+    while (i < orm_run_count) : (i += 1) {
+        _ = query.all(TestModel, &db, allocator) catch {};
+    }
+    const elapsed = @as(u64, @intCast(nowMs() - start));
+
+    // Clean up
+    _ = std.fs.cwd().deleteFile(db_path) catch {};
+
+    return elapsed;
+}
+
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
@@ -59,6 +147,16 @@ pub fn main() !void {
     {
         const elapsed = try benchTemplateRender(allocator);
         std.debug.print("template render ({d}x): {} ms\n", .{ template_run_count, elapsed });
+    }
+
+    {
+        const elapsed = try benchRouterDispatch(allocator);
+        std.debug.print("router dispatch ({d}x): {} ms\n", .{ router_run_count, elapsed });
+    }
+
+    {
+        const elapsed = try benchOrmQuery(allocator);
+        std.debug.print("orm query ({d}x): {} ms\n", .{ orm_run_count, elapsed });
     }
 
     std.debug.print("\nDone.\n", .{});

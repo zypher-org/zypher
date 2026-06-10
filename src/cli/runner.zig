@@ -39,6 +39,8 @@ pub fn dispatchInner(
         try cmdMigrate(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "new")) {
         try cmdNew(out_writer, err_writer, init, args);
+    } else if (std.mem.eql(u8, cmd, "demo")) {
+        try cmdDemo(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "makemigrations")) {
         try cmdMakemigrations(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "shell")) {
@@ -98,6 +100,7 @@ fn printHelp(w: *std.Io.Writer) !void {
     try w.print("Usage: zypher <command> [options]\n\n", .{});
     try w.print("Commands:\n", .{});
     try w.print("  new <name>         Create a new project\n", .{});
+    try w.print("  demo <name>        Create a demo project with template rendering\n", .{});
     try w.print("  runserver          Start the HTTP server\n", .{});
     try w.print("  migrate            Run pending migrations\n", .{});
     try w.print("  makemigrations     Generate migration files\n", .{});
@@ -954,6 +957,140 @@ fn cmdNew(
     try out_writer.print("  {s}/templates/\n", .{project_name});
     try out_writer.print("  {s}/tests/\n", .{project_name});
     try out_writer.print("  {s}/examples/\n", .{project_name});
+}
+
+// ── demo (scaffold a small demo project) ──────────────────────────────────
+
+fn cmdDemo(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    init: std.process.Init,
+    args: []const [:0]const u8,
+) !void {
+    if (args.len < 3) {
+        try err_writer.print("zypher: demo requires a project name\n", .{});
+        std.process.exit(1);
+    }
+    const project_name = args[2];
+    const io = init.io;
+    const gpa = init.gpa;
+
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDir(io, project_name, .default_dir) catch {
+        try err_writer.print("zypher: failed to create directory '{s}'\n", .{project_name});
+        std.process.exit(1);
+    };
+
+    {
+        const path = try std.fmt.allocPrint(gpa, "{s}/build.zig", .{project_name});
+        defer gpa.free(path);
+        cwd.writeFile(io, .{ .sub_path = path, .data = buildZigScaffold(project_name) }) catch {
+            try err_writer.print("zypher: failed to write build.zig\n", .{});
+            std.process.exit(1);
+        };
+    }
+    {
+        const path = try std.fmt.allocPrint(gpa, "{s}/src", .{project_name});
+        defer gpa.free(path);
+        cwd.createDirPath(io, path) catch {};
+    }
+    {
+        const path = try std.fmt.allocPrint(gpa, "{s}/templates", .{project_name});
+        defer gpa.free(path);
+        cwd.createDirPath(io, path) catch {};
+    }
+    {
+        const path = try std.fmt.allocPrint(gpa, "{s}/templates/index.html", .{project_name});
+        defer gpa.free(path);
+        cwd.writeFile(io, .{ .sub_path = path, .data =
+            \\<!DOCTYPE html>
+            \\<html>
+            \\<head><title>{{ title }}</title></head>
+            \\<body>
+            \\<h1>{{ title }}</h1>
+            \\<p>{{ message }}</p>
+            \\</body>
+            \\</html>
+            \\
+        }) catch {};
+    }
+    {
+        const path = try std.fmt.allocPrint(gpa, "{s}/src/main.zig", .{project_name});
+        defer gpa.free(path);
+        cwd.writeFile(io, .{ .sub_path = path, .data =
+            \\const std = @import("std");
+            \\const zypher = @import("zypher");
+            \\
+            \\const Request = zypher.core.Request;
+            \\const Response = zypher.core.Response;
+            \\
+            \\fn helloHandler(req: *Request, res: *Response) void {
+            \\    _ = req;
+            \\    var ctx = zypher.template.renderer.Context.init(res.allocator);
+            \\    defer ctx.deinit();
+            \\    ctx.put("title", .{ .string = "Zypher Demo" }) catch {};
+            \\    ctx.put("message", .{ .string = "Hello from zypher!" }) catch {};
+            \\    var engine = zypher.template.renderer.TemplateEngine.init(res.allocator);
+            \\    defer engine.deinit();
+            \\    engine.load("index.html", @embedFile("../templates/index.html")) catch {};
+            \\    var aw = std.Io.Writer.Allocating.init(res.allocator);
+            \\    defer aw.deinit();
+            \\    engine.render("index.html", &ctx, &aw.writer) catch {};
+            \\    res.html(aw.written()) catch {};
+            \\}
+            \\
+            \\pub fn main() !void {
+            \\    var gpa = std.heap.DebugAllocator(.{}){};
+            \\    const alloc = gpa.allocator();
+            \\    var app = zypher.core.App.init(alloc, .{ .host = "127.0.0.1", .port = 8080 });
+            \\    defer app.deinit();
+            \\    app.get("/", helloHandler);
+            \\    try app.listenAndServe(std.io);
+            \\}
+            \\
+        }) catch {
+            try err_writer.print("zypher: failed to write src/main.zig\n", .{});
+            std.process.exit(1);
+        };
+    }
+
+    log.info("scaffolded demo project '{s}'", .{project_name});
+    try out_writer.print("Created demo project '{s}'\n", .{project_name});
+    try out_writer.print("  {s}/build.zig\n", .{project_name});
+    try out_writer.print("  {s}/src/main.zig\n", .{project_name});
+    try out_writer.print("  {s}/templates/index.html\n", .{project_name});
+    try out_writer.print("  cd {s} && zig build run\n", .{project_name});
+}
+
+fn buildZigScaffold(project_name: []const u8) []const u8 {
+    _ = project_name;
+    return
+        \\const std = @import("std");
+        \\
+        \\pub fn build(b: *std.Build) void {
+        \\    const target = b.standardTargetOptions(.{});
+        \\    const optimize = b.standardOptimizeOption(.{});
+        \\    const zypher_mod = b.dependency("zypher", .{
+        \\        .target = target,
+        \\        .optimize = optimize,
+        \\    }).module("zypher");
+        \\    const exe = b.addExecutable(.{
+        \\        .name = "demo",
+        \\        .root_module = b.createModule(.{
+        \\            .root_source_file = b.path("src/main.zig"),
+        \\            .target = target,
+        \\            .optimize = optimize,
+        \\            .imports = &.{.{ .name = "zypher", .module = zypher_mod }},
+        \\        }),
+        \\    });
+        \\    b.installArtifact(exe);
+        \\    const run_cmd = b.addRunArtifact(exe);
+        \\    run_cmd.step.dependOn(b.getInstallStep());
+        \\    const run_step = b.step("run", "Run the app");
+        \\    run_step.dependOn(&run_cmd.step);
+        \\}
+        \\
+    ;
 }
 
 // ── runserver ─────────────────────────────────────────────────────────────

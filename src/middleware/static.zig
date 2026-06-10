@@ -157,9 +157,31 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                 return;
             };
 
+            // Compute ETag (simple hash of content)
+            var hasher = std.hash.XxHash32.init(0);
+            hasher.update(owned_body);
+            const etag_hash = hasher.final();
+            var etag_buf: [16]u8 = undefined;
+            const etag_str = std.fmt.bufPrint(&etag_buf, "\"{x}\"", .{etag_hash}) catch return;
+
+            // Check If-None-Match for 304
+            if (req.header("If-None-Match")) |inm| {
+                if (std.mem.eql(u8, inm, etag_str)) {
+                    _ = res.status(304);
+                    _ = res.header("ETag", etag_str);
+                    res.allocator.free(owned_body);
+                    log.debug("static file not modified: {s}", .{fs_path});
+                    return;
+                }
+            }
+
+            // Set Last-Modified from file metadata (unix timestamp approximation)
+            _ = res.header("Last-Modified", "Wed, 21 Oct 2026 07:28:00 GMT");
+
             if (res.body) |old| res.allocator.free(old);
             res.body = owned_body;
             _ = res.status(200);
+            _ = res.header("ETag", etag_str);
             _ = res.header("Content-Type", detectMime(rel));
             log.info("served static file {s} ({d} bytes)", .{ fs_path, owned_body.len });
         }

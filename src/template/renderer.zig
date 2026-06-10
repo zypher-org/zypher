@@ -182,21 +182,59 @@ pub const Template = struct {
     }
 
     fn renderVariable(self: *Template, expr: []const u8, ctx: *Context, writer: *std.Io.Writer) RenderError!void {
-        _ = self;
+        const f = @import("filters.zig");
         var parts = std.mem.splitScalar(u8, expr, '|');
         const var_expr = std.mem.trim(u8, parts.first(), " \t");
-        const value = resolveVar(ctx, var_expr);
+        var current = resolveVar(ctx, var_expr);
+        var current_owned = false;
 
         var is_safe = false;
         while (parts.next()) |part| {
             const trimmed = std.mem.trim(u8, part, " \t");
-            if (std.mem.eql(u8, trimmed, "safe")) is_safe = true;
+
+            if (std.mem.eql(u8, trimmed, "safe")) {
+                is_safe = true;
+                continue;
+            }
+
+            const result = if (std.mem.indexOfScalar(u8, trimmed, '(')) |paren| blk: {
+                const fname = std.mem.trim(u8, trimmed[0..paren], " \t");
+                const rest = std.mem.trim(u8, trimmed[paren + 1 ..], " \t");
+                const arg = if (rest.len > 0 and rest[rest.len - 1] == ')') rest[0 .. rest.len - 1] else "";
+                break :blk f.applyWithArg(self.allocator, fname, current, arg) catch {
+                    log.warn("filter with arg failed", .{});
+                    if (current_owned) {
+                        var tmp = f.FilterResult{ .value = current, .owned = true };
+                        tmp.deinit(self.allocator);
+                    }
+                    return;
+                };
+            } else f.apply(self.allocator, trimmed, current) catch {
+                log.warn("filter failed", .{});
+                if (current_owned) {
+                    var tmp = f.FilterResult{ .value = current, .owned = true };
+                    tmp.deinit(self.allocator);
+                }
+                return;
+            };
+
+            if (current_owned) {
+                var tmp = f.FilterResult{ .value = current, .owned = true };
+                tmp.deinit(self.allocator);
+            }
+            current = result.value;
+            current_owned = result.owned;
         }
 
         if (is_safe) {
-            try value.format(writer);
+            try current.format(writer);
         } else {
-            try htmlEscape(value, writer);
+            try htmlEscape(current, writer);
+        }
+
+        if (current_owned) {
+            var tmp = f.FilterResult{ .value = current, .owned = true };
+            tmp.deinit(self.allocator);
         }
     }
 

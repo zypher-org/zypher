@@ -29,6 +29,7 @@ pub const middleware = struct {
     pub const compress = @import("middleware/compress.zig");
     pub const session = @import("middleware/session.zig");
     pub const security_headers = @import("middleware/security_headers.zig");
+    pub const recovery = @import("middleware/recovery.zig");
 };
 
 // Re-export template (Phase 4)
@@ -44,6 +45,7 @@ pub const orm = struct {
     pub const sqlite = @import("orm/sqlite.zig");
     pub const schema = @import("orm/schema.zig");
     pub const query = @import("orm/query.zig");
+    pub const QuerySet = @import("orm/query.zig").QuerySet;
     pub const migration = @import("orm/migration.zig");
 };
 

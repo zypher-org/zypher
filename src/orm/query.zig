@@ -126,6 +126,100 @@ pub fn deleteById(comptime M: type, db: *sqlite.Db, id: i64) QueryError!void {
     log.info("deleted record from {s}: id={d}", .{ M.table_name, id });
 }
 
+/// ORDER BY a column expression. Returns all rows sorted.
+/// Caller owns the rows and their text memory — call freeRow on each when done.
+pub fn order(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, order_by: []const u8) QueryError!std.ArrayList(RowType(M)) {
+    var list = std.ArrayList(RowType(M)).empty;
+    const sql: [:0]const u8 = if (order_by.len > 0)
+        std.fmt.allocPrintSentinel(gpa, "{s} ORDER BY {s}", .{ M.select_all_sql, order_by }, 0) catch return error.AllocatorFailed
+    else
+        M.select_all_sql;
+    defer if (order_by.len > 0) gpa.free(@constCast(sql));
+    var stmt = db.prepare(sql) catch return error.PrepareFailed;
+    defer stmt.finalize();
+    while (stmt.step() catch return error.StepFailed) {
+        const row = try readRow(M, &stmt, gpa);
+        list.append(gpa, row) catch return error.AllocatorFailed;
+    }
+    log.info("ordered rows from {s} by '{s}'", .{ M.table_name, order_by });
+    return list;
+}
+
+/// Chainable QuerySet builder. Each method returns `*Self` for chaining.
+/// Call `.exec()` to execute the built query.
+pub fn QuerySet(comptime M: type) type {
+    return struct {
+        const Self = @This();
+        db: *sqlite.Db,
+        gpa: std.mem.Allocator,
+        where_clause: [:0]const u8 = "",
+        where_vals: std.ArrayList(sqlite.Value),
+        order_clause: []const u8 = "",
+        limit_val: ?u64 = null,
+        offset_val: ?u64 = null,
+
+        pub fn init(db: *sqlite.Db, gpa: std.mem.Allocator) Self {
+            return .{ .db = db, .gpa = gpa, .where_vals = std.ArrayList(sqlite.Value).empty };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.where_vals.deinit(self.gpa);
+        }
+
+        pub fn filterBy(self: *Self, where: [:0]const u8, values: []const sqlite.Value) *Self {
+            self.where_clause = where;
+            for (values) |v| self.where_vals.append(self.gpa, v) catch return self;
+            return self;
+        }
+
+        pub fn orderBy(self: *Self, order_by: []const u8) *Self {
+            self.order_clause = order_by;
+            return self;
+        }
+
+        pub fn limit(self: *Self, n: u64) *Self {
+            self.limit_val = n;
+            return self;
+        }
+
+        pub fn offset(self: *Self, n: u64) *Self {
+            self.offset_val = n;
+            return self;
+        }
+
+        /// Execute the query and return results.
+        pub fn exec(self: *Self) QueryError!std.ArrayList(RowType(M)) {
+            const hw = self.where_clause.len > 0;
+            const ho = self.order_clause.len > 0;
+            const hl = self.limit_val != null;
+            const hof = self.offset_val != null;
+
+            if (hw and ho and hl and hof) {
+                return filterOrderLimitOffset(M, self.db, self.gpa, self.where_clause, self.where_vals.items, self.order_clause, self.limit_val.?, self.offset_val.?);
+            }
+            if (hw and hl and hof) {
+                return filterLimitOffset(M, self.db, self.gpa, self.where_clause, self.where_vals.items, self.limit_val.?, self.offset_val.?);
+            }
+            if (hw and ho) {
+                var list = std.ArrayList(RowType(M)).empty;
+                const sql = std.fmt.allocPrintSentinel(self.gpa, "{s} WHERE {s} ORDER BY {s}", .{ M.select_all_sql, self.where_clause, self.order_clause }, 0) catch return error.AllocatorFailed;
+                defer self.gpa.free(@constCast(sql));
+                var stmt = self.db.prepare(sql) catch return error.PrepareFailed;
+                defer stmt.finalize();
+                for (self.where_vals.items, 0..) |v, i| stmt.bind(v, @intCast(i + 1)) catch return error.BindFailed;
+                while (stmt.step() catch return error.StepFailed) {
+                    const row = try readRow(M, &stmt, self.gpa);
+                    list.append(self.gpa, row) catch return error.AllocatorFailed;
+                }
+                return list;
+            }
+            if (ho) return order(M, self.db, self.gpa, self.order_clause);
+            if (hw) return filter(M, self.db, self.gpa, self.where_clause, self.where_vals.items);
+            return all(M, self.db, self.gpa);
+        }
+    };
+}
+
 /// COUNT all rows.
 pub fn count(comptime M: type, db: *sqlite.Db) QueryError!u64 {
     const sql = "SELECT COUNT(*) FROM " ++ M.table_name;
@@ -201,7 +295,6 @@ pub fn filterOrderLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.All
     }
     frags.appendSlice(gpa, " LIMIT ? OFFSET ?") catch return error.AllocatorFailed;
     const alloc_sql = frags.toOwnedSliceSentinel(gpa, 0) catch return error.AllocatorFailed;
-    errdefer gpa.free(alloc_sql);
     defer gpa.free(alloc_sql);
     var stmt = db.prepare(alloc_sql) catch return error.PrepareFailed;
     defer stmt.finalize();
