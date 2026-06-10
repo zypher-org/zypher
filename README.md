@@ -67,7 +67,35 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 
 ## Quick Start
 
-1. **Add zypher as a dependency** in your `build.zig.zon`:
+### Scaffolded App
+
+Use the CLI when starting a new app:
+
+```sh
+zig build run -- new examples/blog --template mvc
+cd examples/blog
+../../zig-out/bin/zypher createsuperuser --username admin@example.com --password Passw0rd --db blog.db
+../../zig-out/bin/zypher run . --zypher-root ../..
+```
+
+`zypher new` accepts either a project name or a path. The built-in templates live in the root `templates/` directory:
+
+- `single-file` — minimal one-file app
+- `clean-arch` — domain/application/infrastructure/presentation split
+- `mvc` — model/view/controller split
+- `mvp` — model/view/presenter split
+
+Third-party templates can be used with `--template-dir`:
+
+```sh
+zypher new apps/admin_tool --template custom --template-dir /path/to/templates
+```
+
+Generated templates include a `build.zig`, a runnable app, a sample managed ORM model, and an admin dashboard. `/admin` redirects to `/admin/login`; create credentials with `zypher createsuperuser`.
+
+### Manual App
+
+1. **Add zypher as a dependency** in your `build.zig.zon`
 2. **Create a handler** — any function matching `*const fn (*Request, *Response) void`
 3. **Register routes** at comptime
 4. **Start the server**
@@ -152,6 +180,7 @@ zypher/
 │   ├── admin/         # Admin panel
 │   └── cli/           # CLI tooling
 ├── examples/
+├── templates/        # CLI scaffold templates
 ├── docs/
 └── build.zig
 ```

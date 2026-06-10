@@ -141,7 +141,9 @@ All zypher subsystem errors are namespaced under `ZypherError` (defined in `src/
 
 | Function | What Allocates | Memory Lifetime | Notes |
 |---|---|---|---|
-| `new` command | Directory strings, file contents | Freed on scope exit | |
+| `new` command | Directory strings, file contents | Freed on scope exit | Copies root or third-party templates recursively |
+| `templates` command | Directory iterator state | Freed on scope exit | Lists template directories |
+| `run` command | Child argv strings | Freed after child exits | Delegates to generated `build.zig` |
 | `runserver` | Server config | Server lifetime | |
 | `migrate` / `makemigrations` | SQL strings, file paths | Per-command: freed before return | |
 | `createsuperuser` | User credentials, hash | Per-command: freed before return | |
@@ -198,9 +200,10 @@ These are enforced by regression tests using `std.testing.allocator` for allocat
 │                                │  Auth Views │              │
 │  ┌──────────────────────┐      └─────────────┘              │
 │  │  Admin Panel         │                                    │
-│  │  Registry + Views    │   ┌────────────────────┐          │
+│  │  AdminSite + Views   │   ┌────────────────────┐          │
 │  │  Templates (inline)  │   │  CLI Tooling       │          │
 │  └──────────────────────┘   │  new/runserver     │          │
+│                              │  templates/run     │          │
 │                              │  migrate/makemig.  │          │
 │                              │  createsuperuser   │          │
 │                              │  shell             │          │
@@ -222,6 +225,13 @@ These are enforced by regression tests using `std.testing.allocator` for allocat
 **Data flow (ORM interaction):**
 - Handler → form bind/validate → ORM create/filter/save → response
 - Auth middleware → session store → user guards → handler
+
+**Data flow (generated admin login):**
+- `zypher createsuperuser` creates a row in `users` with an admin role and hashed password
+- generated app opens its SQLite database and registers ORM models with `AdminSite`
+- `/admin` redirects to `/admin/login`
+- `/admin/login` verifies password hash and writes `role=admin` to the session
+- admin CRUD routes require that session role before serving `/admin/` and model routes
 
 **Data flow (template rendering):**
 - Handler → TemplateEngine.load (if uncached) → Template.render → Response.html

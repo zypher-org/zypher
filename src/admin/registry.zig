@@ -217,7 +217,7 @@ pub fn AdminSite(comptime config: anytype) type {
 fn requireAdmin(req: *Request, res: *Response) bool {
     const user_ptr = req.user orelse {
         _ = res.status(302);
-        _ = res.header("Location", "/login");
+        _ = res.header("Location", "/admin/login");
         return false;
     };
     const session: *Session = @ptrCast(@alignCast(user_ptr));

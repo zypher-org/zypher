@@ -56,7 +56,7 @@ Issues are grouped by milestone and intentionally small.
 - [ ] Error aggregation
 - [ ] CSRF protection
 - [ ] Session storage (signed cookies)
-- [ ] Password hashing (argon2)
+- [ ] Password hashing (PBKDF2-HMAC-SHA256)
 
 ---
 

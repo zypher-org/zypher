@@ -239,7 +239,7 @@ const User = orm.Model("users", struct {
 
 **Features**:
 - Signed cookie sessions
-- Password hashing (argon2)
+- Password hashing (PBKDF2-HMAC-SHA256)
 - Login / logout
 - Permissions system
 
@@ -258,10 +258,15 @@ const User = orm.Model("users", struct {
 
 **Commands**:
 ```bash
-zypher new <project>
-zypher run
-zypher migrate
+zypher new <path> [--template single-file|clean-arch|mvc|mvp] [--template-dir <dir>]
+zypher templates [--template-dir <dir>]
+zypher run [path] [--zypher-root <path>] [-- <app args...>]
+zypher migrate [--db <path>] [--dir <dir>]
+zypher makemigrations [--schema <path>] [--state <path>] [--dir <dir>]
+zypher createsuperuser [--username <email>] [--password <password>] [--db <path>]
 ```
+
+Scaffold templates live in the repository root `templates/` directory. Third-party templates can be used by pointing `--template-dir` at another directory. Built-in templates generate a runnable `build.zig`, a sample managed ORM model, and an admin dashboard protected by `/admin/login`.
 
 ---
 
