@@ -124,6 +124,13 @@ jobs:
             -e "s|{{SHA_AARCH64_MACOS}}|${sha_aarch64_macos}|g" \
             packaging/homebrew/zypher.rb.template > dist/zypher.rb
 
+      - name: Upload rendered Homebrew formula
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula
+          path: dist/zypher.rb
+          if-no-files-found: error
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -180,12 +187,10 @@ jobs:
 
     steps:
       - name: Download rendered formula
-        uses: robinraju/release-downloader@v1
+        uses: actions/download-artifact@v4
         with:
-          repository: ${{ env.ZYPHER_REPOSITORY }}
-          tag: v${{ needs.github-release.outputs.version }}
-          fileName: zypher.rb
-          out-file-path: dist
+          name: homebrew-formula
+          path: dist
 
       - name: Upload formula to tap
         env:
