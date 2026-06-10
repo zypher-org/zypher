@@ -182,6 +182,95 @@ pub fn filterLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocato
     return list;
 }
 
+/// FILTER with WHERE, ORDER BY, LIMIT, and OFFSET.
+/// Caller owns the rows and their text memory — call freeRow on each when done.
+pub fn filterOrderLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value, order_by: []const u8, limit: u64, offset: u64) QueryError!std.ArrayList(RowType(M)) {
+    var list = std.ArrayList(RowType(M)).empty;
+    const has_where = where.len > 0;
+    const has_order = order_by.len > 0;
+    var frags = std.ArrayList(u8).empty;
+    defer frags.deinit(gpa);
+    frags.appendSlice(gpa, M.select_all_sql) catch return error.AllocatorFailed;
+    if (has_where) {
+        frags.appendSlice(gpa, " WHERE ") catch return error.AllocatorFailed;
+        frags.appendSlice(gpa, where) catch return error.AllocatorFailed;
+    }
+    if (has_order) {
+        frags.appendSlice(gpa, " ORDER BY ") catch return error.AllocatorFailed;
+        frags.appendSlice(gpa, order_by) catch return error.AllocatorFailed;
+    }
+    frags.appendSlice(gpa, " LIMIT ? OFFSET ?") catch return error.AllocatorFailed;
+    const alloc_sql = frags.toOwnedSliceSentinel(gpa, 0) catch return error.AllocatorFailed;
+    errdefer gpa.free(alloc_sql);
+    defer gpa.free(alloc_sql);
+    var stmt = db.prepare(alloc_sql) catch return error.PrepareFailed;
+    defer stmt.finalize();
+    for (values, 0..) |v, i| {
+        stmt.bind(v, @intCast(i + 1)) catch return error.BindFailed;
+    }
+    const limit_idx: c_int = @intCast(values.len + 1);
+    const offset_idx: c_int = @intCast(values.len + 2);
+    stmt.bind(.{ .int = @intCast(limit) }, limit_idx) catch return error.BindFailed;
+    stmt.bind(.{ .int = @intCast(offset) }, offset_idx) catch return error.BindFailed;
+    while (stmt.step() catch return error.StepFailed) {
+        const row = try readRow(M, &stmt, gpa);
+        list.append(gpa, row) catch return error.AllocatorFailed;
+    }
+    log.info("filtered {d} rows from {s} (order={s}, limit={d}, offset={d})", .{ list.items.len, M.table_name, order_by, limit, offset });
+    return list;
+}
+
+/// SELECT first matching row. Returns null if no match.
+/// Caller owns the row's text memory — call freeRow when done.
+pub fn first(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value) QueryError!?RowType(M) {
+    var rows = try filterLimitOffset(M, db, gpa, where, values, 1, 0);
+    if (rows.items.len == 0) return null;
+    const row = rows.items[0];
+    rows.deinit(gpa);
+    return row;
+}
+
+/// INSERT or UPDATE a record. If row[0] (id) is 0, inserts; otherwise updates.
+/// Returns the rowid. On insert, row[0] is updated with the new id.
+pub fn save(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, row: *RowType(M)) QueryError!i64 {
+    _ = gpa;
+    const id: i64 = row[0];
+    if (id == 0) {
+        // INSERT — skip id field (auto-increment)
+        var stmt = db.prepare(M.insert_sql) catch return error.PrepareFailed;
+        defer stmt.finalize();
+        inline for (1..M.fields_len) |i| {
+            const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
+            if (FieldType == i64) {
+                stmt.bind(.{ .int = row[i] }, @intCast(i)) catch return error.BindFailed;
+            } else if (FieldType == f64) {
+                stmt.bind(.{ .float = row[i] }, @intCast(i)) catch return error.BindFailed;
+            } else if (FieldType == []const u8) {
+                stmt.bind(.{ .text = row[i] }, @intCast(i)) catch return error.BindFailed;
+            } else if (FieldType == bool) {
+                stmt.bind(.{ .int = if (row[i]) @as(i64, 1) else 0 }, @intCast(i)) catch return error.BindFailed;
+            }
+        }
+        _ = stmt.step() catch return error.StepFailed;
+        const new_id = db.lastInsertRowId();
+        row[0] = new_id;
+        log.info("saved new record in {s}: rowid={d}", .{ M.table_name, new_id });
+        return new_id;
+    } else {
+        // UPDATE
+        const values = blk: {
+            var arr: [M.fields_len - 1]sqlite.Value = undefined;
+            inline for (1..M.fields_len) |i| {
+                const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
+                arr[i - 1] = if (FieldType == i64) .{ .int = row[i] } else if (FieldType == f64) .{ .float = row[i] } else if (FieldType == []const u8) .{ .text = row[i] } else if (FieldType == bool) .{ .int = if (row[i]) 1 else 0 } else .{ .int = 0 };
+            }
+            break :blk &arr;
+        };
+        try updateById(M, db, id, values);
+        return id;
+    }
+}
+
 test {
     std.testing.refAllDecls(@This());
 }

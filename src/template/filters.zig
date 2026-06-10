@@ -35,6 +35,8 @@ pub fn apply(gpa: std.mem.Allocator, name: []const u8, value: Value) !FilterResu
 
 pub fn applyWithArg(gpa: std.mem.Allocator, name: []const u8, value: Value, arg: []const u8) !FilterResult {
     if (std.mem.eql(u8, name, "join")) return filterJoin(gpa, value, arg);
+    if (std.mem.eql(u8, name, "truncate")) return filterTruncate(gpa, value, arg);
+    if (std.mem.eql(u8, name, "date")) return filterDate(gpa, value, arg);
     return apply(gpa, name, value);
 }
 
@@ -116,6 +118,57 @@ fn filterJoin(gpa: std.mem.Allocator, value: Value, sep: []const u8) !FilterResu
             }
             const result = try buf.toOwnedSlice(gpa);
             return .{ .value = .{ .string = result }, .owned = true };
+        },
+        else => return .{ .value = value, .owned = false },
+    }
+}
+
+fn filterTruncate(gpa: std.mem.Allocator, value: Value, arg: []const u8) !FilterResult {
+    switch (value) {
+        .string => |s| {
+            const n = std.fmt.parseInt(usize, arg, 10) catch {
+                return .{ .value = value, .owned = false };
+            };
+            if (s.len <= n) return .{ .value = value, .owned = false };
+            const ellipsis = "...";
+            const buf = try gpa.alloc(u8, n + ellipsis.len);
+            @memcpy(buf[0..n], s[0..n]);
+            @memcpy(buf[n..], ellipsis);
+            return .{ .value = .{ .string = buf }, .owned = true };
+        },
+        else => return .{ .value = value, .owned = false },
+    }
+}
+
+fn filterDate(gpa: std.mem.Allocator, value: Value, arg: []const u8) !FilterResult {
+    _ = arg;
+    switch (value) {
+        .int => |ts| {
+            if (ts < 0) return .{ .value = value, .owned = false };
+            const epoch_secs = std.time.epoch.EpochSeconds{ .secs = @intCast(ts) };
+            const epoch_day = epoch_secs.getEpochDay();
+            const year_day = epoch_day.calculateYearDay();
+            const month_day = year_day.calculateMonthDay();
+            var buf: [80]u8 = undefined;
+            const y = year_day.year;
+            const m = month_day.month.numeric();
+            const d = @as(u32, @intCast(month_day.day_index + 1));
+            var tmp: [4]u8 = undefined;
+            const y_str = std.fmt.bufPrint(&tmp, "{d}", .{y}) catch "1970";
+            var pos: usize = 0;
+            @memcpy(buf[pos..][0..y_str.len], y_str);
+            pos += y_str.len;
+            buf[pos] = '-'; pos += 1;
+            const m_str = std.fmt.bufPrint(&tmp, "{d}", .{m}) catch "01";
+            if (m_str.len < 2) { buf[pos] = '0'; pos += 1; }
+            @memcpy(buf[pos..][0..m_str.len], m_str);
+            pos += m_str.len;
+            buf[pos] = '-'; pos += 1;
+            const d_str = std.fmt.bufPrint(&tmp, "{d}", .{d}) catch "01";
+            if (d_str.len < 2) { buf[pos] = '0'; pos += 1; }
+            @memcpy(buf[pos..][0..d_str.len], d_str);
+            pos += d_str.len;
+            return .{ .value = .{ .string = try gpa.dupe(u8, buf[0..pos]) }, .owned = true };
         },
         else => return .{ .value = value, .owned = false },
     }

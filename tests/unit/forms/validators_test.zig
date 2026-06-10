@@ -100,6 +100,43 @@ test "validators: choices accepts values in the set" {
     try std.testing.expect(v("yellow") != null);
 }
 
+// ── regex ──────────────────────────────────────────────────────────────────
+
+test "validators: regex matches exact pattern" {
+    const v = validators.regex("hello");
+    try std.testing.expect(v("hello") == null);
+    try std.testing.expect(v("world") != null);
+}
+
+test "validators: regex with wildcard" {
+    const v = validators.regex("he*");
+    try std.testing.expect(v("hello") == null);
+    try std.testing.expect(v("he") == null);
+    try std.testing.expect(v("help") == null);
+}
+
+test "validators: regex with single char wildcard" {
+    const v = validators.regex("h?llo");
+    try std.testing.expect(v("hello") == null);
+    try std.testing.expect(v("hallo") == null);
+    try std.testing.expect(v("hxllo") == null);
+    try std.testing.expect(v("hllo") != null);
+}
+
+test "validators: regex with leading wildcard" {
+    const v = validators.regex("*world");
+    try std.testing.expect(v("hello world") == null);
+    try std.testing.expect(v("world") == null);
+    try std.testing.expect(v("world!") != null);
+}
+
+test "validators: regex with trailing wildcard" {
+    const v = validators.regex("hello*");
+    try std.testing.expect(v("hello world") == null);
+    try std.testing.expect(v("hello") == null);
+    try std.testing.expect(v("hi") != null);
+}
+
 // ── custom ────────────────────────────────────────────────────────────────
 
 test "validators: custom validator with fn pointer" {

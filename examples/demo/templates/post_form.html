@@ -1,0 +1,7 @@
+<h1>{{ form_title }}</h1>
+<form method="post" action="{{ form_action }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label>Title: <input type="text" name="title" value="{{ title_value }}" required></label>
+    <label>Body: <textarea name="body" rows="10" required>{{ body_value }}</textarea></label>
+    <button type="submit">{{ submit_text }}</button>
+</form>

@@ -76,3 +76,38 @@ test "filters: join concatenates list with separator" {
     defer result.deinit(gpa);
     try std.testing.expectEqualStrings("a, b, c", result.value.string);
 }
+
+test "filters: truncate shortens string with ellipsis" {
+    const gpa = std.testing.allocator;
+    var result = try filters.applyWithArg(gpa, "truncate", Value{ .string = "hello world" }, "5");
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("hello...", result.value.string);
+}
+
+test "filters: truncate returns full string if shorter than n" {
+    const gpa = std.testing.allocator;
+    var result = try filters.applyWithArg(gpa, "truncate", Value{ .string = "hi" }, "10");
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("hi", result.value.string);
+}
+
+test "filters: truncate returns empty for empty string" {
+    const gpa = std.testing.allocator;
+    var result = try filters.applyWithArg(gpa, "truncate", Value{ .string = "" }, "5");
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("", result.value.string);
+}
+
+test "filters: date formats timestamp" {
+    const gpa = std.testing.allocator;
+    var result = try filters.applyWithArg(gpa, "date", Value{ .int = 0 }, "unix");
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("1970-01-01", result.value.string);
+}
+
+test "filters: date formats recent timestamp" {
+    const gpa = std.testing.allocator;
+    var result = try filters.applyWithArg(gpa, "date", Value{ .int = 1717000000 }, "unix");
+    defer result.deinit(gpa);
+    try std.testing.expect(result.value.string.len > 0);
+}

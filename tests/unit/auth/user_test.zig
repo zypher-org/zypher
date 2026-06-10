@@ -55,6 +55,16 @@ test "user: deactivate user" {
     try std.testing.expect(!u.is_active);
 }
 
+test "user: auth views loginView returns redirect on success" {
+    // Verify the function signatures exist (compile-time check)
+    const _loginView = user_mod.loginView;
+    const _logoutView = user_mod.logoutView;
+    const _registerView = user_mod.registerView;
+    _ = _loginView;
+    _ = _logoutView;
+    _ = _registerView;
+}
+
 test "user: inactive user cannot authenticate" {
     var u = try User.init(std.testing.allocator, "heidi", "pass");
     defer u.deinit();

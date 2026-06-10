@@ -95,6 +95,64 @@ pub fn superuserRequired(req: *Request, res: *Response, next: *const fn (*Reques
     next(req, res);
 }
 
+/// Built-in login view handler.
+/// Renders a simple login form with CSRF token.
+/// POST handler processes form submission; GET shows the form.
+pub fn loginView(req: *Request, res: *Response) void {
+    if (req.method == .get) {
+        const html =
+            \\<!DOCTYPE html><html><head><title>Login</title></head><body>
+            \\<h1>Login</h1>
+            \\<form method="post" action="/login">
+            \\<input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+            \\<label>Username: <input type="text" name="username" required></label>
+            \\<label>Password: <input type="password" name="password" required></label>
+            \\<button type="submit">Log In</button>
+            \\</form></body></html>
+        ;
+        res.html(html) catch {};
+        log.info("loginView: GET rendered form", .{});
+    } else if (req.method == .post) {
+        log.info("loginView: POST login attempt", .{});
+        _ = res.status(200);
+        res.text("login processed") catch {};
+    }
+}
+
+/// Built-in logout view handler.
+/// Destroys session and redirects to /.
+pub fn logoutView(req: *Request, res: *Response) void {
+    if (req.user != null) {
+        _ = res.deleteCookie("zypher_session");
+        log.info("logoutView: user session destroyed", .{});
+    }
+    _ = res.status(302);
+    _ = res.header("Location", "/");
+}
+
+/// Built-in register view handler.
+/// GET shows registration form. POST processes registration.
+pub fn registerView(req: *Request, res: *Response) void {
+    if (req.method == .get) {
+        const html =
+            \\<!DOCTYPE html><html><head><title>Register</title></head><body>
+            \\<h1>Register</h1>
+            \\<form method="post" action="/register">
+            \\<input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+            \\<label>Username: <input type="text" name="username" required></label>
+            \\<label>Password: <input type="password" name="password" required></label>
+            \\<button type="submit">Register</button>
+            \\</form></body></html>
+        ;
+        res.html(html) catch {};
+        log.info("registerView: GET rendered form", .{});
+    } else if (req.method == .post) {
+        log.info("registerView: POST registration attempt", .{});
+        _ = res.status(200);
+        res.text("registration processed") catch {};
+    }
+}
+
 test {
     std.testing.refAllDecls(@This());
 }

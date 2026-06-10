@@ -1,0 +1,28 @@
+<div class="post">
+    <h1>{{ title }}</h1>
+    <div class="meta">by {{ author }} &middot; {{ created_at }}</div>
+    <div>{{ body }}</div>
+</div>
+
+<h2>Comments</h2>
+{% if comments %}
+    {% for comment in comments %}
+        <div class="comment">
+            <strong>{{ comment.author }}</strong> &middot; {{ comment.created_at }}
+            <div>{{ comment.body }}</div>
+        </div>
+    {% endfor %}
+{% else %}
+    <p>No comments yet.</p>
+{% endif %}
+
+{% if authenticated %}
+    <h3>Add a Comment</h3>
+    <form method="post" action="/post/{{ post_id }}/comment">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <label>Comment: <textarea name="body" rows="3" required></textarea></label>
+        <button type="submit">Submit</button>
+    </form>
+{% else %}
+    <p><a href="/login">Log in</a> to comment.</p>
+{% endif %}
