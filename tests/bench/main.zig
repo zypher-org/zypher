@@ -47,26 +47,25 @@ fn benchTemplateRender(allocator: std.mem.Allocator) !u64 {
     return elapsed;
 }
 
+const Route = zypher.router.Route;
+const Router = zypher.router.Router;
+const Request = zypher.core.Request;
+const Response = zypher.core.Response;
+
+fn _bh1(_: *Request, _: *Response) void {}
+fn _bh2(_: *Request, _: *Response) void {}
+fn _bh3(_: *Request, _: *Response) void {}
+fn _bh4(_: *Request, _: *Response) void {}
+fn _bh5(_: *Request, _: *Response) void {}
+fn _bhf(_: *Request, _: *Response) void {}
+
 fn benchRouterDispatch(allocator: std.mem.Allocator) !u64 {
-    _ = allocator;
-    const Route = zypher.router.Route;
-    const Router = zypher.router.Router;
-    const Request = zypher.core.Request;
-    const Response = zypher.core.Response;
-
-    fn h1(_: *Request, _: *Response) void {}
-    fn h2(_: *Request, _: *Response) void {}
-    fn h3(_: *Request, _: *Response) void {}
-    fn h4(_: *Request, _: *Response) void {}
-    fn h5(_: *Request, _: *Response) void {}
-    fn hf(_: *Request, _: *Response) void {}
-
-    const routes = .{
-        Route.init(.get, "/", h1),
-        Route.init(.get, "/users/:id", h2),
-        Route.init(.post, "/users", h3),
-        Route.init(.get, "/users/:id/posts", h4),
-        Route.init(.get, "/static/*", h5),
+    const routes = [_]Route{
+        Route.init(.get, "/", _bh1),
+        Route.init(.get, "/users/:id", _bh2),
+        Route.init(.post, "/users", _bh3),
+        Route.init(.get, "/users/:id/posts", _bh4),
+        Route.init(.get, "/static/*", _bh5),
     };
 
     var req = Request{
@@ -84,7 +83,7 @@ fn benchRouterDispatch(allocator: std.mem.Allocator) !u64 {
     var res = Response.init(allocator);
     defer res.deinit();
 
-    const router = Router.init(&routes, hf);
+    const router = Router.initFromSlice(&routes, _bhf);
 
     const start = nowMs();
     var i: u64 = 0;
@@ -100,24 +99,19 @@ fn benchOrmQuery(allocator: std.mem.Allocator) !u64 {
     const query = zypher.orm.query;
     const schema = zypher.orm.schema;
 
-    const TestModel = schema.Model("test_bench", &.{
-        schema.Field("id", .integer, .{ .primary = true }),
-        schema.Field("name", .text, .{}),
-    });
+    const BenchFields = struct {
+        id: schema.FieldDef = schema.Field("id", .integer, .{ .primary = true }),
+        name: schema.FieldDef = schema.Field("name", .text, .{}),
+    };
+    const TestModel = schema.Model("test_bench", BenchFields);
 
-    const db_path = try std.fmt.allocPrint(allocator, "/tmp/zypher_bench_{d}.db", .{std.time.milliTimestamp()});
-    defer allocator.free(db_path);
-
-    // Clean up previous bench db
-    _ = std.fs.cwd().deleteFile(db_path) catch {};
-
-    var db = try sqlite.Db.open(allocator, db_path);
+    var db = try sqlite.Db.open(allocator, ":memory:");
     defer db.close();
 
     db.exec(TestModel.create_table_sql) catch {};
     var i: u64 = 0;
     while (i < 100) : (i += 1) {
-        _ = query.create(TestModel, &db, &.{ .{ .text = "bench" } }) catch {};
+        _ = query.create(TestModel, &db, &.{.{ .text = "bench" }}) catch {};
     }
 
     const start = nowMs();
@@ -126,9 +120,6 @@ fn benchOrmQuery(allocator: std.mem.Allocator) !u64 {
         _ = query.all(TestModel, &db, allocator) catch {};
     }
     const elapsed = @as(u64, @intCast(nowMs() - start));
-
-    // Clean up
-    _ = std.fs.cwd().deleteFile(db_path) catch {};
 
     return elapsed;
 }

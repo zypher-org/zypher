@@ -65,25 +65,74 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 
 ---
 
-## Example
+## Quick Start
+
+1. **Add zypher as a dependency** in your `build.zig.zon`:
+2. **Create a handler** — any function matching `*const fn (*Request, *Response) void`
+3. **Register routes** at comptime
+4. **Start the server**
+
+### Minimal Example
 
 ```zig
 const std = @import("std");
 const zypher = @import("zypher");
+const Route = zypher.router.Route;
+const Router = zypher.router.Router;
 
-pub fn index(req: *zypher.Request, res: *const zypher.Response) !void {
-    try res.text("Hello from zypher");
+fn index(req: *zypher.core.Request, res: *zypher.core.Response) void {
+    _ = req;
+    res.text("Hello from zypher") catch {};
+}
+
+fn notFound(req: *zypher.core.Request, res: *zypher.core.Response) void {
+    _ = req;
+    _ = res.status(404);
+    res.text("Not Found") catch {};
 }
 
 pub fn main(init: std.process.Init) !void {
-    var app = zypher.App.init(init.gpa, init.io);
+    const routes = [_]Route{
+        Route.init(.get, "/", index),
+    };
+    var router = Router.initFromSlice(&routes, notFound);
+
+    var app = zypher.core.App.init(init.gpa, .{ .port = 8080 });
     defer app.deinit();
+    app.routerHandler(router.dispatch);
 
-    app.router.get("/", index);
-
-    try app.run(.{ .port = 8080 });
+    try app.listenAndServe(init.io);
 }
 ```
+
+### With Middleware
+
+```zig
+const Chain = zypher.middleware.Chain;
+const DemoRL = zypher.middleware.rate_limit.middlewareWith(
+    .{ .max_requests = 100, .window_seconds = 60 },
+);
+
+fn mwHandler(req: *zypher.core.Request, res: *zypher.core.Response) void {
+    const MwChain = Chain(.{
+        zypher.middleware.logger.middleware,
+        DemoRL.handle,
+    });
+    MwChain.run(req, res, router.dispatch);
+}
+
+app.middlewareHandler(mwHandler);
+```
+
+### Full Demo
+
+See `examples/demo/` for a complete application with:
+- ORM models (Post, Comment) backed by SQLite
+- Template rendering with `{% extends %}`, `{% block %}`, `{{ variable|filter }}`
+- Authentication (register, login, logout) with session management
+- CSRF protection on all mutating requests
+- Auto-generated admin panel for registered models
+- Rate limiting and request logging middleware
 
 ---
 

@@ -1,5 +1,9 @@
 const std = @import("std");
 const demo = @import("demo");
+const zypher = @import("zypher");
+const sqlite = zypher.orm.sqlite;
+const query = zypher.orm.query;
+const password = zypher.auth.password;
 
 fn hasMiddleware(name: []const u8) bool {
     for (demo.middleware_names) |candidate| {
@@ -47,4 +51,122 @@ test "demo forms validate required post and comment input" {
     defer bound_comment.deinit();
     try std.testing.expect(!bound_comment.validate());
     try std.testing.expect(bound_comment.errors.contains("body"));
+}
+
+test "register user via ORM: create user, hash password, authenticate" {
+    var db = try sqlite.Db.open(std.testing.allocator, ":memory:");
+    defer db.close();
+
+    try db.exec(
+        \\CREATE TABLE IF NOT EXISTS users (
+        \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
+        \\  username TEXT NOT NULL UNIQUE,
+        \\  password_hash TEXT NOT NULL,
+        \\  role TEXT NOT NULL DEFAULT 'user',
+        \\  is_active INTEGER NOT NULL DEFAULT 1
+        \\)
+    );
+
+    const hash = try password.hash(std.testing.allocator, "secure_password");
+    defer std.testing.allocator.free(hash);
+
+    const insert_sql = "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, 'user', 1)";
+    var stmt = try db.prepare(insert_sql);
+    defer stmt.finalize();
+    try stmt.bind(.{ .text = "testuser" }, 1);
+    try stmt.bind(.{ .text = hash }, 2);
+    _ = try stmt.step();
+
+    var lookup = try db.prepare("SELECT password_hash, role FROM users WHERE username = ?");
+    defer lookup.finalize();
+    try lookup.bind(.{ .text = "testuser" }, 1);
+    try std.testing.expect(try lookup.step());
+
+    const stored_hash = (try lookup.column(.text, 0)).text;
+    const role = (try lookup.column(.text, 1)).text;
+    try std.testing.expectEqualStrings("user", role);
+    try std.testing.expect(try password.verify(stored_hash, "secure_password"));
+    try std.testing.expect(!try password.verify(stored_hash, "wrong_password"));
+}
+
+test "create post and comment, verify data flow end-to-end" {
+    var db = try sqlite.Db.open(std.testing.allocator, ":memory:");
+    defer db.close();
+
+    try db.exec(demo.Post.create_table_sql);
+    try db.exec(demo.Comment.create_table_sql);
+
+    const gpa = std.testing.allocator;
+
+    const post_id = try query.create(demo.Post, &db, &.{
+        sqlite.Value{ .text = "Test Post" },
+        sqlite.Value{ .text = "This is the body of the test post." },
+        sqlite.Value{ .text = "alice" },
+        sqlite.Value{ .int = 1000000 },
+    });
+
+    var posts = try query.all(demo.Post, &db, gpa);
+    defer {
+        for (posts.items) |*r| query.freeRow(demo.Post, gpa, r);
+        posts.deinit(gpa);
+    }
+    try std.testing.expectEqual(@as(usize, 1), posts.items.len);
+    try std.testing.expectEqualStrings("Test Post", posts.items[0][1]);
+
+    _ = try query.create(demo.Comment, &db, &.{
+        sqlite.Value{ .int = post_id },
+        sqlite.Value{ .text = "bob" },
+        sqlite.Value{ .text = "Great post!" },
+        sqlite.Value{ .int = 1000001 },
+    });
+
+    var comments = try query.filter(demo.Comment, &db, gpa, "post_id = ?", &.{.{ .int = post_id }});
+    defer {
+        for (comments.items) |*r| query.freeRow(demo.Comment, gpa, r);
+        comments.deinit(gpa);
+    }
+    try std.testing.expectEqual(@as(usize, 1), comments.items.len);
+    try std.testing.expectEqualStrings("bob", comments.items[0][2]);
+    try std.testing.expectEqualStrings("Great post!", comments.items[0][3]);
+
+    var all_comments = try query.all(demo.Comment, &db, gpa);
+    defer {
+        for (all_comments.items) |*r| query.freeRow(demo.Comment, gpa, r);
+        all_comments.deinit(gpa);
+    }
+    try std.testing.expectEqual(@as(usize, 1), all_comments.items.len);
+}
+
+test "admin site exposes routes for registered models" {
+    const routes = demo.Site.routes();
+    try std.testing.expect(routes.len >= 14);
+
+    var has_admin_index = false;
+    var has_posts_list = false;
+    var has_comments_list = false;
+    for (routes) |r| {
+        if (std.mem.eql(u8, r.pattern, "/admin/")) has_admin_index = true;
+        if (std.mem.eql(u8, r.pattern, "/admin/posts/")) has_posts_list = true;
+        if (std.mem.eql(u8, r.pattern, "/admin/comments/")) has_comments_list = true;
+    }
+    try std.testing.expect(has_admin_index);
+    try std.testing.expect(has_posts_list);
+    try std.testing.expect(has_comments_list);
+}
+
+test "logout: session destruction works via session store" {
+    var store = zypher.auth.session.SessionStore.init(std.testing.allocator);
+    defer store.deinit();
+
+    var session = try store.create();
+    defer session.deinit(std.testing.allocator);
+    try session.put(std.testing.allocator, "username", "testuser");
+    try store.save(&session);
+
+    const retrieved = try store.get(session.id);
+    try std.testing.expect(retrieved != null);
+
+    try store.destroy(session.id);
+    const after_destroy = try store.get(session.id);
+    try std.testing.expect(after_destroy == null);
 }
