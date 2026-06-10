@@ -155,7 +155,7 @@ jobs:
       - name: Prepare npm metadata
         env:
           VERSION: ${{ needs.github-release.outputs.version }}
-        run: npm --prefix npm version "${VERSION}" --no-git-tag-version
+        run: npm --prefix npm version "${VERSION}" --no-git-tag-version --allow-same-version
 
       - name: Publish npm package
         env:
