@@ -1,9 +1,11 @@
 # Release Process
 
-Zypher releases are driven by annotated Git tags. Tags matching `v*` trigger the
-release workflow, which builds all supported CLI targets, publishes a GitHub
-release, publishes the npm package, renders a Homebrew formula with release
-checksums, and pushes that formula to the Homebrew tap.
+Zypher releases are driven by annotated Git tags. Pushes to `main` run the
+release workflow's verification job only. Tags matching `v*` or manual
+dispatches run the full release workflow, which builds all supported CLI
+targets, publishes a GitHub release, publishes the npm package, renders a
+Homebrew formula with release checksums, and pushes that formula to the
+Homebrew tap.
 
 ## Required Secrets
 
