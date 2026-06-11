@@ -79,6 +79,7 @@ jobs:
     outputs:
       version: ${{ steps.vars.outputs.version }}
       release_tag: ${{ steps.vars.outputs.release_tag }}
+      zig_version: ${{ steps.vars.outputs.zig_version }}
       sha_x86_64_linux: ${{ steps.vars.outputs.sha_x86_64_linux }}
       sha_aarch64_linux: ${{ steps.vars.outputs.sha_aarch64_linux }}
       sha_x86_64_macos: ${{ steps.vars.outputs.sha_x86_64_macos }}
@@ -111,6 +112,13 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
 
+          zig_version=$(sed -n 's/.*\.minimum_zig_version = "\([^"]*\)".*/\1/p' build.zig.zon | head -n 1)
+          if [ -z "${zig_version}" ]; then
+            echo "::error::Could not read .minimum_zig_version from build.zig.zon."
+            exit 1
+          fi
+          echo "zig_version=${zig_version}" >> "$GITHUB_OUTPUT"
+
           zig build all-targets -Doptimize=ReleaseSafe
 
           mkdir -p dist
@@ -129,10 +137,12 @@ jobs:
             cp "zig-out/bin/${target}/${exe}" "dist/${pkg}/${exe}"
             cp README.md LICENSE "dist/${pkg}/"
             mkdir -p "dist/${pkg}/source"
-            cp build.zig build.zig.zon LICENSE README.md "dist/${pkg}/source/"
+            cp build.zig build.zig.zon install.sh LICENSE README.md "dist/${pkg}/source/"
             cp -R src templates tools vendor "dist/${pkg}/source/"
             tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
           done
+
+          cp install.sh dist/install.sh
 
           cd dist
           sha256sum *.tar.gz > SHA256SUMS
@@ -182,8 +192,10 @@ jobs:
           sha_aarch64_linux="${{ needs.build.outputs.sha_aarch64_linux }}"
           sha_x86_64_macos="${{ needs.build.outputs.sha_x86_64_macos }}"
           sha_aarch64_macos="${{ needs.build.outputs.sha_aarch64_macos }}"
+          zig_version="${{ needs.build.outputs.zig_version }}"
           sed \
             -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{ZIG_VERSION}}|${zig_version}|g" \
             -e "s|{{BASE_URL}}|${base_url}|g" \
             -e "s|{{SHA_X86_64_LINUX}}|${sha_x86_64_linux}|g" \
             -e "s|{{SHA_AARCH64_LINUX}}|${sha_aarch64_linux}|g" \
@@ -211,6 +223,7 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/SHA256SUMS
+            dist/install.sh
             dist/${{ env.HOMEBREW_FORMULA_FILE }}
 
   npm-release:
@@ -231,6 +244,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           npm --prefix npm pkg set name="${PACKAGE_NAME}"
+          npm --prefix npm pkg set zypher.zigVersion="${{ needs.build.outputs.zig_version }}"
           npm --prefix npm version "${VERSION}" --no-git-tag-version --allow-same-version
 
       - name: Publish npm package
@@ -312,6 +326,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           SHA256_X86_64: ${{ needs.build.outputs.sha_x86_64_linux }}
           SHA256_AARCH64: ${{ needs.build.outputs.sha_aarch64_linux }}
+          ZIG_VERSION: ${{ needs.build.outputs.zig_version }}
         run: |
           set -eu
           if [ -z "${AUR_SSH_KEY}" ]; then
@@ -336,6 +351,7 @@ jobs:
           sed \
             -e "s|{{PACKAGE_NAME}}|${PACKAGE_NAME}|g" \
             -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{ZIG_VERSION}}|${ZIG_VERSION}|g" \
             -e "s|{{SHA256_X86_64}}|${SHA256_X86_64}|g" \
             -e "s|{{SHA256_AARCH64}}|${SHA256_AARCH64}|g" \
             ../packaging/aur/PKGBUILD.template > PKGBUILD
@@ -343,6 +359,7 @@ jobs:
           sed \
             -e "s|{{PACKAGE_NAME}}|${PACKAGE_NAME}|g" \
             -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{ZIG_VERSION}}|${ZIG_VERSION}|g" \
             -e "s|{{SHA256_X86_64}}|${SHA256_X86_64}|g" \
             -e "s|{{SHA256_AARCH64}}|${SHA256_AARCH64}|g" \
             ../packaging/aur/SRCINFO.template > .SRCINFO
@@ -371,6 +388,7 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ needs.build.outputs.version }}
+          ZIG_VERSION: ${{ needs.build.outputs.zig_version }}
           SHA256_X86_64_WINDOWS: ${{ needs.build.outputs.sha_x86_64_windows }}
           SHA256_AARCH64_WINDOWS: ${{ needs.build.outputs.sha_aarch64_windows }}
         run: |
@@ -384,6 +402,7 @@ jobs:
           (Get-Content packaging/chocolatey/tools/chocolateyinstall.ps1.template) `
             -replace '{{PACKAGE_NAME}}', $env:PACKAGE_NAME `
             -replace '{{VERSION}}', $env:VERSION `
+            -replace '{{ZIG_VERSION}}', $env:ZIG_VERSION `
             -replace '{{SHA256_X86_64_WINDOWS}}', $env:SHA256_X86_64_WINDOWS `
             -replace '{{SHA256_AARCH64_WINDOWS}}', $env:SHA256_AARCH64_WINDOWS `
           | Set-Content -Path tools/chocolateyinstall.ps1

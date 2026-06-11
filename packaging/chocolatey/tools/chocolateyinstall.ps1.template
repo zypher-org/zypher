@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $toolsDir  = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
 $version   = '{{VERSION}}'
 $pkgName   = '{{PACKAGE_NAME}}'
+$zigVersion = '{{ZIG_VERSION}}'
 
 $url64     = "https://github.com/zypher-org/zypher/releases/download/v$version/zypher-v$version-x86_64-windows-gnu.tar.gz"
 $url64Arm  = "https://github.com/zypher-org/zypher/releases/download/v$version/zypher-v$version-aarch64-windows-gnu.tar.gz"
@@ -20,5 +21,137 @@ $packageDir = Get-ChildItem -Path $extractDir -Directory | Select-Object -First 
 Copy-Item -Path (Join-Path $packageDir.FullName '*') -Destination $toolsDir -Recurse -Force
 Remove-Item $archivePath -Force
 Remove-Item $extractDir -Recurse -Force
+
+$nativeExe = Join-Path $toolsDir 'zypher.exe'
+$nativeBin = Join-Path $toolsDir 'zypher-bin.exe'
+if (Test-Path $nativeExe) {
+  if (Test-Path $nativeBin) {
+    Remove-Item $nativeBin -Force
+  }
+  Rename-Item -Path $nativeExe -NewName 'zypher-bin.exe'
+}
+
+function Resolve-ZypherHome {
+  if ($env:ZYPHER_HOME) {
+    return $env:ZYPHER_HOME
+  }
+  return Join-Path $env:USERPROFILE '.zypher'
+}
+
+function Resolve-ZigTarget {
+  if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
+    return 'aarch64-windows'
+  }
+  return 'x86_64-windows'
+}
+
+function Install-ZypherRuntime {
+  param([string] $ZypherHome)
+
+  $zigTarget = Resolve-ZigTarget
+  $zigInstallDir = Join-Path $ZypherHome "zig\$zigVersion\$zigTarget"
+  $zigExe = Join-Path $zigInstallDir 'zig.exe'
+  if (-not (Test-Path $zigExe)) {
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString('N'))
+    $partialInstallDir = "$zigInstallDir.partial-$PID"
+    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $zigInstallDir) -Force | Out-Null
+    try {
+      $zigArchive = Join-Path $tmpDir 'zig.zip'
+      Get-ChocolateyWebFile -PackageName $pkgName -FileFullPath $zigArchive -Url "https://ziglang.org/builds/zig-$zigTarget-$zigVersion.zip"
+      Expand-Archive -LiteralPath $zigArchive -DestinationPath $tmpDir -Force
+      $extractedZig = Join-Path $tmpDir "zig-$zigTarget-$zigVersion"
+      if (Test-Path $partialInstallDir) {
+        Remove-Item $partialInstallDir -Recurse -Force
+      }
+      Move-Item -Path $extractedZig -Destination $partialInstallDir
+      if (Test-Path $zigInstallDir) {
+        Remove-Item $zigInstallDir -Recurse -Force
+      }
+      Move-Item -Path $partialInstallDir -Destination $zigInstallDir
+    } finally {
+      if (Test-Path $partialInstallDir) {
+        Remove-Item $partialInstallDir -Recurse -Force
+      }
+      if (Test-Path $tmpDir) {
+        Remove-Item $tmpDir -Recurse -Force
+      }
+    }
+  }
+
+  $sourceInstallDir = Join-Path $ZypherHome "source\$version"
+  $sourceMarker = Join-Path $sourceInstallDir 'src\zypher.zig'
+  if (-not (Test-Path $sourceMarker)) {
+    if (Test-Path $sourceInstallDir) {
+      Remove-Item $sourceInstallDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $sourceInstallDir -Force | Out-Null
+    Copy-Item -Path (Join-Path $toolsDir 'source\*') -Destination $sourceInstallDir -Recurse -Force
+  }
+}
+
+Install-ZypherRuntime -ZypherHome (Resolve-ZypherHome)
+
+$wrapperPs1 = Join-Path $toolsDir 'zypher.ps1'
+@"
+`$ErrorActionPreference = 'Stop'
+`$toolsDir = Split-Path -Parent `$MyInvocation.MyCommand.Definition
+`$version = '$version'
+`$zigVersion = '$zigVersion'
+if (`$env:ZYPHER_HOME) {
+  `$zypherHome = `$env:ZYPHER_HOME
+} else {
+  `$zypherHome = Join-Path `$env:USERPROFILE '.zypher'
+}
+`$zigTarget = if (`$env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64-windows' } else { 'x86_64-windows' }
+`$zigDir = Join-Path `$zypherHome "zig\`$zigVersion\`$zigTarget"
+`$zigExe = Join-Path `$zigDir 'zig.exe'
+if (-not (Test-Path `$zigExe)) {
+  `$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString('N'))
+  `$partialInstallDir = "`$zigDir.partial-`$PID"
+  New-Item -ItemType Directory -Path `$tmpDir -Force | Out-Null
+  New-Item -ItemType Directory -Path (Split-Path -Parent `$zigDir) -Force | Out-Null
+  try {
+    `$zigArchive = Join-Path `$tmpDir 'zig.zip'
+    `$zigUrl = "https://ziglang.org/builds/zig-`$zigTarget-`$zigVersion.zip"
+    Invoke-WebRequest -Uri `$zigUrl -OutFile `$zigArchive
+    Expand-Archive -LiteralPath `$zigArchive -DestinationPath `$tmpDir -Force
+    `$extractedZig = Join-Path `$tmpDir "zig-`$zigTarget-`$zigVersion"
+    if (Test-Path `$partialInstallDir) { Remove-Item `$partialInstallDir -Recurse -Force }
+    Move-Item -Path `$extractedZig -Destination `$partialInstallDir
+    if (Test-Path `$zigDir) { Remove-Item `$zigDir -Recurse -Force }
+    Move-Item -Path `$partialInstallDir -Destination `$zigDir
+  } finally {
+    if (Test-Path `$partialInstallDir) { Remove-Item `$partialInstallDir -Recurse -Force }
+    if (Test-Path `$tmpDir) { Remove-Item `$tmpDir -Recurse -Force }
+  }
+}
+`$sourceDir = Join-Path `$zypherHome "source\`$version"
+`$sourceMarker = Join-Path `$sourceDir 'src\zypher.zig'
+if (-not (Test-Path `$sourceMarker)) {
+  if (Test-Path `$sourceDir) { Remove-Item `$sourceDir -Recurse -Force }
+  New-Item -ItemType Directory -Path `$sourceDir -Force | Out-Null
+  Copy-Item -Path (Join-Path `$toolsDir 'source\*') -Destination `$sourceDir -Recurse -Force
+}
+`$env:PATH = "`$zigDir;`$env:PATH"
+`$env:ZYPHER_ROOT = `$sourceDir
+`$native = Join-Path `$toolsDir 'zypher-bin.exe'
+if (`$args.Length -gt 0 -and (`$args[0] -eq 'run' -or `$args[0] -eq 'doc' -or `$args[0] -eq 'doc-user')) {
+  `$nativeArgs = @(`$args[0], '--zypher-root', `$sourceDir)
+  if (`$args.Length -gt 1) {
+    `$nativeArgs += `$args[1..(`$args.Length - 1)]
+  }
+} else {
+  `$nativeArgs = `$args
+}
+& `$native @nativeArgs
+exit `$LASTEXITCODE
+"@ | Set-Content -Path $wrapperPs1 -Encoding UTF8
+
+$wrapperCmd = Join-Path $toolsDir 'zypher.cmd'
+@'
+@echo off
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0zypher.ps1" %*
+'@ | Set-Content -Path $wrapperCmd -Encoding ASCII
 
 Install-ChocolateyPath $toolsDir 'Machine'

@@ -11,15 +11,14 @@ export PATH="$PWD/zig-out/bin:$PATH"
 zypher help
 ```
 
-Published npm installs place the native Zypher binary under the package vendor
-directory, install the pinned Zig toolchain under `~/.zypher/zig`, and install
-the matching Zypher source tree under `~/.zypher/source`. The npm wrapper
-prepends the Zig directory to `PATH` and passes the source tree as
-`--zypher-root` for build-backed commands such as `run`, `doc`, and `doc-user`.
+Published installs use the Zig version pinned in `build.zig.zon`, place that
+toolchain under `~/.zypher/zig`, and install the matching Zypher source tree
+under `~/.zypher/source`. Package wrappers prepend the Zig directory to `PATH`
+and pass the source tree as `--zypher-root` for build-backed commands such as
+`run`, `doc`, and `doc-user`.
 Package-manager installs use `zypher-cli` for `prod-nightly` releases and
 `zypher-cli-bin` for `prod-stable` releases. The executable command remains
-`zypher`. Native package-manager installs depend on Zig and include the matching
-Zypher source tree so build-backed commands can resolve `--zypher-root`.
+`zypher`. AUR publishing is intentionally TODO for now.
 
 - `dispatchInner(out, err, init, cmd, args)` — Dispatch a CLI command
 - `buildRunArgv(gpa, zypher_root, app_args)` — Build the `zig build run` argv used by `zypher run`
@@ -117,7 +116,7 @@ It runs:
 zig build -Dzypher-root=<path> run -- --port <port>
 ```
 
-`zypher run` passes the Zypher source root to the generated build script automatically. It infers that root from the CLI binary when the binary lives under `zig-out/bin`, packaged source locations such as `source/` or `share/zypher`, and finally the current framework checkout. Pass `--zypher-root` only for nonstandard installs. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port. Users should prefer `zypher run` over invoking the app build script directly.
+`zypher run` passes the Zypher source root to the generated build script automatically. It first honors `ZYPHER_ROOT`, then infers that root from the CLI binary when the binary lives under `zig-out/bin`, packaged source locations such as `source/` or `share/zypher`, and finally the current framework checkout. Pass `--zypher-root` only for nonstandard installs. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port. Users should prefer `zypher run` over invoking the app build script directly.
 
 ## Documentation Server
 

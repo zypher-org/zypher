@@ -14,8 +14,9 @@ tags matching `v*`.
 
 Both release workflows build all supported CLI targets, publish a GitHub
 release, publish npm when credentials are available, render a Homebrew formula
-with release checksums, and publish AUR/Chocolatey packages when those channel
-credentials are available.
+with release checksums, and publish Chocolatey packages when those channel
+credentials are available. AUR publishing is intentionally skipped for now and
+tracked as release-distribution TODO work.
 
 ## Required Secrets
 
@@ -24,8 +25,6 @@ credentials are available.
 - `HOMEBREW_TAP_REPO` names the tap repository to update, for example
   `zypher-org/homebrew-tap`.
 - `HOMEBREW_TAP_TOKEN` pushes the rendered formula to the tap repository.
-- `AUR_SSH_KEY` pushes rendered `PKGBUILD` and `.SRCINFO` files to the matching
-  AUR package repository.
 - `CHOCOLATEY_API_KEY` pushes the rendered Chocolatey package.
 
 Package-manager credentials are optional in CI. When a secret is absent, the
@@ -37,7 +36,11 @@ The published npm package and release binaries embed all template files at
 compile time. Template discovery therefore does not require a Zypher source
 tree.
 
-The npm packages also install:
+All package-manager installs use the Zig version pinned in
+`build.zig.zon` (`.minimum_zig_version`) rather than whatever Zig version the
+host package manager currently provides.
+
+The npm package installs:
 
 - the pinned Zig toolchain declared in `npm/package.json`
 - the tagged Zypher source tree, including `vendor/sqlite-amalgamation-*`
@@ -55,12 +58,43 @@ it. This lets commands that invoke `zig build` resolve both `zig` and Zypher's
 vendored SQLite-backed source tree after npm install without additional shell
 setup.
 
-Native package managers install Zig through their dependency systems and install
-the matching Zypher source tree beside the native binary package:
+The standalone `install.sh` script provides the same runtime layout for
+curl-based installs:
 
-- Homebrew formula: `depends_on "zig"`
-- AUR package: `depends=('glibc' 'zig')`
-- Chocolatey package: `zig` package dependency
+```sh
+curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/install.sh | sh
+```
+
+It resolves the latest GitHub release unless `ZYPHER_VERSION` is set, detects
+the current OS/architecture, downloads the matching Zypher release archive,
+parses the release source tree's `build.zig.zon`, downloads that pinned Zig
+binary from `https://ziglang.org/builds/`, and writes the user-facing wrapper to
+`~/.local/bin/zypher` by default.
+
+Native package-manager wrappers use the same layout under the invoking user's
+home directory:
+
+```text
+~/.zypher/zig/<zig-version>/<zig-target>/
+~/.zypher/source/<zypher-version>/
+```
+
+The wrappers prepend the pinned Zig directory to `PATH`, export
+`ZYPHER_ROOT=~/.zypher/source/<zypher-version>`, and pass `--zypher-root` for
+build-backed commands. When invoked through sudo/elevated package-manager
+flows, the runtime cache still targets the invoking user's home directory when
+that home can be resolved by the platform.
+
+Native packages also keep a copy of the release source tree beside the packaged
+binary so wrappers can populate `~/.zypher/source/<zypher-version>` without
+requiring a separate source checkout.
+
+## AUR TODO
+
+AUR templates are kept in `packaging/aur/`, but the release workflows
+intentionally disable AUR publishing until the package ownership, review, and
+runtime bootstrap policy are finalized. Do not treat `AUR_SSH_KEY` as an active
+release credential yet.
 
 The following CLI commands work without a Zypher source tree:
 
@@ -73,8 +107,9 @@ The following CLI commands work without a Zypher source tree:
 - `migrate` — run SQL migrations
 - `shell` — interactive REPL
 
-Commands that build code require Zig to be available through the npm-managed
-`~/.zypher` toolchain or the platform package manager:
+Commands that build code require Zig to be available through the pinned
+`~/.zypher` toolchain installed by the npm package, native wrappers, or
+standalone installer:
 
 - `run` — runs a scaffolded app via `zig build run`
 - `doc` — builds and serves Zypher library docs via `zig build doc`
@@ -94,6 +129,7 @@ Each release publishes these archives:
 - `zypher-v<VERSION>-x86_64-windows-gnu.tar.gz`
 - `zypher-v<VERSION>-aarch64-windows-gnu.tar.gz`
 - `SHA256SUMS`
+- `install.sh`
 - `zypher-cli.rb` for nightly releases, or `zypher-cli-bin.rb` for stable
   releases
 
@@ -157,14 +193,14 @@ npx zypher help
 ## Native Package Installation
 
 The package name depends on the release branch. The installed command remains
-`zypher`.
+`zypher`. AUR commands are shown as TODO until AUR publishing is enabled.
 
 Nightly packages from `prod-nightly`:
 
 ```sh
 brew install zypher-cli
-paru -S zypher-cli
-yay -S zypher-cli
+# TODO: paru -S zypher-cli
+# TODO: yay -S zypher-cli
 choco install zypher-cli
 ```
 
@@ -172,8 +208,8 @@ Stable binary packages from `prod-stable`:
 
 ```sh
 brew install zypher-cli-bin
-paru -S zypher-cli-bin
-yay -S zypher-cli-bin
+# TODO: paru -S zypher-cli-bin
+# TODO: yay -S zypher-cli-bin
 choco install zypher-cli-bin
 ```
 
@@ -206,6 +242,7 @@ git push origin v0.1.0
 ```
 
 Nightly npm publishes with the `latest` dist-tag. Stable npm also publishes
-with the `latest` dist-tag for the `zypher-cli-bin` package. GitHub releases are
+with the `latest` dist-tag for the `zypher-cli-bin` package. GitHub releases,
+including tag-triggered releases from both `prod-nightly` and `prod-stable`, are
 explicitly marked latest by the release workflows so the repository sidebar
 points at the most recent published Zypher release.

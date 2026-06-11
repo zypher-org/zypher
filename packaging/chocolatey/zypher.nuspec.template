@@ -14,9 +14,6 @@
     <summary>Batteries-included web framework built the Zig way</summary>
     <description>Zypher is a Django-inspired web framework for Zig. It includes an ORM, admin panel, authentication, middleware, templates, and more—all compiled to a single portable binary.</description>
     <releaseNotes>https://github.com/zypher-org/zypher/releases/tag/v{{VERSION}}</releaseNotes>
-    <dependencies>
-      <dependency id="zig" />
-    </dependencies>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />

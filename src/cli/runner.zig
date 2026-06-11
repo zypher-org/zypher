@@ -1286,7 +1286,7 @@ fn cmdRun(
     const zypher_root = if (opts.zypher_root) |root|
         try init.gpa.dupe(u8, root)
     else
-        inferZypherRoot(init.gpa, init.io) catch {
+        inferZypherRootWithEnv(init.gpa, init.io, init.environ_map) catch {
             try err_writer.print("zypher: failed to locate Zypher source tree; pass --zypher-root <path>\n", .{});
             std.process.exit(1);
         };
@@ -1348,6 +1348,20 @@ fn parseRunOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !RunO
 }
 
 pub fn inferZypherRoot(gpa: std.mem.Allocator, io: std.Io) ![]const u8 {
+    return inferZypherRootWithEnv(gpa, io, null);
+}
+
+pub fn inferZypherRootWithEnv(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    environ_map: ?*const std.process.Environ.Map,
+) ![]const u8 {
+    if (environ_map) |map| if (map.get("ZYPHER_ROOT")) |env_root| {
+        if (try candidateZypherRootFromPath(gpa, io, env_root)) |root| {
+            return root;
+        }
+    };
+
     const exe_dir = std.process.executableDirPathAlloc(io, gpa) catch {
         return gpa.dupe(u8, default_zypher_root);
     };
@@ -1446,7 +1460,18 @@ fn cmdDoc(
     args: []const [:0]const u8,
 ) !void {
     const opts = parseDocOptions(err_writer, args, .framework) catch return;
-    try buildAndServeDocs(out_writer, err_writer, init, opts.zypher_root orelse ".", opts);
+    const zypher_root = if (opts.zypher_root) |root|
+        try init.gpa.dupe(u8, root)
+    else
+        inferZypherRootWithEnv(init.gpa, init.io, init.environ_map) catch {
+            try err_writer.print("zypher: failed to locate Zypher source tree; pass --zypher-root <path>\n", .{});
+            std.process.exit(1);
+        };
+    defer init.gpa.free(zypher_root);
+
+    var resolved_opts = opts;
+    resolved_opts.zypher_root = zypher_root;
+    try buildAndServeDocs(out_writer, err_writer, init, zypher_root, resolved_opts);
 }
 
 fn cmdDocUser(

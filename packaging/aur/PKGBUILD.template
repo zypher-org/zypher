@@ -8,7 +8,7 @@ pkgdesc="Batteries-included web framework built the Zig way"
 arch=('x86_64' 'aarch64')
 url="https://github.com/zypher-org/zypher"
 license=('Apache-2.0')
-depends=('glibc' 'zig')
+depends=('glibc' 'curl' 'tar' 'xz')
 source_x86_64=("https://github.com/zypher-org/zypher/releases/download/v${pkgver}/zypher-v${pkgver}-x86_64-linux-musl.tar.gz")
 source_aarch64=("https://github.com/zypher-org/zypher/releases/download/v${pkgver}/zypher-v${pkgver}-aarch64-linux-musl.tar.gz")
 sha256sums_x86_64=('{{SHA256_X86_64}}')
@@ -16,9 +16,60 @@ sha256sums_aarch64=('{{SHA256_AARCH64}}')
 
 package() {
   local srcdir_name="zypher-v${pkgver}-${CARCH}-linux-musl"
-  install -Dm755 "${srcdir_name}/zypher" "${pkgdir}/usr/bin/zypher"
+  install -Dm755 "${srcdir_name}/zypher" "${pkgdir}/usr/lib/zypher/zypher-bin"
   install -Dm644 "${srcdir_name}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
   install -Dm644 "${srcdir_name}/README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
   mkdir -p "${pkgdir}/usr/share/zypher"
   cp -a "${srcdir_name}/source/." "${pkgdir}/usr/share/zypher/"
+  install -Dm755 /dev/null "${pkgdir}/usr/bin/zypher"
+  cat > "${pkgdir}/usr/bin/zypher" <<'EOF'
+#!/bin/sh
+set -eu
+
+zig_version="{{ZIG_VERSION}}"
+version="{{VERSION}}"
+zypher_home="${ZYPHER_HOME:-$HOME/.zypher}"
+source_dir="$zypher_home/source/$version"
+
+case "$(uname -m)" in
+  aarch64|arm64) zig_target="aarch64-linux" ;;
+  x86_64) zig_target="x86_64-linux" ;;
+  *) echo "zypher: unsupported Linux architecture for pinned Zig toolchain: $(uname -m)" >&2; exit 1 ;;
+esac
+
+zig_dir="$zypher_home/zig/$zig_version/$zig_target"
+if [ ! -x "$zig_dir/zig" ]; then
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zypher-zig.XXXXXX")"
+  trap 'rm -rf "$tmp_dir" "$zig_dir.partial-$$"' EXIT INT TERM
+  mkdir -p "$(dirname "$zig_dir")"
+  curl -fsSL "https://ziglang.org/builds/zig-$zig_target-$zig_version.tar.xz" -o "$tmp_dir/zig.tar.xz"
+  tar -xJf "$tmp_dir/zig.tar.xz" -C "$tmp_dir"
+  rm -rf "$zig_dir.partial-$$"
+  mv "$tmp_dir/zig-$zig_target-$zig_version" "$zig_dir.partial-$$"
+  rm -rf "$zig_dir"
+  mv "$zig_dir.partial-$$" "$zig_dir"
+fi
+
+if [ ! -f "$source_dir/src/zypher.zig" ]; then
+  rm -rf "$source_dir"
+  mkdir -p "$source_dir"
+  cp -R /usr/share/zypher/. "$source_dir/"
+fi
+
+export PATH="$zig_dir:$PATH"
+export ZYPHER_ROOT="$source_dir"
+
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    run|doc|doc-user)
+      cmd="$1"
+      shift
+      exec /usr/lib/zypher/zypher-bin "$cmd" --zypher-root "$source_dir" "$@"
+      ;;
+  esac
+fi
+
+exec /usr/lib/zypher/zypher-bin "$@"
+EOF
+  chmod 755 "${pkgdir}/usr/bin/zypher"
 }
