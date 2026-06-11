@@ -101,6 +101,23 @@ npm install -g zypher-cli@beta
 zypher help
 ```
 
+If `npm install -g` fails with `EACCES` because npm is writing to a system
+prefix such as `/usr/lib/node_modules`, move global npm packages to a user-owned
+prefix:
+
+```sh
+mkdir -p ~/.local
+npm config set prefix ~/.local
+export PATH="$HOME/.local/bin:$PATH"
+npm install -g zypher-cli@beta
+```
+
+The `PATH` export should be added to the user's shell profile. Package scripts
+cannot change npm's global install prefix before npm creates the package
+directory. Avoid `sudo npm install -g` when possible; when sudo is used, the
+Zypher npm wrapper resolves its cache root to the invoking user's `~/.zypher`
+directory instead of `/root/.zypher`.
+
 The postinstall script downloads the matching native `zypher` binary from the
 GitHub release, installs Zig from `ziglang.org`, and installs the matching
 tagged Zypher source tree into `~/.zypher`.

@@ -234,10 +234,22 @@ jobs:
             echo "Homebrew tap credentials not configured — skipping."
             exit 0
           fi
-          tap_url="https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git"
+          tap_repo="${HOMEBREW_TAP_REPO#https://github.com/}"
+          tap_repo="${tap_repo#http://github.com/}"
+          tap_repo="${tap_repo#git@github.com:}"
+          tap_repo="${tap_repo%.git}"
+          tap_repo="${tap_repo%/}"
+          case "${tap_repo}" in
+            */*) ;;
+            *)
+              echo "::error::HOMEBREW_TAP_REPO must be owner/repo or a GitHub repository URL."
+              exit 1
+              ;;
+          esac
+          tap_url="https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${tap_repo}.git"
           if ! git ls-remote "${tap_url}" >/dev/null 2>&1; then
-            echo "Homebrew tap '${HOMEBREW_TAP_REPO}' is not accessible with HOMEBREW_TAP_TOKEN — skipping."
-            exit 0
+            echo "::error::Homebrew tap '${tap_repo}' is not accessible with HOMEBREW_TAP_TOKEN. Check that the repo exists and the token has contents write access."
+            exit 1
           fi
           git clone "${tap_url}" homebrew-tap
           mkdir -p homebrew-tap/Formula
@@ -275,14 +287,14 @@ jobs:
           fi
 
           mkdir -p ~/.ssh
-          printf '%s\n' "${AUR_SSH_KEY}" > ~/.ssh/aur
+          printf '%b\n' "${AUR_SSH_KEY}" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
 
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
           if ! git ls-remote "aur@aur.archlinux.org:${PACKAGE_NAME}.git" >/dev/null 2>&1; then
-            echo "AUR package '${PACKAGE_NAME}' is not accessible with AUR_SSH_KEY — skipping."
-            exit 0
+            echo "::error::AUR package '${PACKAGE_NAME}' is not accessible with AUR_SSH_KEY. Check that the public key is registered on the AUR account and the package base exists or is owned by that account."
+            exit 1
           fi
 
           git clone "aur@aur.archlinux.org:${PACKAGE_NAME}.git" aur-pkg

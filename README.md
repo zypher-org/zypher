@@ -91,6 +91,21 @@ paru -S zypher-cli-bin
 choco install zypher-cli-bin
 ```
 
+If global npm installs target a system directory such as `/usr/lib/node_modules`,
+configure a user-level npm prefix before installing:
+
+```sh
+mkdir -p ~/.local
+npm config set prefix ~/.local
+export PATH="$HOME/.local/bin:$PATH"
+npm install -g zypher-cli@beta
+```
+
+Add `export PATH="$HOME/.local/bin:$PATH"` to your shell profile if it is not
+already present. Avoid `sudo npm install -g` when possible; if sudo is used,
+Zypher stores its toolchain and source cache under the invoking user's
+`~/.zypher` directory instead of `/root/.zypher`.
+
 The npm package installs the published binary, a pinned Zig toolchain, and the
 matching Zypher source tree under `~/.zypher`, while templates are embedded at
 compile time. That means `zypher new`, `zypher demo`, `zypher templates`, and

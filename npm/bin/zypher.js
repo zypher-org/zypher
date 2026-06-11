@@ -13,7 +13,7 @@ const target = resolveTarget(process.platform, process.arch);
 const zigTarget = resolveZigTarget(process.platform, process.arch);
 const exeName = process.platform === "win32" ? "zypher.exe" : "zypher";
 const exePath = path.join(__dirname, "..", "vendor", target, exeName);
-const zypherHome = process.env.ZYPHER_HOME || path.join(os.homedir(), ".zypher");
+const zypherHome = resolveZypherHome();
 const zigBinDir = path.join(zypherHome, "zig", zigVersion, zigTarget);
 const zypherRoot = process.env.ZYPHER_ROOT || path.join(zypherHome, "source", packageJson.version);
 
@@ -86,6 +86,41 @@ function resolvePathKey(env) {
     return "PATH";
   }
   return Object.keys(env).find((key) => key.toLowerCase() === "path") || "Path";
+}
+
+function resolveZypherHome() {
+  if (process.env.ZYPHER_HOME) {
+    return process.env.ZYPHER_HOME;
+  }
+
+  const sudoUser = process.env.SUDO_USER;
+  if (process.platform !== "win32" && sudoUser && sudoUser !== "root" && isRoot()) {
+    const sudoHome = homeForUser(sudoUser);
+    if (sudoHome) {
+      return path.join(sudoHome, ".zypher");
+    }
+  }
+
+  return path.join(os.homedir(), ".zypher");
+}
+
+function isRoot() {
+  return typeof process.getuid === "function" && process.getuid() === 0;
+}
+
+function homeForUser(username) {
+  try {
+    const passwd = fs.readFileSync("/etc/passwd", "utf8");
+    for (const line of passwd.split("\n")) {
+      const fields = line.split(":");
+      if (fields[0] === username && fields[5]) {
+        return fields[5];
+      }
+    }
+  } catch (_) {
+    // Fall back to os.homedir() below when /etc/passwd is unavailable.
+  }
+  return null;
 }
 
 function withZypherRoot(args) {
