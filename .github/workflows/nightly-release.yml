@@ -14,6 +14,9 @@ concurrency:
 
 env:
   ZYPHER_REPOSITORY: zypher-org/zypher
+  PACKAGE_NAME: zypher-cli
+  HOMEBREW_CLASS: ZypherCli
+  HOMEBREW_FORMULA_FILE: zypher-cli.rb
 
 jobs:
   gate:
@@ -64,6 +67,8 @@ jobs:
       version: ${{ steps.vars.outputs.version }}
       sha_x86_64_linux: ${{ steps.vars.outputs.sha_x86_64_linux }}
       sha_aarch64_linux: ${{ steps.vars.outputs.sha_aarch64_linux }}
+      sha_x86_64_macos: ${{ steps.vars.outputs.sha_x86_64_macos }}
+      sha_aarch64_macos: ${{ steps.vars.outputs.sha_aarch64_macos }}
       sha_x86_64_windows: ${{ steps.vars.outputs.sha_x86_64_windows }}
       sha_aarch64_windows: ${{ steps.vars.outputs.sha_aarch64_windows }}
     steps:
@@ -95,6 +100,9 @@ jobs:
             mkdir -p "dist/${pkg}"
             cp "zig-out/bin/${target}/${exe}" "dist/${pkg}/${exe}"
             cp README.md LICENSE "dist/${pkg}/"
+            mkdir -p "dist/${pkg}/source"
+            cp build.zig build.zig.zon LICENSE README.md "dist/${pkg}/source/"
+            cp -R src templates tools vendor "dist/${pkg}/source/"
             tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
           done
 
@@ -103,11 +111,15 @@ jobs:
 
           sha_x86_64_linux=$(sha256sum "zypher-v${version}-x86_64-linux-musl.tar.gz" | cut -d' ' -f1)
           sha_aarch64_linux=$(sha256sum "zypher-v${version}-aarch64-linux-musl.tar.gz" | cut -d' ' -f1)
+          sha_x86_64_macos=$(sha256sum "zypher-v${version}-x86_64-macos.tar.gz" | cut -d' ' -f1)
+          sha_aarch64_macos=$(sha256sum "zypher-v${version}-aarch64-macos.tar.gz" | cut -d' ' -f1)
           sha_x86_64_windows=$(sha256sum "zypher-v${version}-x86_64-windows-gnu.tar.gz" | cut -d' ' -f1)
           sha_aarch64_windows=$(sha256sum "zypher-v${version}-aarch64-windows-gnu.tar.gz" | cut -d' ' -f1)
 
           echo "sha_x86_64_linux=${sha_x86_64_linux}" >> "$GITHUB_OUTPUT"
           echo "sha_aarch64_linux=${sha_aarch64_linux}" >> "$GITHUB_OUTPUT"
+          echo "sha_x86_64_macos=${sha_x86_64_macos}" >> "$GITHUB_OUTPUT"
+          echo "sha_aarch64_macos=${sha_aarch64_macos}" >> "$GITHUB_OUTPUT"
           echo "sha_x86_64_windows=${sha_x86_64_windows}" >> "$GITHUB_OUTPUT"
           echo "sha_aarch64_windows=${sha_aarch64_windows}" >> "$GITHUB_OUTPUT"
 
@@ -124,11 +136,40 @@ jobs:
     if: needs.gate.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           name: release-artifacts-nightly
           path: dist/
+
+      - name: Render Homebrew formula
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -eu
+          base_url="https://github.com/${ZYPHER_REPOSITORY}/releases/download/v${VERSION}"
+          sha_x86_64_linux="${{ needs.build.outputs.sha_x86_64_linux }}"
+          sha_aarch64_linux="${{ needs.build.outputs.sha_aarch64_linux }}"
+          sha_x86_64_macos="${{ needs.build.outputs.sha_x86_64_macos }}"
+          sha_aarch64_macos="${{ needs.build.outputs.sha_aarch64_macos }}"
+          sed \
+            -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{BASE_URL}}|${base_url}|g" \
+            -e "s|{{SHA_X86_64_LINUX}}|${sha_x86_64_linux}|g" \
+            -e "s|{{SHA_AARCH64_LINUX}}|${sha_aarch64_linux}|g" \
+            -e "s|{{SHA_X86_64_MACOS}}|${sha_x86_64_macos}|g" \
+            -e "s|{{SHA_AARCH64_MACOS}}|${sha_aarch64_macos}|g" \
+            -e "s|{{HOMEBREW_CLASS}}|${HOMEBREW_CLASS}|g" \
+            packaging/homebrew/zypher.rb.template > "dist/${HOMEBREW_FORMULA_FILE}"
+
+      - name: Upload Homebrew formula as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula-nightly
+          path: dist/${{ env.HOMEBREW_FORMULA_FILE }}
+          if-no-files-found: error
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -140,6 +181,75 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/SHA256SUMS
+            dist/${{ env.HOMEBREW_FORMULA_FILE }}
+
+  npm-release:
+    name: Publish npm package
+    needs: [gate, build]
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Prepare npm metadata
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          npm --prefix npm pkg set name="${PACKAGE_NAME}"
+          npm --prefix npm version "${VERSION}" --no-git-tag-version --allow-same-version
+
+      - name: Publish npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN is not set — skipping npm publish."
+            exit 0
+          fi
+          npm publish ./npm --access public --tag beta
+
+  homebrew-release:
+    name: Publish Homebrew formula
+    needs: [gate, build, nightly-release]
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download rendered formula
+        uses: actions/download-artifact@v4
+        with:
+          name: homebrew-formula-nightly
+          path: dist
+
+      - name: Upload formula to tap
+        env:
+          HOMEBREW_TAP_REPO: ${{ secrets.HOMEBREW_TAP_REPO }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -eu
+          if [ -z "${HOMEBREW_TAP_REPO}" ] || [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "Homebrew tap credentials not configured — skipping."
+            exit 0
+          fi
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" homebrew-tap
+          mkdir -p homebrew-tap/Formula
+          cp "dist/${HOMEBREW_FORMULA_FILE}" "homebrew-tap/Formula/${HOMEBREW_FORMULA_FILE}"
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "Formula/${HOMEBREW_FORMULA_FILE}"
+          if git diff --cached --quiet; then
+            echo "Homebrew formula is already current."
+            exit 0
+          fi
+          git commit -m "Update ${PACKAGE_NAME} to v${VERSION}"
+          git push
 
   aur-publish:
     name: Publish to AUR
@@ -167,16 +277,18 @@ jobs:
           chmod 600 ~/.ssh/aur
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
 
-          git clone aur@aur.archlinux.org:zypher-cli.git aur-pkg
+          git clone "aur@aur.archlinux.org:${PACKAGE_NAME}.git" aur-pkg
           cd aur-pkg
 
           sed \
+            -e "s|{{PACKAGE_NAME}}|${PACKAGE_NAME}|g" \
             -e "s|{{VERSION}}|${VERSION}|g" \
             -e "s|{{SHA256_X86_64}}|${SHA256_X86_64}|g" \
             -e "s|{{SHA256_AARCH64}}|${SHA256_AARCH64}|g" \
             ../packaging/aur/PKGBUILD.template > PKGBUILD
 
           sed \
+            -e "s|{{PACKAGE_NAME}}|${PACKAGE_NAME}|g" \
             -e "s|{{VERSION}}|${VERSION}|g" \
             -e "s|{{SHA256_X86_64}}|${SHA256_X86_64}|g" \
             -e "s|{{SHA256_AARCH64}}|${SHA256_AARCH64}|g" \
@@ -191,7 +303,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Update zypher to v${VERSION}"
+          git commit -m "Update ${PACKAGE_NAME} to v${VERSION}"
           git push origin master
 
   chocolatey-publish:
@@ -210,18 +322,20 @@ jobs:
           SHA256_AARCH64_WINDOWS: ${{ needs.build.outputs.sha_aarch64_windows }}
         run: |
           (Get-Content packaging/chocolatey/zypher.nuspec.template) `
+            -replace '{{PACKAGE_NAME}}', $env:PACKAGE_NAME `
             -replace '{{VERSION}}', $env:VERSION `
-          | Set-Content -Path zypher-cli.nuspec
+          | Set-Content -Path "$env:PACKAGE_NAME.nuspec"
 
           New-Item -ItemType Directory -Path tools -Force | Out-Null
 
           (Get-Content packaging/chocolatey/tools/chocolateyinstall.ps1.template) `
+            -replace '{{PACKAGE_NAME}}', $env:PACKAGE_NAME `
             -replace '{{VERSION}}', $env:VERSION `
             -replace '{{SHA256_X86_64_WINDOWS}}', $env:SHA256_X86_64_WINDOWS `
             -replace '{{SHA256_AARCH64_WINDOWS}}', $env:SHA256_AARCH64_WINDOWS `
           | Set-Content -Path tools/chocolateyinstall.ps1
 
-          choco pack zypher-cli.nuspec
+          choco pack "$env:PACKAGE_NAME.nuspec"
 
       - name: Push to Chocolatey
         shell: pwsh

@@ -67,19 +67,28 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 
 ## Quick Start
 
-Install the published CLI from npm:
+Install the nightly CLI from npm:
 
 ```sh
 npm install -g zypher-cli@beta
 zypher help
 ```
 
-Other package managers use the same package name:
+Nightly package-manager installs use `zypher-cli`:
 
 ```sh
 brew install zypher-cli
 paru -S zypher-cli
 choco install zypher-cli
+```
+
+Stable binary packages use `zypher-cli-bin`:
+
+```sh
+npm install -g zypher-cli-bin@latest
+brew install zypher-cli-bin
+paru -S zypher-cli-bin
+choco install zypher-cli-bin
 ```
 
 The npm package installs the published binary, a pinned Zig toolchain, and the

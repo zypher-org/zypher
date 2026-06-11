@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
-    <id>zypher-cli</id>
+    <id>{{PACKAGE_NAME}}</id>
     <version>{{VERSION}}</version>
     <title>Zypher CLI</title>
     <authors>Zypher Team</authors>

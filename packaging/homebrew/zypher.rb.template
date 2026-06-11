@@ -1,4 +1,4 @@
-class ZypherCli < Formula
+class {{HOMEBREW_CLASS}} < Formula
   desc "Batteries-included web framework built the Zig way"
   homepage "https://github.com/zypher-org/zypher"
   version "{{VERSION}}"
@@ -28,6 +28,7 @@ class ZypherCli < Formula
 
   def install
     bin.install Dir["zypher*"].first => "zypher"
+    (share/"zypher").install Dir["source/*"]
   end
 
   test do

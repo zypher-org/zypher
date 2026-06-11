@@ -2,21 +2,23 @@ $ErrorActionPreference = 'Stop'
 
 $toolsDir  = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
 $version   = '{{VERSION}}'
-$pkgName   = 'zypher'
+$pkgName   = '{{PACKAGE_NAME}}'
 
 $url64     = "https://github.com/zypher-org/zypher/releases/download/v$version/zypher-v$version-x86_64-windows-gnu.tar.gz"
 $url64Arm  = "https://github.com/zypher-org/zypher/releases/download/v$version/zypher-v$version-aarch64-windows-gnu.tar.gz"
 
-$packageArgs = @{
-  packageName    = $pkgName
-  url64bit       = $url64
-  url64          = $url64Arm
-  checksum64     = '{{SHA256_X86_64_WINDOWS}}'
-  checksum64Arm  = '{{SHA256_AARCH64_WINDOWS}}'
-  checksumType64 = 'sha256'
-}
+$isArm64 = $env:PROCESSOR_ARCHITECTURE -eq 'ARM64'
+$url = if ($isArm64) { $url64Arm } else { $url64 }
+$checksum = if ($isArm64) { '{{SHA256_AARCH64_WINDOWS}}' } else { '{{SHA256_X86_64_WINDOWS}}' }
 
-Install-ChocolateyZipPackage @packageArgs
+$archivePath = Join-Path $toolsDir "$pkgName.tar.gz"
+$extractDir = Join-Path $toolsDir 'extract'
+Get-ChocolateyWebFile -PackageName $pkgName -FileFullPath $archivePath -Url $url -Checksum $checksum -ChecksumType 'sha256'
+New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+tar -xzf $archivePath -C $extractDir
+$packageDir = Get-ChildItem -Path $extractDir -Directory | Select-Object -First 1
+Copy-Item -Path (Join-Path $packageDir.FullName '*') -Destination $toolsDir -Recurse -Force
+Remove-Item $archivePath -Force
+Remove-Item $extractDir -Recurse -Force
 
-$binPath = Join-Path $toolsDir 'zypher.exe'
-Install-ChocolateyPath (Split-Path $binPath -Parent) 'Machine'
+Install-ChocolateyPath $toolsDir 'Machine'

@@ -1354,6 +1354,7 @@ pub fn inferZypherRoot(gpa: std.mem.Allocator, io: std.Io) ![]const u8 {
     defer gpa.free(exe_dir);
 
     if (try candidateZypherRootFromExeDir(gpa, io, exe_dir)) |root| return root;
+    if (try candidateZypherRootFromPackagedInstall(gpa, io, exe_dir)) |root| return root;
     if (try candidateZypherRootFromPath(gpa, io, ".")) |root| return root;
     return gpa.dupe(u8, default_zypher_root);
 }
@@ -1366,6 +1367,21 @@ fn candidateZypherRootFromExeDir(gpa: std.mem.Allocator, io: std.Io, exe_dir: []
     if (!std.mem.eql(u8, std.fs.path.basename(zig_out_dir), "zig-out")) return null;
 
     const root = std.fs.path.dirname(zig_out_dir) orelse return null;
+    return candidateZypherRootFromPath(gpa, io, root);
+}
+
+fn candidateZypherRootFromPackagedInstall(gpa: std.mem.Allocator, io: std.Io, exe_dir: []const u8) !?[]const u8 {
+    if (try candidateZypherRootFromJoinedPath(gpa, io, &.{ exe_dir, "source" })) |root| return root;
+
+    const prefix = std.fs.path.dirname(exe_dir) orelse return null;
+    if (try candidateZypherRootFromJoinedPath(gpa, io, &.{ prefix, "share", "zypher" })) |root| return root;
+
+    return null;
+}
+
+fn candidateZypherRootFromJoinedPath(gpa: std.mem.Allocator, io: std.Io, parts: []const []const u8) !?[]const u8 {
+    const root = try std.fs.path.join(gpa, parts);
+    defer gpa.free(root);
     return candidateZypherRootFromPath(gpa, io, root);
 }
 
