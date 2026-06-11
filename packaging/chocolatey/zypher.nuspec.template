@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>zypher</id>
+    <version>{{VERSION}}</version>
+    <title>Zypher</title>
+    <authors>Zypher Team</authors>
+    <projectUrl>https://github.com/zypher-org/zypher</projectUrl>
+    <licenseUrl>https://raw.githubusercontent.com/zypher-org/zypher/main/LICENSE</licenseUrl>
+    <projectSourceUrl>https://github.com/zypher-org/zypher</projectSourceUrl>
+    <bugTrackerUrl>https://github.com/zypher-org/zypher/issues</bugTrackerUrl>
+    <packageSourceUrl>https://github.com/zypher-org/zypher</packageSourceUrl>
+    <tags>zypher web framework zig django cli</tags>
+    <summary>Batteries-included web framework built the Zig way</summary>
+    <description>Zypher is a Django-inspired web framework for Zig. It includes an ORM, admin panel, authentication, middleware, templates, and more—all compiled to a single portable binary.</description>
+    <releaseNotes>https://github.com/zypher-org/zypher/releases/tag/v{{VERSION}}</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

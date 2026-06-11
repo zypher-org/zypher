@@ -1,0 +1,22 @@
+$ErrorActionPreference = 'Stop'
+
+$toolsDir  = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+$version   = '{{VERSION}}'
+$pkgName   = 'zypher'
+
+$url64     = "https://github.com/zypher-org/zypher/releases/download/v$version/zypher-v$version-x86_64-windows-gnu.tar.gz"
+$url64Arm  = "https://github.com/zypher-org/zypher/releases/download/v$version/zypher-v$version-aarch64-windows-gnu.tar.gz"
+
+$packageArgs = @{
+  packageName    = $pkgName
+  url64bit       = $url64
+  url64          = $url64Arm
+  checksum64     = '{{SHA256_X86_64_WINDOWS}}'
+  checksum64Arm  = '{{SHA256_AARCH64_WINDOWS}}'
+  checksumType64 = 'sha256'
+}
+
+Install-ChocolateyZipPackage @packageArgs
+
+$binPath = Join-Path $toolsDir 'zypher.exe'
+Install-ChocolateyPath (Split-Path $binPath -Parent) 'Machine'
