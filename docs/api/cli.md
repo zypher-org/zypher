@@ -11,6 +11,11 @@ export PATH="$PWD/zig-out/bin:$PATH"
 zypher help
 ```
 
+Published npm installs place the native Zypher binary under the package vendor
+directory and install the pinned Zig toolchain under `~/.zypher/zig`. The npm
+wrapper prepends that Zig directory to `PATH` before dispatching to the native
+CLI, so build-backed commands such as `run`, `doc`, and `doc-user` can find Zig.
+
 - `dispatchInner(out, err, init, cmd, args)` — Dispatch a CLI command
 - `buildRunArgv(gpa, zypher_root, app_args)` — Build the `zig build run` argv used by `zypher run`
 - `buildDocArgv(gpa)` — Build the `zig build doc` argv used by documentation commands

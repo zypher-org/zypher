@@ -4,6 +4,8 @@ class Zypher < Formula
   version "{{VERSION}}"
   license "Apache-2.0"
 
+  depends_on "zig"
+
   on_macos do
     if Hardware::CPU.arm?
       url "{{BASE_URL}}/zypher-v{{VERSION}}-aarch64-macos.tar.gz"

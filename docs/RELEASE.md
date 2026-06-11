@@ -20,11 +20,30 @@ Missing npm credentials fail the release workflow. Homebrew tap credentials are
 optional for now; when absent, the workflow still uploads `zypher.rb` to the
 GitHub release and skips only the tap update.
 
-## Standalone Binary Capabilities
+## CLI Runtime Dependencies
 
 The published npm package and release binaries embed all template files at
-compile time. The following CLI commands work **without** a Zypher source tree
-or Zig compiler:
+compile time. Template discovery therefore does not require a Zypher source
+tree.
+
+The npm package also installs the pinned Zig toolchain declared in
+`npm/package.json` under:
+
+```text
+~/.zypher/zig/<zig-version>/<zig-target>/
+```
+
+The npm `zypher` wrapper prepends that directory to `PATH` before launching the
+native CLI, so commands that invoke `zig build` can work after npm install
+without additional shell setup.
+
+Native package managers install Zig through their dependency systems:
+
+- Homebrew formula: `depends_on "zig"`
+- AUR package: `depends=('glibc' 'zig')`
+- Chocolatey package: `zig` package dependency
+
+The following CLI commands work without a Zypher source tree:
 
 - `help` — show help
 - `new` — scaffold projects from embedded templates (8 variants)
@@ -35,14 +54,15 @@ or Zig compiler:
 - `migrate` — run SQL migrations
 - `shell` — interactive REPL
 
-Commands that require a Zig development environment and Zypher source tree:
+Commands that build code require Zig to be available through the npm-managed
+`~/.zypher` toolchain or the platform package manager:
 
 - `run` — runs a scaffolded app via `zig build run`
 - `doc` — builds and serves Zypher library docs via `zig build doc`
 - `doc-user` — builds and serves user project docs
 
-These commands fail with a clear error message when `zig` or the source tree
-is not available.
+`doc` additionally requires a Zypher source tree. `run` and `doc-user` operate
+on generated/user projects and use their local `build.zig` files.
 
 ## Supported Release Assets
 
@@ -65,6 +85,9 @@ Install the published CLI globally:
 npm install -g @zypher-org/zypher@beta
 zypher help
 ```
+
+The postinstall script downloads the matching native `zypher` binary from the
+GitHub release and installs Zig from `ziglang.org` into `~/.zypher`.
 
 Install an exact beta version:
 
