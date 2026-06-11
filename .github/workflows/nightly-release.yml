@@ -2,6 +2,8 @@ name: Nightly Release
 
 on:
   push:
+    branches:
+      - prod-nightly
     tags:
       - "v*"
 
@@ -21,7 +23,6 @@ env:
 jobs:
   gate:
     name: Check branch
-    if: github.event.created == true && github.event.deleted == false
     runs-on: ubuntu-latest
     outputs:
       is_valid: ${{ steps.gate.outputs.is_valid }}
@@ -33,6 +34,17 @@ jobs:
         id: gate
         run: |
           set -eu
+          if [ "${{ github.ref }}" = "refs/heads/prod-nightly" ]; then
+            echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event.created }}" != "true" ] || [ "${{ github.event.deleted }}" = "true" ]; then
+            echo "is_valid=false" >> "$GITHUB_OUTPUT"
+            echo "Ignoring non-created or deleted ref ${{ github.ref }}."
+            exit 0
+          fi
+
           git fetch origin prod-nightly:prod-nightly prod-stable:prod-stable 2>/dev/null || true
           tag_commit=$(git rev-list -n 1 "${{ github.ref }}")
           if git merge-base --is-ancestor "$tag_commit" prod-nightly 2>/dev/null; then
@@ -66,6 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.vars.outputs.version }}
+      release_tag: ${{ steps.vars.outputs.release_tag }}
       sha_x86_64_linux: ${{ steps.vars.outputs.sha_x86_64_linux }}
       sha_aarch64_linux: ${{ steps.vars.outputs.sha_aarch64_linux }}
       sha_x86_64_macos: ${{ steps.vars.outputs.sha_x86_64_macos }}
@@ -80,9 +93,23 @@ jobs:
         id: vars
         run: |
           set -eu
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            release_tag="${GITHUB_REF_NAME}"
+            version="${release_tag#v}"
+          else
+            base_version=$(sed -n 's/.*\.version = "\([^"]*\)".*/\1/p' build.zig.zon | head -n 1)
+            if [ -z "${base_version}" ]; then
+              echo "::error::Could not read .version from build.zig.zon."
+              exit 1
+            fi
+            case "${base_version}" in
+              *-*) version="${base_version}.nightly.${GITHUB_RUN_NUMBER}" ;;
+              *) version="${base_version}-nightly.${GITHUB_RUN_NUMBER}" ;;
+            esac
+            release_tag="v${version}"
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
 
           zig build all-targets -Doptimize=ReleaseSafe
 
@@ -174,7 +201,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ needs.build.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           name: nightly-build
           prerelease: false
           make_latest: true

@@ -1,9 +1,14 @@
 # Release Process
 
-Zypher releases are driven by annotated Git tags matching `v*`.
+Zypher releases are driven by `prod-nightly` branch pushes and annotated Git
+tags matching `v*`.
 
-- Tags whose commits are on `prod-nightly` and not on `prod-stable` publish the
-  nightly package family: `zypher-cli`.
+- Pushes to `prod-nightly` publish the nightly package family: `zypher-cli`.
+  The workflow derives a unique semver prerelease from `build.zig.zon`, for
+  example `0.1.0-beta.nightly.123`, and publishes it under the matching
+  generated GitHub release tag.
+- Tags whose commits are on `prod-nightly` and not on `prod-stable` also
+  publish the nightly package family: `zypher-cli`.
 - Tags whose commits are on `prod-stable` publish the stable binary package
   family: `zypher-cli-bin`.
 
@@ -172,15 +177,26 @@ yay -S zypher-cli-bin
 choco install zypher-cli-bin
 ```
 
-## Beta Release
+## Nightly Release
 
-Create an annotated beta tag from the commit to release, then push it after the
-commit is present on `prod-nightly`:
+Push the commit to `prod-nightly`:
+
+```sh
+git push origin HEAD:prod-nightly
+```
+
+The workflow publishes a generated nightly version based on the
+`build.zig.zon` version and the GitHub Actions run number.
+
+You can also create an annotated beta tag from the commit to release, then push
+it after the commit is present on `prod-nightly`:
 
 ```sh
 git tag -a v0.1.0-beta -m "v0.1.0-beta beta release"
 git push origin v0.1.0-beta
 ```
+
+## Stable Release
 
 Create a stable tag after promoting the commit to `prod-stable`:
 
