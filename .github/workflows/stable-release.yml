@@ -234,7 +234,12 @@ jobs:
             echo "Homebrew tap credentials not configured — skipping."
             exit 0
           fi
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" homebrew-tap
+          tap_url="https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git"
+          if ! git ls-remote "${tap_url}" >/dev/null 2>&1; then
+            echo "Homebrew tap '${HOMEBREW_TAP_REPO}' is not accessible with HOMEBREW_TAP_TOKEN — skipping."
+            exit 0
+          fi
+          git clone "${tap_url}" homebrew-tap
           mkdir -p homebrew-tap/Formula
           cp "dist/${HOMEBREW_FORMULA_FILE}" "homebrew-tap/Formula/${HOMEBREW_FORMULA_FILE}"
           cd homebrew-tap
@@ -273,6 +278,12 @@ jobs:
           printf '%s\n' "${AUR_SSH_KEY}" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          if ! git ls-remote "aur@aur.archlinux.org:${PACKAGE_NAME}.git" >/dev/null 2>&1; then
+            echo "AUR package '${PACKAGE_NAME}' is not accessible with AUR_SSH_KEY — skipping."
+            exit 0
+          fi
 
           git clone "aur@aur.archlinux.org:${PACKAGE_NAME}.git" aur-pkg
           cd aur-pkg
@@ -333,6 +344,10 @@ jobs:
           | Set-Content -Path tools/chocolateyinstall.ps1
 
           choco pack "$env:PACKAGE_NAME.nuspec"
+          $package = Get-ChildItem -Path . -Filter '*.nupkg' | Select-Object -First 1
+          if (-not $package) {
+            throw "Chocolatey package was not created."
+          }
 
       - name: Push to Chocolatey
         shell: pwsh
@@ -343,4 +358,8 @@ jobs:
             Write-Host "CHOCOLATEY_API_KEY is not set — skipping Chocolatey push."
             exit 0
           }
-          choco push *.nupkg --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/
+          $package = Get-ChildItem -Path . -Filter '*.nupkg' | Select-Object -First 1
+          if (-not $package) {
+            throw "Chocolatey package file was not found."
+          }
+          choco push $package.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/

@@ -92,7 +92,7 @@ async function installZigToolchain() {
 
     const extractedDir = path.join(extractDir, `zig-${zigTarget}-${zigVersion}`);
     fs.rmSync(partialInstallDir, { recursive: true, force: true });
-    fs.renameSync(extractedDir, partialInstallDir);
+    moveDirectory(extractedDir, partialInstallDir);
     fs.rmSync(zigInstallDir, { recursive: true, force: true });
     fs.renameSync(partialInstallDir, zigInstallDir);
 
@@ -124,7 +124,7 @@ async function installZypherSource() {
 
     const extractedDir = firstDirectory(extractDir);
     fs.rmSync(partialInstallDir, { recursive: true, force: true });
-    fs.renameSync(extractedDir, partialInstallDir);
+    moveDirectory(extractedDir, partialInstallDir);
     fs.rmSync(sourceInstallDir, { recursive: true, force: true });
     fs.renameSync(partialInstallDir, sourceInstallDir);
 
@@ -243,6 +243,18 @@ function extractArchive(archivePath, extractDir, kind) {
 
 function escapePowerShell(value) {
   return value.replace(/'/g, "''");
+}
+
+function moveDirectory(source, destination) {
+  try {
+    fs.renameSync(source, destination);
+  } catch (error) {
+    if (!error || error.code !== "EXDEV") {
+      throw error;
+    }
+    fs.cpSync(source, destination, { recursive: true });
+    fs.rmSync(source, { recursive: true, force: true });
+  }
 }
 
 function firstDirectory(parent) {
