@@ -97,7 +97,7 @@ Each release publishes these archives:
 Install the nightly CLI globally:
 
 ```sh
-npm install -g zypher-cli@beta
+npm install -g zypher-cli@latest
 zypher help
 ```
 
@@ -109,7 +109,7 @@ prefix:
 mkdir -p ~/.local
 npm config set prefix ~/.local
 export PATH="$HOME/.local/bin:$PATH"
-npm install -g zypher-cli@beta
+npm install -g zypher-cli@latest
 ```
 
 The `PATH` export should be added to the user's shell profile. Package scripts
@@ -122,7 +122,7 @@ The postinstall script downloads the matching native `zypher` binary from the
 GitHub release, installs Zig from `ziglang.org`, and installs the matching
 tagged Zypher source tree into `~/.zypher`.
 
-Install an exact beta version:
+Install an exact nightly version:
 
 ```sh
 npm install -g zypher-cli@0.1.0-beta
@@ -139,13 +139,13 @@ zypher help
 Run without a global install:
 
 ```sh
-npx zypher-cli@beta help
+npx zypher-cli@latest help
 ```
 
 For project-local use:
 
 ```sh
-npm install --save-dev zypher-cli@beta
+npm install --save-dev zypher-cli@latest
 npx zypher help
 ```
 
@@ -189,7 +189,7 @@ git tag -a v0.1.0 -m "v0.1.0 stable release"
 git push origin v0.1.0
 ```
 
-Nightly npm publishes with the `beta` dist-tag. Stable npm publishes with the
-`latest` dist-tag. GitHub releases and nightly prereleases are explicitly marked
-latest by the release workflows so the repository sidebar points at the most
-recent published Zypher release.
+Nightly npm publishes with the `latest` dist-tag. Stable npm also publishes
+with the `latest` dist-tag for the `zypher-cli-bin` package. GitHub releases are
+explicitly marked latest by the release workflows so the repository sidebar
+points at the most recent published Zypher release.

@@ -176,7 +176,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: nightly-build
-          prerelease: true
+          prerelease: false
           make_latest: true
           generate_release_notes: true
           overwrite_files: true
@@ -214,7 +214,7 @@ jobs:
             echo "NPM_TOKEN is not set — skipping npm publish."
             exit 0
           fi
-          npm publish ./npm --access public --tag beta
+          npm publish ./npm --access public --tag latest
 
   homebrew-release:
     name: Publish Homebrew formula

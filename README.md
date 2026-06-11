@@ -70,7 +70,7 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 Install the nightly CLI from npm:
 
 ```sh
-npm install -g zypher-cli@beta
+npm install -g zypher-cli@latest
 zypher help
 ```
 
@@ -98,7 +98,7 @@ configure a user-level npm prefix before installing:
 mkdir -p ~/.local
 npm config set prefix ~/.local
 export PATH="$HOME/.local/bin:$PATH"
-npm install -g zypher-cli@beta
+npm install -g zypher-cli@latest
 ```
 
 Add `export PATH="$HOME/.local/bin:$PATH"` to your shell profile if it is not
