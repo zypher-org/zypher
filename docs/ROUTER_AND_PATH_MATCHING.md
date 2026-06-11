@@ -1,9 +1,9 @@
-# zypher Framework – Router & Path Matching (v1)
+# zypher Framework – Router & Path Matching
 
-> **Status:**  Frozen (v1)
+> **Status:** Current pre-1.0 behavior
 >
 > This document defines how HTTP requests are matched to handlers in zypher.
-> Once frozen, all HTTP adapters and extensions must obey these semantics.
+> These semantics are intended to become the v1 router contract once frozen.
 
 ---
 
@@ -51,7 +51,7 @@ Methods are matched **before** paths.
 
 ---
 
-## 4. Path Pattern Syntax (Frozen)
+## 4. Path Pattern Syntax
 
 Paths are UTF-8 strings split by `/`.
 
@@ -79,6 +79,15 @@ Rules:
 Example:
 ```
 /users/42 → { id = "42" }
+```
+
+Typed parameter conversion is performed by reading the captured string through
+`req.params.getAs(T, "name")`.
+
+Example:
+```zig
+Router.route(.get, "/users/:id", userView);
+const id = try req.params.getAs(u64, "id");
 ```
 
 ---
@@ -220,11 +229,10 @@ Breaking these requires a **major version bump**.
 
 ## 14. Status
 
-- Path syntax frozen
+- Path syntax implemented
 
-- Matching rules frozen
+- Matching rules implemented
 
-- Precedence rules frozen
+- Precedence rules implemented
 
-- Safe to implement router internals
-
+- Safe to implement router internals behind these tests

@@ -46,7 +46,7 @@ zypher new services/books --template mvc --api
 
 The project name used in template substitutions is the basename of the path. For `examples/blog`, `{{project_name}}` becomes `blog`.
 
-Built-in templates are stored under the repository root `templates/` directory. Each style has an HTML/template-oriented variant and an API variant:
+Built-in templates are embedded into the binary at compile time and listed under the repository root `templates/` directory. Each style has an HTML/template-oriented variant and an API variant:
 
 - `single-file`
 - `single-file-api`

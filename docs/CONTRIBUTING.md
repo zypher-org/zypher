@@ -34,9 +34,9 @@ These documents define **authoritative behavior**.
 
 ---
 
-## 3. Frozen APIs (Very Important)
+## 3. Compatibility-Sensitive APIs
 
-The following are **frozen for zypher v1**:
+The following are intended to become zypher v1 compatibility surfaces:
 
 - Request
 - Response
@@ -48,9 +48,9 @@ The following are **frozen for zypher v1**:
 
 ###  What this means
 
--  No renaming exported symbols
--  No adding fields to frozen structs
--  No changing function signatures
+-  Avoid renaming exported symbols without updating docs and tests
+-  Avoid adding fields to compatibility-sensitive structs without a migration note
+-  Avoid changing function signatures without explicit maintainer approval
 
 Breaking changes require:
 - a version bump

@@ -41,6 +41,23 @@ test "CORS: adds Allow-Origin header on normal request" {
     try std.testing.expectEqualStrings("http://example.com", origin.?);
 }
 
+test "CORS: accepts lowercase origin request header" {
+    const gpa = std.testing.allocator;
+
+    const MyChain = comptime Chain(.{cors.middleware});
+
+    var req = makeRequest(gpa, .get, "/api/data");
+    try req.headers.put("origin", "http://example.com");
+    defer req.deinit();
+    var res = Response.init(gpa);
+    defer res.deinit();
+
+    MyChain.run(&req, &res, ok_handler);
+
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expectEqualStrings("http://example.com", res.headers.get("Access-Control-Allow-Origin").?);
+}
+
 test "CORS: handles preflight OPTIONS request" {
     const gpa = std.testing.allocator;
 

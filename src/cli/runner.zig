@@ -9,6 +9,7 @@ const migration = @import("../orm/migration.zig");
 const password = @import("../auth/password.zig");
 const validators = @import("../forms/validators.zig");
 const static_files = @import("../middleware/static.zig");
+const embedded_templates = @import("embedded_templates.zig");
 const zypher_log = @import("../log.zig");
 const log = std.log.scoped(.cli);
 
@@ -1098,18 +1099,29 @@ fn scaffoldProject(
     const source_path = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ opts.template_dir, source_template });
     defer gpa.free(source_path);
 
-    var source_dir = cwd.openDir(io, source_path, .{ .iterate = true }) catch {
-        try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ source_template, opts.template_dir });
-        cwd.deleteTree(io, opts.project_path) catch {};
-        std.process.exit(1);
-    };
-    defer source_dir.close(io);
-
-    copyTemplateDir(gpa, io, source_dir, cwd, opts.project_path, opts.project_name) catch {
-        try err_writer.print("zypher: failed to copy template '{s}'\n", .{source_template});
-        cwd.deleteTree(io, opts.project_path) catch {};
-        std.process.exit(1);
-    };
+    if (cwd.openDir(io, source_path, .{ .iterate = true })) |source_dir| {
+        defer source_dir.close(io);
+        copyTemplateDir(gpa, io, source_dir, cwd, opts.project_path, opts.project_name) catch {
+            try err_writer.print("zypher: failed to copy template '{s}'\n", .{source_template});
+            cwd.deleteTree(io, opts.project_path) catch {};
+            std.process.exit(1);
+        };
+    } else |err| switch (err) {
+        error.FileNotFound => {
+            if (std.mem.eql(u8, opts.template_dir, default_template_dir)) {
+                try scaffoldFromEmbedded(out_writer, err_writer, io, gpa, cwd, opts.project_path, opts.project_name, source_template);
+                return;
+            }
+            try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ source_template, opts.template_dir });
+            cwd.deleteTree(io, opts.project_path) catch {};
+            std.process.exit(1);
+        },
+        else => {
+            try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ source_template, opts.template_dir });
+            cwd.deleteTree(io, opts.project_path) catch {};
+            std.process.exit(1);
+        },
+    }
 
     log.info("scaffolded project '{s}' from template '{s}'", .{ opts.project_path, source_template });
     try out_writer.print("Created project '{s}' from template '{s}'\n", .{ opts.project_path, source_template });
@@ -1176,6 +1188,47 @@ fn replaceProjectName(gpa: std.mem.Allocator, input: []const u8, project_name: [
     return out.toOwnedSlice(gpa);
 }
 
+fn scaffoldFromEmbedded(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    cwd: std.Io.Dir,
+    project_path: []const u8,
+    project_name: []const u8,
+    source_template: []const u8,
+) !void {
+    const files = embedded_templates.getFiles(source_template) orelse {
+        try err_writer.print("zypher: template '{s}' not found in embedded templates\n", .{source_template});
+        cwd.deleteTree(io, project_path) catch {};
+        std.process.exit(1);
+    };
+    for (files) |file| {
+        const replaced_rel = try replaceProjectName(gpa, file.path, project_name);
+        defer gpa.free(replaced_rel);
+        const dest_path = try std.fs.path.join(gpa, &.{ project_path, replaced_rel });
+        defer gpa.free(dest_path);
+        if (std.fs.path.dirname(dest_path)) |parent| {
+            cwd.createDirPath(io, parent) catch {
+                try err_writer.print("zypher: failed to create directory '{s}'\n", .{parent});
+                cwd.deleteTree(io, project_path) catch {};
+                std.process.exit(1);
+            };
+        }
+        const rendered = try replaceProjectName(gpa, file.content, project_name);
+        defer gpa.free(rendered);
+        cwd.writeFile(io, .{ .sub_path = dest_path, .data = rendered }) catch {
+            try err_writer.print("zypher: failed to write '{s}'\n", .{dest_path});
+            cwd.deleteTree(io, project_path) catch {};
+            std.process.exit(1);
+        };
+    }
+    log.info("scaffolded project '{s}' from embedded template '{s}'", .{ project_path, source_template });
+    try out_writer.print("Created project '{s}' from embedded template '{s}'\n", .{ project_path, source_template });
+    try out_writer.print("  cd {s}\n", .{project_path});
+    try out_writer.print("  zypher run\n", .{});
+}
+
 fn cmdTemplates(
     out_writer: *std.Io.Writer,
     err_writer: *std.Io.Writer,
@@ -1200,6 +1253,10 @@ fn cmdTemplates(
     }
 
     var dir = std.Io.Dir.cwd().openDir(io, template_dir, .{ .iterate = true }) catch {
+        if (std.mem.eql(u8, template_dir, default_template_dir)) {
+            try listEmbeddedTemplates(out_writer);
+            return;
+        }
         try err_writer.print("zypher: template directory '{s}' not found\n", .{template_dir});
         std.process.exit(1);
     };
@@ -1209,6 +1266,13 @@ fn cmdTemplates(
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
         if (entry.kind == .directory) try out_writer.print("  {s}\n", .{entry.name});
+    }
+}
+
+fn listEmbeddedTemplates(out_writer: *std.Io.Writer) !void {
+    try out_writer.writeAll("Available embedded templates:\n");
+    for (embedded_templates.embedded_template_names) |name| {
+        try out_writer.print("  {s}\n", .{name});
     }
 }
 
@@ -1235,8 +1299,8 @@ fn cmdRun(
     var child = std.process.spawn(init.io, .{
         .argv = argv,
         .cwd = .{ .path = opts.project_path },
-    }) catch {
-        try err_writer.print("zypher: failed to spawn zig build run\n", .{});
+    }) catch |err| {
+        try err_writer.print("zypher: failed to spawn zig build run ({s}). Is Zig installed?\n", .{@errorName(err)});
         std.process.exit(1);
     };
     const term = child.wait(init.io) catch {
@@ -1446,8 +1510,8 @@ fn buildAndServeDocs(
     var child = std.process.spawn(init.io, .{
         .argv = argv,
         .cwd = .{ .path = build_cwd },
-    }) catch {
-        try err_writer.print("zypher: failed to spawn zig build doc\n", .{});
+    }) catch |err| {
+        try err_writer.print("zypher: failed to spawn zig build doc ({s}). Is Zig installed?\n", .{@errorName(err)});
         std.process.exit(1);
     };
     const term = child.wait(init.io) catch {

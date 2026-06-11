@@ -150,7 +150,8 @@ pub const Response = struct {
 
 **Example API**:
 ```zig
-router.get("/users/{id:int}", userView);
+Router.route(.get, "/users/:id", userView);
+const id = try req.params.getAs(u64, "id");
 ```
 
 Invalid route definitions **must fail at compile time**.

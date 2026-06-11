@@ -74,10 +74,13 @@ npm install -g @zypher-org/zypher@beta
 zypher help
 ```
 
-Run without a global install:
+The published binary has templates **embedded at compile time**, so `zypher new`,
+`zypher demo`, and `zypher templates` work standalone without a source tree
+or Zig compiler:
 
 ```sh
-npx @zypher-org/zypher@beta help
+zypher new my-project --template mvc
+cd my-project
 ```
 
 Build the local CLI once from the repository root:

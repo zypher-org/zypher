@@ -20,6 +20,30 @@ Missing npm credentials fail the release workflow. Homebrew tap credentials are
 optional for now; when absent, the workflow still uploads `zypher.rb` to the
 GitHub release and skips only the tap update.
 
+## Standalone Binary Capabilities
+
+The published npm package and release binaries embed all template files at
+compile time. The following CLI commands work **without** a Zypher source tree
+or Zig compiler:
+
+- `help` — show help
+- `new` — scaffold projects from embedded templates (8 variants)
+- `demo` — shortcut for `new --template mvc`
+- `templates` — list available embedded templates
+- `runserver` — start a health-check HTTP server
+- `createsuperuser` — create admin users in a SQLite database
+- `migrate` — run SQL migrations
+- `shell` — interactive REPL
+
+Commands that require a Zig development environment and Zypher source tree:
+
+- `run` — runs a scaffolded app via `zig build run`
+- `doc` — builds and serves Zypher library docs via `zig build doc`
+- `doc-user` — builds and serves user project docs
+
+These commands fail with a clear error message when `zig` or the source tree
+is not available.
+
 ## Supported Release Assets
 
 Each release publishes these archives:

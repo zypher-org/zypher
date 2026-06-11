@@ -19,6 +19,19 @@ pub fn build(b: *std.Build) void {
     lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
     lib_mod.link_libc = true;
 
+    // ── Generate embedded templates ────────────────────────────────
+    const gen_templates_mod = b.createModule(.{
+        .root_source_file = b.path("tools/generate_templates.zig"),
+        .target = b.resolveTargetQuery(.{}),
+    });
+    const gen_templates = b.addExecutable(.{
+        .name = "gen-embedded-templates",
+        .root_module = gen_templates_mod,
+    });
+    const run_gen_templates = b.addRunArtifact(gen_templates);
+    const gen_templates_step = b.step("gen-templates", "Regenerate embedded_templates.zig from templates/");
+    gen_templates_step.dependOn(&run_gen_templates.step);
+
     // ── CLI executable ──────────────────────────────────────────────
     const exe = b.addExecutable(.{
         .name = "zypher",
@@ -32,6 +45,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(exe);
+    exe.step.dependOn(&run_gen_templates.step);
 
     // ── Cross-target CLI binaries ──────────────────────────────────
     const all_targets_step = b.step("all-targets", "Build zypher CLI binaries for all supported targets");
@@ -43,6 +57,7 @@ pub fn build(b: *std.Build) void {
         const install_release_exe = b.addInstallArtifact(release_exe, .{
             .dest_sub_path = b.fmt("{s}/zypher{s}", .{ release_target.name, release_target.exe_suffix }),
         });
+        release_exe.step.dependOn(&run_gen_templates.step);
 
         all_targets_step.dependOn(&install_release_exe.step);
         b.getInstallStep().dependOn(&install_release_exe.step);

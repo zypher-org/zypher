@@ -112,9 +112,9 @@ fn httpDate(buf: []u8, timestamp: std.Io.Timestamp) ![]const u8 {
     );
 }
 
-fn fileMtime(gpa: std.mem.Allocator, path: []const u8) !std.Io.Timestamp {
-    if (@import("builtin").os.tag != .linux) return error.UnsupportedPlatform;
-    const path_z = try gpa.dupeSentinel(u8, path, 0);
+fn fileMtime(gpa: std.mem.Allocator, path: []const u8) ?std.Io.Timestamp {
+    if (@import("builtin").os.tag != .linux) return null;
+    const path_z = gpa.dupeSentinel(u8, path, 0) catch return null;
     defer gpa.free(path_z);
 
     var stx: std.os.linux.Statx = undefined;
@@ -130,7 +130,7 @@ fn fileMtime(gpa: std.mem.Allocator, path: []const u8) !std.Io.Timestamp {
             const nanos = @as(i96, @intCast(stx.mtime.sec)) * std.time.ns_per_s + @as(i96, @intCast(stx.mtime.nsec));
             return std.Io.Timestamp.fromNanoseconds(nanos);
         },
-        else => return error.StatFailed,
+        else => return null,
     }
 }
 
@@ -210,14 +210,11 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
             };
             errdefer res.allocator.free(owned_body);
 
-            const mtime = fileMtime(res.allocator, fs_path) catch |err| {
-                log.err("failed to stat static file {s}: {}", .{ fs_path, err });
-                _ = res.status(500);
-                res.text("Internal Server Error") catch {};
-                return;
-            };
             var last_modified_buf: [40]u8 = undefined;
-            const last_modified = httpDate(&last_modified_buf, mtime) catch "";
+            const last_modified = if (fileMtime(res.allocator, fs_path)) |mtime|
+                httpDate(&last_modified_buf, mtime) catch ""
+            else
+                "";
 
             // Compute ETag (simple hash of content)
             var hasher = std.hash.XxHash32.init(0);

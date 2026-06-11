@@ -1,9 +1,9 @@
-# zypher Framework – Handler & Middleware API (v1)
+# zypher Framework – Handler & Middleware API
 
-> **Status:**  Frozen (v1)
+> **Status:** Current pre-1.0 behavior
 >
 > This document defines the *core execution model* of zypher.
-> Once frozen, all routing, HTTP adapters, async runtimes, and extensions must conform to this API.
+> These function contracts are intended to become the v1 compatibility shape.
 
 ---
 
@@ -33,7 +33,7 @@ pub const Context = struct {
 
 ---
 
-## 3. Handler API (Frozen)
+## 3. Handler API
 
 ### Definition
 
@@ -57,7 +57,7 @@ fn hello(req: *Request, res: *Response) void {
 
 ---
 
-## 4. Middleware API (Frozen)
+## 4. Middleware API
 
 ### Definition
 
@@ -173,7 +173,7 @@ app.use(recover);
 app.get("/", hello);
 ```
 
-> `App` is **not frozen** yet — only the function contracts are.
+> `App` internals are not part of the compatibility surface yet.
 
 ---
 
@@ -200,8 +200,8 @@ Violations require a **major version bump**.
 
 ## 11. Status
 
- Handler API frozen (v1)
+ Handler API implemented
 
- Middleware API frozen (v1)
+ Middleware API implemented
 
  Safe to build router, server, and extensions

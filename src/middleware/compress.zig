@@ -26,7 +26,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
     next(req, res);
 
     // Check if client accepts gzip
-    const accept = req.headers.get("Accept-Encoding") orelse return;
+    const accept = req.header("Accept-Encoding") orelse return;
     if (std.mem.indexOf(u8, accept, "gzip") == null) {
         log.debug("client does not accept gzip, passing through", .{});
         return;

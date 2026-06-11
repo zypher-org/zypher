@@ -144,7 +144,7 @@ test "Response.setCookie adds Set-Cookie header" {
         .secure = true,
         .same_site = .Strict,
     });
-    const cookie_header = res.headers.get("Set-Cookie").?;
+    const cookie_header = res.set_cookie_headers.items[0];
     try std.testing.expect(cookie_header.len > 0);
     try std.testing.expect(std.mem.indexOf(u8, cookie_header, "session=abc123") != null);
     try std.testing.expect(std.mem.indexOf(u8, cookie_header, "HttpOnly") != null);
@@ -156,9 +156,25 @@ test "Response.deleteCookie sets expired cookie" {
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
     _ = res.deleteCookie("session");
-    const cookie_header = res.headers.get("Set-Cookie").?;
+    const cookie_header = res.set_cookie_headers.items[0];
     try std.testing.expect(std.mem.indexOf(u8, cookie_header, "session=") != null);
     try std.testing.expect(std.mem.indexOf(u8, cookie_header, "Max-Age=0") != null);
+}
+
+test "Response.setCookie preserves multiple Set-Cookie headers" {
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+    _ = res.setCookie(.{ .name = "a", .value = "1" });
+    _ = res.setCookie(.{ .name = "b", .value = "2" });
+
+    try std.testing.expectEqual(@as(usize, 2), res.set_cookie_headers.items.len);
+
+    var buf: std.ArrayList(u8) = .empty;
+    defer buf.deinit(std.testing.allocator);
+    try res.send(std.testing.allocator, &buf);
+
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Set-Cookie: a=1; Path=/; SameSite=Lax\r\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Set-Cookie: b=2; Path=/; SameSite=Lax\r\n") != null);
 }
 
 // ── Serialise response to bytes ──────────────────────────────────
