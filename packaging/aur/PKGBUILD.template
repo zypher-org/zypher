@@ -1,7 +1,7 @@
 # Maintainer: Zypher Team <team@zypher.dev>
 # Contributor: Zypher Contributors
 
-pkgname=zypher
+pkgname=zypher-cli
 pkgver={{VERSION}}
 pkgrel=1
 pkgdesc="Batteries-included web framework built the Zig way"

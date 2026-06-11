@@ -1,5 +1,5 @@
 {
-  "name": "@zypher-org/zypher",
+  "name": "zypher-cli",
   "version": "0.1.0-beta",
   "description": "A batteries-included web framework built the Zig way.",
   "license": "Apache-2.0",

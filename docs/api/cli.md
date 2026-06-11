@@ -16,6 +16,8 @@ directory, install the pinned Zig toolchain under `~/.zypher/zig`, and install
 the matching Zypher source tree under `~/.zypher/source`. The npm wrapper
 prepends the Zig directory to `PATH` and passes the source tree as
 `--zypher-root` for build-backed commands such as `run`, `doc`, and `doc-user`.
+Package-manager installs use the package name `zypher-cli`; the executable
+command remains `zypher`.
 
 - `dispatchInner(out, err, init, cmd, args)` — Dispatch a CLI command
 - `buildRunArgv(gpa, zypher_root, app_args)` — Build the `zig build run` argv used by `zypher run`

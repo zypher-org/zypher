@@ -70,8 +70,16 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 Install the published CLI from npm:
 
 ```sh
-npm install -g @zypher-org/zypher@beta
+npm install -g zypher-cli@beta
 zypher help
+```
+
+Other package managers use the same package name:
+
+```sh
+brew install zypher-cli
+paru -S zypher-cli
+choco install zypher-cli
 ```
 
 The npm package installs the published binary, a pinned Zig toolchain, and the

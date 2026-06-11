@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
-    <id>zypher</id>
+    <id>zypher-cli</id>
     <version>{{VERSION}}</version>
-    <title>Zypher</title>
+    <title>Zypher CLI</title>
     <authors>Zypher Team</authors>
     <projectUrl>https://github.com/zypher-org/zypher</projectUrl>
     <licenseUrl>https://raw.githubusercontent.com/zypher-org/zypher/main/LICENSE</licenseUrl>

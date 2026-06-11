@@ -167,7 +167,7 @@ jobs:
           chmod 600 ~/.ssh/aur
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
 
-          git clone aur@aur.archlinux.org:zypher.git aur-pkg
+          git clone aur@aur.archlinux.org:zypher-cli.git aur-pkg
           cd aur-pkg
 
           sed \
@@ -211,7 +211,7 @@ jobs:
         run: |
           (Get-Content packaging/chocolatey/zypher.nuspec.template) `
             -replace '{{VERSION}}', $env:VERSION `
-          | Set-Content -Path zypher.nuspec
+          | Set-Content -Path zypher-cli.nuspec
 
           New-Item -ItemType Directory -Path tools -Force | Out-Null
 
@@ -221,7 +221,7 @@ jobs:
             -replace '{{SHA256_AARCH64_WINDOWS}}', $env:SHA256_AARCH64_WINDOWS `
           | Set-Content -Path tools/chocolateyinstall.ps1
 
-          choco pack zypher.nuspec
+          choco pack zypher-cli.nuspec
 
       - name: Push to Chocolatey
         shell: pwsh

@@ -10,14 +10,14 @@ pushes that formula to the Homebrew tap.
 
 ## Required Secrets
 
-- `NPM_TOKEN` publishes the `@zypher-org/zypher` package to npm. The installed
+- `NPM_TOKEN` publishes the `zypher-cli` package to npm. The installed
   binary command remains `zypher`.
 - `HOMEBREW_TAP_REPO` names the tap repository to update, for example
   `zypher-org/homebrew-tap`.
 - `HOMEBREW_TAP_TOKEN` pushes the rendered formula to the tap repository.
 
 Missing npm credentials fail the release workflow. Homebrew tap credentials are
-optional for now; when absent, the workflow still uploads `zypher.rb` to the
+optional for now; when absent, the workflow still uploads `zypher-cli.rb` to the
 GitHub release and skips only the tap update.
 
 ## CLI Runtime Dependencies
@@ -82,14 +82,14 @@ Each release publishes these archives:
 - `zypher-v<VERSION>-x86_64-windows-gnu.tar.gz`
 - `zypher-v<VERSION>-aarch64-windows-gnu.tar.gz`
 - `SHA256SUMS`
-- `zypher.rb`
+- `zypher-cli.rb`
 
 ## npm Installation
 
 Install the published CLI globally:
 
 ```sh
-npm install -g @zypher-org/zypher@beta
+npm install -g zypher-cli@beta
 zypher help
 ```
 
@@ -100,21 +100,33 @@ tagged Zypher source tree into `~/.zypher`.
 Install an exact beta version:
 
 ```sh
-npm install -g @zypher-org/zypher@0.1.0-beta
+npm install -g zypher-cli@0.1.0-beta
 zypher help
 ```
 
 Run without a global install:
 
 ```sh
-npx @zypher-org/zypher@beta help
+npx zypher-cli@beta help
 ```
 
 For project-local use:
 
 ```sh
-npm install --save-dev @zypher-org/zypher@beta
+npm install --save-dev zypher-cli@beta
 npx zypher help
+```
+
+## Native Package Installation
+
+The package name is `zypher-cli` across package managers. The installed command
+remains `zypher`.
+
+```sh
+brew install zypher-cli
+paru -S zypher-cli
+yay -S zypher-cli
+choco install zypher-cli
 ```
 
 ## Beta Release
