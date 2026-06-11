@@ -21,6 +21,7 @@ env:
 jobs:
   gate:
     name: Check branch
+    if: github.event.created == true && github.event.deleted == false
     runs-on: ubuntu-latest
     outputs:
       is_valid: ${{ steps.gate.outputs.is_valid }}
@@ -174,6 +175,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          name: nightly-build
           prerelease: true
           make_latest: true
           generate_release_notes: true
@@ -271,7 +273,7 @@ jobs:
   aur-publish:
     name: Publish to AUR
     needs: [gate, build]
-    if: needs.gate.outputs.is_valid == 'true'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

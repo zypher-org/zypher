@@ -21,6 +21,7 @@ env:
 jobs:
   gate:
     name: Check branch
+    if: github.event.created == true && github.event.deleted == false
     runs-on: ubuntu-latest
     outputs:
       is_valid: ${{ steps.gate.outputs.is_valid }}
@@ -268,7 +269,7 @@ jobs:
   aur-publish:
     name: Publish to AUR
     needs: [gate, build]
-    if: needs.gate.outputs.is_valid == 'true'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
