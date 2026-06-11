@@ -224,7 +224,7 @@ test "cli: run infers zypher root from current checkout" {
 }
 
 test "cli: doc builds zig build doc argv" {
-    const argv = try cli.buildDocArgv(std.testing.allocator);
+    const argv = try cli.buildDocArgv(std.testing.allocator, null);
     defer {
         for (argv) |arg| std.testing.allocator.free(arg);
         std.testing.allocator.free(argv);
@@ -234,6 +234,20 @@ test "cli: doc builds zig build doc argv" {
     try std.testing.expectEqualStrings("zig", argv[0]);
     try std.testing.expectEqualStrings("build", argv[1]);
     try std.testing.expectEqualStrings("doc", argv[2]);
+}
+
+test "cli: doc can pass zypher root to user project build" {
+    const argv = try cli.buildDocArgv(std.testing.allocator, "/tmp/zypher");
+    defer {
+        for (argv) |arg| std.testing.allocator.free(arg);
+        std.testing.allocator.free(argv);
+    }
+
+    try std.testing.expectEqual(@as(usize, 4), argv.len);
+    try std.testing.expectEqualStrings("zig", argv[0]);
+    try std.testing.expectEqualStrings("build", argv[1]);
+    try std.testing.expectEqualStrings("-Dzypher-root=/tmp/zypher", argv[2]);
+    try std.testing.expectEqualStrings("doc", argv[3]);
 }
 
 test "cli: migrate applies SQL files in order and skips applied migrations" {

@@ -25,6 +25,10 @@ const zigDownloadUrl = `https://ziglang.org/builds/${zigArchiveName}`;
 const zigInstallDir = path.join(zypherHome, "zig", zigVersion, zigTarget);
 const zigExeName = process.platform === "win32" ? "zig.exe" : "zig";
 const zigExePath = path.join(zigInstallDir, zigExeName);
+const sourceArchiveName = `zypher-source-v${version}.tar.gz`;
+const sourceDownloadUrl = `https://github.com/${repository}/archive/refs/tags/v${version}.tar.gz`;
+const sourceInstallDir = path.join(zypherHome, "source", version);
+const sourceMarkerPath = path.join(sourceInstallDir, "src", "zypher.zig");
 
 install()
   .catch((error) => {
@@ -36,6 +40,7 @@ install()
 async function install() {
   await installZypherBinary();
   await installZigToolchain();
+  await installZypherSource();
 }
 
 async function installZypherBinary() {
@@ -93,6 +98,38 @@ async function installZigToolchain() {
 
     if (process.platform !== "win32") {
       fs.chmodSync(zigExePath, 0o755);
+    }
+  } finally {
+    fs.rmSync(partialInstallDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+async function installZypherSource() {
+  if (fs.existsSync(sourceMarkerPath)) {
+    return;
+  }
+
+  fs.mkdirSync(path.dirname(sourceInstallDir), { recursive: true });
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "zypher-source-"));
+  const partialInstallDir = `${sourceInstallDir}.partial-${process.pid}`;
+  try {
+    const archivePath = path.join(tmpDir, sourceArchiveName);
+    const extractDir = path.join(tmpDir, "extract");
+    fs.mkdirSync(extractDir);
+
+    await download(sourceDownloadUrl, archivePath);
+    extractArchive(archivePath, extractDir, "tar.gz");
+
+    const extractedDir = firstDirectory(extractDir);
+    fs.rmSync(partialInstallDir, { recursive: true, force: true });
+    fs.renameSync(extractedDir, partialInstallDir);
+    fs.rmSync(sourceInstallDir, { recursive: true, force: true });
+    fs.renameSync(partialInstallDir, sourceInstallDir);
+
+    if (!fs.existsSync(sourceMarkerPath)) {
+      throw new Error(`installed source tree is missing ${sourceMarkerPath}`);
     }
   } finally {
     fs.rmSync(partialInstallDir, { recursive: true, force: true });
@@ -206,4 +243,13 @@ function extractArchive(archivePath, extractDir, kind) {
 
 function escapePowerShell(value) {
   return value.replace(/'/g, "''");
+}
+
+function firstDirectory(parent) {
+  const entries = fs.readdirSync(parent, { withFileTypes: true });
+  const dir = entries.find((entry) => entry.isDirectory());
+  if (!dir) {
+    throw new Error(`archive did not contain a source directory`);
+  }
+  return path.join(parent, dir.name);
 }

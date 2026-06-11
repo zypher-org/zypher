@@ -15,6 +15,7 @@ const exeName = process.platform === "win32" ? "zypher.exe" : "zypher";
 const exePath = path.join(__dirname, "..", "vendor", target, exeName);
 const zypherHome = process.env.ZYPHER_HOME || path.join(os.homedir(), ".zypher");
 const zigBinDir = path.join(zypherHome, "zig", zigVersion, zigTarget);
+const zypherRoot = process.env.ZYPHER_ROOT || path.join(zypherHome, "source", packageJson.version);
 
 if (!fs.existsSync(exePath)) {
   console.error(`zypher binary is missing for ${target}. Try reinstalling the package.`);
@@ -25,9 +26,10 @@ const pathKey = resolvePathKey(process.env);
 const childEnv = {
   ...process.env,
   [pathKey]: [zigBinDir, process.env[pathKey]].filter(Boolean).join(path.delimiter),
+  ZYPHER_ROOT: zypherRoot,
 };
 
-const result = spawnSync(exePath, process.argv.slice(2), {
+const result = spawnSync(exePath, withZypherRoot(process.argv.slice(2)), {
   env: childEnv,
   stdio: "inherit",
 });
@@ -84,4 +86,27 @@ function resolvePathKey(env) {
     return "PATH";
   }
   return Object.keys(env).find((key) => key.toLowerCase() === "path") || "Path";
+}
+
+function withZypherRoot(args) {
+  const command = args[0];
+  if (!command || !["run", "doc", "doc-user"].includes(command)) {
+    return args;
+  }
+  if (hasOptionBeforePassthrough(args, "--zypher-root")) {
+    return args;
+  }
+  return [command, "--zypher-root", zypherRoot, ...args.slice(1)];
+}
+
+function hasOptionBeforePassthrough(args, option) {
+  for (const arg of args) {
+    if (arg === "--") {
+      return false;
+    }
+    if (arg === option) {
+      return true;
+    }
+  }
+  return false;
 }

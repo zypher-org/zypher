@@ -74,10 +74,10 @@ npm install -g @zypher-org/zypher@beta
 zypher help
 ```
 
-The npm package installs the published binary and a pinned Zig toolchain under
-`~/.zypher`, while templates are embedded at compile time. That means
-`zypher new`, `zypher demo`, `zypher templates`, and docs/build commands can
-work from an npm install without manual Zig setup:
+The npm package installs the published binary, a pinned Zig toolchain, and the
+matching Zypher source tree under `~/.zypher`, while templates are embedded at
+compile time. That means `zypher new`, `zypher demo`, `zypher templates`, and
+docs/build commands can work from an npm install without manual Zig setup:
 
 ```sh
 zypher new my-project --template mvc

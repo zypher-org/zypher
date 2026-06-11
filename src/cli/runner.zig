@@ -991,7 +991,7 @@ const RunOptions = struct {
 
 const DocOptions = struct {
     project_path: []const u8 = ".",
-    zypher_root: []const u8 = ".",
+    zypher_root: ?[]const u8 = null,
     host: []const u8 = "127.0.0.1",
     port: u16 = 8080,
     max_requests: ?usize = null,
@@ -1402,7 +1402,7 @@ pub fn buildRunArgv(gpa: std.mem.Allocator, zypher_root: []const u8, port: u16, 
     return argv.toOwnedSlice(gpa);
 }
 
-pub fn buildDocArgv(gpa: std.mem.Allocator) ![][]const u8 {
+pub fn buildDocArgv(gpa: std.mem.Allocator, zypher_root: ?[]const u8) ![][]const u8 {
     var argv: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (argv.items) |arg| gpa.free(arg);
@@ -1411,6 +1411,9 @@ pub fn buildDocArgv(gpa: std.mem.Allocator) ![][]const u8 {
 
     try argv.append(gpa, try gpa.dupe(u8, "zig"));
     try argv.append(gpa, try gpa.dupe(u8, "build"));
+    if (zypher_root) |root| {
+        try argv.append(gpa, try std.fmt.allocPrint(gpa, "-Dzypher-root={s}", .{root}));
+    }
     try argv.append(gpa, try gpa.dupe(u8, "doc"));
     return argv.toOwnedSlice(gpa);
 }
@@ -1427,7 +1430,7 @@ fn cmdDoc(
     args: []const [:0]const u8,
 ) !void {
     const opts = parseDocOptions(err_writer, args, .framework) catch return;
-    try buildAndServeDocs(out_writer, err_writer, init, opts.zypher_root, opts);
+    try buildAndServeDocs(out_writer, err_writer, init, opts.zypher_root orelse ".", opts);
 }
 
 fn cmdDocUser(
@@ -1503,7 +1506,7 @@ fn buildAndServeDocs(
     build_cwd: []const u8,
     opts: DocOptions,
 ) !void {
-    const argv = try buildDocArgv(init.gpa);
+    const argv = try buildDocArgv(init.gpa, opts.zypher_root);
     defer freeArgv(init.gpa, argv);
 
     try out_writer.print("Building documentation in {s}\n", .{build_cwd});

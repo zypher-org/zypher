@@ -134,7 +134,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           prerelease: true
-          make_latest: false
+          make_latest: true
           generate_release_notes: true
           overwrite_files: true
           files: |

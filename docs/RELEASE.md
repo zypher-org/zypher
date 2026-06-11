@@ -26,16 +26,23 @@ The published npm package and release binaries embed all template files at
 compile time. Template discovery therefore does not require a Zypher source
 tree.
 
-The npm package also installs the pinned Zig toolchain declared in
-`npm/package.json` under:
+The npm package also installs:
+
+- the pinned Zig toolchain declared in `npm/package.json`
+- the tagged Zypher source tree, including `vendor/sqlite-amalgamation-*`
+
+These are stored under:
 
 ```text
 ~/.zypher/zig/<zig-version>/<zig-target>/
+~/.zypher/source/<zypher-version>/
 ```
 
 The npm `zypher` wrapper prepends that directory to `PATH` before launching the
-native CLI, so commands that invoke `zig build` can work after npm install
-without additional shell setup.
+native CLI and passes the source path as `--zypher-root` for commands that need
+it. This lets commands that invoke `zig build` resolve both `zig` and Zypher's
+vendored SQLite-backed source tree after npm install without additional shell
+setup.
 
 Native package managers install Zig through their dependency systems:
 
@@ -87,7 +94,8 @@ zypher help
 ```
 
 The postinstall script downloads the matching native `zypher` binary from the
-GitHub release and installs Zig from `ziglang.org` into `~/.zypher`.
+GitHub release, installs Zig from `ziglang.org`, and installs the matching
+tagged Zypher source tree into `~/.zypher`.
 
 Install an exact beta version:
 
@@ -121,6 +129,6 @@ git push origin v0.1.0-beta
 ```
 
 Prerelease versions containing a hyphen publish to npm with the `beta` dist-tag.
-Stable versions publish with the `latest` dist-tag. GitHub releases are still
-published as normal/latest releases so they appear in repository release
-surfaces.
+Stable versions publish with the `latest` dist-tag. GitHub releases and nightly
+prereleases are explicitly marked latest by the release workflows so the
+repository sidebar points at the most recent published Zypher release.
