@@ -1,9 +1,9 @@
-# zypher Framework – Core Conformance Test Specifications (v1)
+# zypher Framework – Core Conformance Test Specifications
 
-> **Status:**  Authoritative
+> **Status:** Current conformance direction
 >
-> This document defines **all mandatory tests** required for zypher v1 compliance.
-> Any implementation MUST pass these tests to be considered correct.
+> This document tracks the tests expected for zypher's intended v1 behavior.
+> It is not yet a frozen external conformance contract.
 
 ---
 
@@ -291,4 +291,3 @@ An implementation is **zypher v1 compliant** if:
  - Router spec covered
 
  - Core behavior fully locked
-

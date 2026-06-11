@@ -87,12 +87,43 @@ fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
     return false;
 }
 
-fn generateRecoveryCode(gpa: std.mem.Allocator, req: *Request) ![]u8 {
-    var seed: u64 = @intFromPtr(req);
-    seed ^= @intFromPtr(gpa.ptr);
-    var prng = std.Random.DefaultPrng.init(seed);
-    const n = prng.random().uintLessThan(u32, 1_000_000);
-    return std.fmt.allocPrint(gpa, "{d:0>6}", .{n});
+fn randomBytes(buf: []u8) !void {
+    if (buf.len == 0) return;
+    if (@import("builtin").os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const remaining = buf[filled..];
+            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
+            switch (std.posix.errno(rc)) {
+                .SUCCESS => {
+                    const n: usize = @intCast(rc);
+                    if (n == 0) return error.EntropyUnavailable;
+                    filled += n;
+                },
+                .INTR => continue,
+                else => return error.EntropyUnavailable,
+            }
+        }
+        return;
+    }
+    if (@import("builtin").link_libc and @hasDecl(std.posix.system, "arc4random_buf")) {
+        std.posix.system.arc4random_buf(buf.ptr, buf.len);
+        return;
+    }
+    return error.EntropyUnavailable;
+}
+
+fn unixTimestamp() i64 {
+    var ts: std.posix.timespec = undefined;
+    _ = std.posix.system.clock_gettime(std.posix.CLOCK.REALTIME, &ts);
+    return ts.sec;
+}
+
+fn generateRecoveryCode(gpa: std.mem.Allocator) ![]u8 {
+    var bytes: [4]u8 = undefined;
+    try randomBytes(&bytes);
+    const raw = (@as(u32, bytes[0]) << 24) | (@as(u32, bytes[1]) << 16) | (@as(u32, bytes[2]) << 8) | @as(u32, bytes[3]);
+    return std.fmt.allocPrint(gpa, "{d:0>6}", .{raw % 1_000_000});
 }
 
 fn passwordStrong(plain: []const u8) bool {
@@ -131,18 +162,18 @@ fn forgotPassword(req: *Request, res: *Response) void {
         res.html("<p>If an admin account exists for that email, a recovery code was sent.</p>") catch {};
         return;
     }
-    const code = generateRecoveryCode(req.allocator, req) catch return;
+    const code = generateRecoveryCode(req.allocator) catch return;
     defer req.allocator.free(code);
-    var update = db.prepare("UPDATE users SET reset_code = ?, reset_code_expires_at = 0 WHERE email = ?") catch return;
+    var update = db.prepare("UPDATE users SET reset_code = ?, reset_code_expires_at = ? WHERE email = ?") catch return;
     defer update.finalize();
     update.bind(.{ .text = code }, 1) catch return;
-    update.bind(.{ .text = email }, 2) catch return;
+    update.bind(.{ .int = unixTimestamp() + 900 }, 2) catch return;
+    update.bind(.{ .text = email }, 3) catch return;
     _ = update.step() catch return;
     res.html(std.fmt.allocPrint(req.allocator,
-        \\<p>A 6-digit recovery code was sent for {s}.</p>
-        \\<p>Development code: <strong>{s}</strong></p>
+        \\<p>If an admin account exists for {s}, a recovery code was sent.</p>
         \\<p><a href="/admin/reset-password">Reset password</a></p>
-    , .{ email, code }) catch "Recovery code sent") catch {};
+    , .{email}) catch "Recovery code sent") catch {};
 }
 
 fn resetPasswordForm(_: *Request, res: *Response) void {
@@ -170,7 +201,7 @@ fn resetPassword(req: *Request, res: *Response) void {
     }
     const db = tl_db orelse return;
     ensureAuthRecoverySchema(db);
-    var stmt = db.prepare("SELECT reset_code FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch return;
+    var stmt = db.prepare("SELECT reset_code, reset_code_expires_at FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch return;
     defer stmt.finalize();
     stmt.bind(.{ .text = email }, 1) catch return;
     if (!(stmt.step() catch false)) {
@@ -183,7 +214,12 @@ fn resetPassword(req: *Request, res: *Response) void {
         res.text("Invalid recovery code") catch {};
         return;
     };
-    if (!std.mem.eql(u8, stored.text, code)) {
+    const expires = stmt.column(.integer, 1) catch {
+        _ = res.status(400);
+        res.text("Invalid recovery code") catch {};
+        return;
+    };
+    if (expires.int < unixTimestamp() or !std.mem.eql(u8, stored.text, code)) {
         _ = res.status(400);
         res.text("Invalid recovery code") catch {};
         return;

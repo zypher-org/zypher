@@ -98,7 +98,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
         if (cookie_config.secure) cookie_writer.writeAll("; Secure") catch {};
         cookie_writer.print("; Path={s}", .{cookie_config.path}) catch {};
         cookie_writer.print("; Max-Age={d}", .{cookie_config.max_age}) catch {};
-        _ = res.header("Set-Cookie", cookie_buf[0..cookie_writer.end]);
+        _ = res.addSetCookie(cookie_buf[0..cookie_writer.end]);
         log.debug("created new session for {s}", .{req.path});
     }
 

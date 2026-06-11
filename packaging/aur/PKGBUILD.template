@@ -1,0 +1,24 @@
+# Maintainer: Zypher Team <team@zypher.dev>
+# Contributor: Zypher Contributors
+
+pkgname={{PACKAGE_NAME}}
+pkgver={{VERSION}}
+pkgrel=1
+pkgdesc="Batteries-included web framework built the Zig way"
+arch=('x86_64' 'aarch64')
+url="https://github.com/zypher-org/zypher"
+license=('Apache-2.0')
+depends=('glibc' 'zig')
+source_x86_64=("https://github.com/zypher-org/zypher/releases/download/v${pkgver}/zypher-v${pkgver}-x86_64-linux-musl.tar.gz")
+source_aarch64=("https://github.com/zypher-org/zypher/releases/download/v${pkgver}/zypher-v${pkgver}-aarch64-linux-musl.tar.gz")
+sha256sums_x86_64=('{{SHA256_X86_64}}')
+sha256sums_aarch64=('{{SHA256_AARCH64}}')
+
+package() {
+  local srcdir_name="zypher-v${pkgver}-${CARCH}-linux-musl"
+  install -Dm755 "${srcdir_name}/zypher" "${pkgdir}/usr/bin/zypher"
+  install -Dm644 "${srcdir_name}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 "${srcdir_name}/README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+  mkdir -p "${pkgdir}/usr/share/zypher"
+  cp -a "${srcdir_name}/source/." "${pkgdir}/usr/share/zypher/"
+}

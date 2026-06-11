@@ -67,17 +67,38 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 
 ## Quick Start
 
-Install the published CLI from npm:
+Install the nightly CLI from npm:
 
 ```sh
-npm install -g @zypher-org/zypher@beta
+npm install -g zypher-cli@beta
 zypher help
 ```
 
-Run without a global install:
+Nightly package-manager installs use `zypher-cli`:
 
 ```sh
-npx @zypher-org/zypher@beta help
+brew install zypher-cli
+paru -S zypher-cli
+choco install zypher-cli
+```
+
+Stable binary packages use `zypher-cli-bin`:
+
+```sh
+npm install -g zypher-cli-bin@latest
+brew install zypher-cli-bin
+paru -S zypher-cli-bin
+choco install zypher-cli-bin
+```
+
+The npm package installs the published binary, a pinned Zig toolchain, and the
+matching Zypher source tree under `~/.zypher`, while templates are embedded at
+compile time. That means `zypher new`, `zypher demo`, `zypher templates`, and
+docs/build commands can work from an npm install without manual Zig setup:
+
+```sh
+zypher new my-project --template mvc
+cd my-project
 ```
 
 Build the local CLI once from the repository root:

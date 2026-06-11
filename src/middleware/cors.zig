@@ -28,7 +28,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
 pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *const fn (*Request, *Response) void) void {
     return struct {
         fn handle(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-            const origin = req.headers.get("Origin");
+            const origin = req.header("Origin");
 
             // No Origin header — not a CORS request, pass through
             if (origin == null) {

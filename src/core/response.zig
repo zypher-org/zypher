@@ -66,6 +66,7 @@ pub const Response = struct {
     status_code: u16 = 200,
     reason_phrase: ?[]const u8 = "OK",
     headers: std.StringHashMap([]const u8),
+    set_cookie_headers: std.ArrayList([]const u8) = .empty,
     body: ?[]const u8 = null,
     use_chunked: bool = false,
     allocator: std.mem.Allocator,
@@ -91,6 +92,10 @@ pub const Response = struct {
             self.allocator.free(entry.value_ptr.*);
         }
         self.headers.deinit();
+        for (self.set_cookie_headers.items) |cookie| {
+            self.allocator.free(cookie);
+        }
+        self.set_cookie_headers.deinit(self.allocator);
     }
 
     // ───────────── Mutators (chainable) ─────────────
@@ -119,6 +124,16 @@ pub const Response = struct {
 
         self.headers.put(owned_name, owned_value) catch {
             self.allocator.free(owned_name);
+            self.allocator.free(owned_value);
+            return self;
+        };
+        return self;
+    }
+
+    /// Add a raw Set-Cookie header value. Multiple Set-Cookie headers are preserved.
+    pub fn addSetCookie(self: *Response, value: []const u8) *Response {
+        const owned_value = self.allocator.dupe(u8, value) catch return self;
+        self.set_cookie_headers.append(self.allocator, owned_value) catch {
             self.allocator.free(owned_value);
             return self;
         };
@@ -184,6 +199,7 @@ pub const Response = struct {
     /// Add a Set-Cookie header.
     pub fn setCookie(self: *Response, cookie: Cookie) *Response {
         var buf: std.ArrayList(u8) = .empty;
+        defer buf.deinit(self.allocator);
         buf.appendSlice(self.allocator, cookie.name) catch return self;
         buf.appendSlice(self.allocator, "=") catch return self;
         buf.appendSlice(self.allocator, cookie.value) catch return self;
@@ -212,9 +228,7 @@ pub const Response = struct {
             .Lax => buf.appendSlice(self.allocator, "; SameSite=Lax") catch return self,
             .None => buf.appendSlice(self.allocator, "; SameSite=None") catch return self,
         }
-        const slice = buf.toOwnedSlice(self.allocator) catch return self;
-        _ = self.header("Set-Cookie", slice);
-        self.allocator.free(slice);
+        _ = self.addSetCookie(buf.items);
         return self;
     }
 
@@ -256,6 +270,11 @@ pub const Response = struct {
             try out.appendSlice(gpa, entry.key_ptr.*);
             try out.appendSlice(gpa, ": ");
             try out.appendSlice(gpa, entry.value_ptr.*);
+            try out.appendSlice(gpa, "\r\n");
+        }
+        for (self.set_cookie_headers.items) |cookie| {
+            try out.appendSlice(gpa, "Set-Cookie: ");
+            try out.appendSlice(gpa, cookie);
             try out.appendSlice(gpa, "\r\n");
         }
 
