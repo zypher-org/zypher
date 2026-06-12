@@ -1,137 +1,96 @@
 # CLI API
 
 ## Runner
-CLI command dispatcher.
+CLI command dispatcher with subcommands for project scaffolding, running, documentation, migrations, and admin tasks.
 
-Build the CLI once from the repository root, then use `zypher` for project workflows:
+### Key Functions
+- `dispatchInner(out, err, init, cmd, args) !void` — dispatch a CLI command by name
+- `buildRunArgv(gpa, zypher_root, port, app_args) ![]const [:0]const u8` — build `zig build run` argv for `zypher run`
+- `buildDocArgv(gpa, zypher_root, project_path, host, port, max_requests) ![]const [:0]const u8` — build `zig build doc` argv for documentation commands
 
+### RunserverConfig
+- `host: []const u8 = "127.0.0.1"` — bind address
+- `port: u16 = 8080` — listen port
+- `max_requests: ?usize = null` — optional request limit
+
+### Helpers
+- `parseRunserverConfig(args) RunserverConfig` — parse runserver arguments
+- `runserverDefaultHandler(req, res)` — default health-check handler (returns 404)
+- `bindRunserverSignalTarget(app, io)` — bind SIGINT handler for graceful shutdown
+- `clearRunserverSignalTarget()` — clear signal handler
+
+## Commands
+
+### Project Scaffolding
+- `zypher new <path> [--template <name>] [--api] [--template-dir <dir>]` — scaffold a new project from a template
+  - Project name is basename of path
+  - `{{project_name}}` is replaced in file paths and contents
+  - `--api` appends `-api` to template name
+  - Falls back to embedded templates if template dir not found
+
+- `zypher templates [--template-dir <dir>]` — list available templates
+- `zypher demo <name>` — compatibility alias for `zypher new <name> --template mvc`
+
+### Running Apps
+- `zypher run [path] [--zypher-root <path>] [--port <port>] [-- <app args...>]` — run a scaffolded app through its `build.zig`
+  - Infers zypher root from binary location, package install paths, or current checkout
+  - Honors `ZYPHER_ROOT` environment variable
+  - Defaults to port 8080
+  - Delegates to `zig build -Dzypher-root=<path> run`
+
+### Development Server
+- `zypher runserver [--host <host>] [--port <port>] [--max-requests <n>]` — start the framework health-check server
+
+### Documentation
+- `zypher doc [--zypher-root <path>] [--host <host>] [--port <port>] [--max-requests <n>]` — build and serve Zypher library documentation
+- `zypher doc-user [path] [--host <host>] [--port <port>] [--max-requests <n>]` — build and serve documentation for user code
+
+### Database
+- `zypher migrate [--db <path>] [--dir <dir>]` — run pending SQL migrations from a directory
+  - Collects `.sql` files, sorts by name, applies unapplied ones
+  - Tracks applied migrations in `zypher_migrations` table
+- `zypher makemigrations [--schema <path>] [--state <path>] [--dir <dir>]` — generate migration files by comparing schema manifest to previous state
+
+### Admin
+- `zypher createsuperuser [--username <name>] [--email <email>] [--password <password>] [--db <path>]` — create an admin user in the database
+  - Interactive mode with hidden password input if any field is omitted
+  - Validates: non-empty username, valid email, password ≥ 8 chars with letter + digit
+  - Creates `users` table if it doesn't exist (with email, reset_code, reset_code_expires_at columns)
+  - Stores password as PBKDF2-HMAC-SHA256 hash
+  - Sets role to `"admin"`
+  - Supports `--db` (default: `db.sqlite`)
+
+### Shell
+- `zypher shell [--eval <expr>]` — interactive REPL with integer arithmetic
+  - Commands: `:help`, `:context`, `:contract`, `:quit`
+  - Supports `+`, `-`, `*`, `/` operators
+
+### Help
+- `zypher help` — show available commands
+
+## Built-in Templates
+Templates are embedded into the binary at compile time. Each style has an HTML variant and an API variant:
+- `single-file` / `single-file-api`
+- `clean-arch` / `clean-arch-api`
+- `mvc` / `mvc-api`
+- `mvp` / `mvp-api`
+
+### Every template includes:
+- `build.zig` with `-Dzypher-root` support
+- A runnable Zypher app
+- Sample `managed_items` ORM model
+- `AdminSite` registration
+- `/admin` redirecting to `/admin/login`
+- `/admin/login` backed by `users` table
+- `/admin/forgot-password` and `/admin/reset-password` with 6-digit recovery codes
+
+API variants return JSON for app routes instead of HTML templates.
+
+## Installation
 ```sh
 zig build
 export PATH="$PWD/zig-out/bin:$PATH"
 zypher help
 ```
 
-Published installs use the Zig version pinned in `build.zig.zon`, place that
-toolchain under `~/.zypher/zig`, and install the matching Zypher source tree
-under `~/.zypher/source`. Package wrappers prepend the Zig directory to `PATH`
-and pass the source tree as `--zypher-root` for build-backed commands such as
-`run`, `doc`, and `doc-user`.
-Package-manager installs use `zypher-cli` for `prod-nightly` releases and
-`zypher-cli-bin` for `prod-stable` releases. The executable command remains
-`zypher`. AUR publishing is intentionally TODO for now.
-
-- `dispatchInner(out, err, init, cmd, args)` — Dispatch a CLI command
-- `buildRunArgv(gpa, zypher_root, app_args)` — Build the `zig build run` argv used by `zypher run`
-- `buildDocArgv(gpa)` — Build the `zig build doc` argv used by documentation commands
-- `RunserverConfig` — Server configuration struct
-- `parseRunserverConfig(args)` — Parse runserver arguments
-- `runserverDefaultHandler(req, res)` — Default health check handler
-- `bindRunserverSignalTarget(app, io)` — Bind signal handler target
-- `clearRunserverSignalTarget()` — Clear signal handler target
-
-### Commands
-- `new <path> [--template <name>] [--api] [--template-dir <dir>]` — Scaffold a new project from a template
-- `templates [--template-dir <dir>]` — List available scaffold templates
-- `run [path] [--zypher-root <path>] [--port <port>] [-- <app args...>]` — Run a scaffolded app through its `build.zig`; the Zypher root is inferred by default
-- `doc [--zypher-root <path>] [--host <host>] [--port <port>] [--max-requests <n>]` — Build and serve Zypher library documentation
-- `doc-user [path] [--host <host>] [--port <port>] [--max-requests <n>]` — Build and serve documentation for user code
-- `demo <path>` — Compatibility alias that scaffolds the `mvc` template
-- `runserver [--host <host>] [--port <port>] [--max-requests <n>]` — Start the framework health-check server
-- `migrate [--db <path>] [--dir <dir>]` — Run database migrations
-- `makemigrations [--schema <path>] [--state <path>] [--dir <dir>]` — Generate migration files
-- `createsuperuser [--username <name>] [--email <email>] [--password <password>] [--db <path>]` — Create an admin user
-- `shell` — Interactive REPL
-- `help` — Show help
-
-## Project Scaffolding
-
-`zypher new` accepts either a bare project name or a nested path:
-
-```sh
-zypher new blog
-zypher new examples/blog --template clean-arch
-zypher new services/books --template mvc --api
-```
-
-The project name used in template substitutions is the basename of the path. For `examples/blog`, `{{project_name}}` becomes `blog`.
-
-Built-in templates are embedded into the binary at compile time and listed under the repository root `templates/` directory. Each style has an HTML/template-oriented variant and an API variant:
-
-- `single-file`
-- `single-file-api`
-- `clean-arch`
-- `clean-arch-api`
-- `mvc`
-- `mvc-api`
-- `mvp`
-- `mvp-api`
-
-`--api` maps the selected template to its `-api` sibling. For example, `--template mvc --api` scaffolds `mvc-api`.
-
-Templates are copied recursively. File paths and file contents may use `{{project_name}}`; the CLI replaces it during scaffold creation. This keeps third-party templates simple: place paired folders under a template directory and pass it with `--template-dir`.
-
-Every built-in template includes:
-
-- `build.zig`
-- a runnable Zypher app
-- a sample `managed_items` ORM model
-- `zypher.admin.AdminSite` registration
-- `/admin` redirecting to `/admin/login`
-- `/admin/login` credentials backed by the `users` table created by `zypher createsuperuser`
-- `/admin/forgot-password` and `/admin/reset-password` for 6-digit recovery codes
-
-API variants do not include project HTML templates for app routes. Their app routes return JSON with `Response.json`; the admin dashboard still uses the framework's built-in admin templates.
-
-## Superusers
-
-`zypher createsuperuser` creates the admin row used by scaffolded `/admin/login` routes. The default flow is interactive:
-
-```sh
-zypher createsuperuser --db app.db
-```
-
-It prompts for username, email, password, and password confirmation. Password input is hidden in an interactive terminal.
-
-For scripts or fixtures, pass all account fields explicitly:
-
-```sh
-zypher createsuperuser --username admin --email admin@example.com --password Passw0rd --db app.db
-```
-
-Scaffolded admin login uses `username` and `password`. Password recovery uses the stored email address: `POST /admin/forgot-password` creates a 6-digit code, and `POST /admin/reset-password` accepts `email`, `code`, `password`, and `confirm_password`.
-
-## Running Scaffolded Apps
-
-`zypher run` is the supported way to start scaffolded apps from the CLI. It delegates to the generated app build script and forwards runtime options:
-
-```sh
-zypher run .
-zypher run examples/blog
-zypher run . --port 9000
-```
-
-It runs:
-
-```sh
-zig build -Dzypher-root=<path> run -- --port <port>
-```
-
-`zypher run` passes the Zypher source root to the generated build script automatically. It first honors `ZYPHER_ROOT`, then infers that root from the CLI binary when the binary lives under `zig-out/bin`, packaged source locations such as `source/` or `share/zypher`, and finally the current framework checkout. Pass `--zypher-root` only for nonstandard installs. If `--port` is omitted, `zypher run` forwards `--port 8080`; generated apps also default to `8080` when run directly without a port. Users should prefer `zypher run` over invoking the app build script directly.
-
-## Documentation Server
-
-`zypher doc` is the CLI entrypoint for framework documentation. It builds the framework docs and serves the generated `zig-out/docs` directory:
-
-```sh
-zypher doc
-zypher doc --zypher-root /path/to/zypher --port 9000
-```
-
-`zypher doc-user` is the CLI entrypoint for user-project documentation. It builds docs for the current project or a selected project path and serves that project's `zig-out/docs` directory:
-
-```sh
-zypher doc-user
-zypher doc-user examples/books-api --port 9001
-```
-
-Both commands default to `127.0.0.1:8080` and accept `--max-requests` for tests or one-shot smoke checks.
+Published installs use the Zig version pinned in `build.zig.zon`, place that toolchain under `~/.zypher/zig`, and install the matching Zypher source tree under `~/.zypher/source`.
