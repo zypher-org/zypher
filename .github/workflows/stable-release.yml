@@ -96,7 +96,7 @@ jobs:
           fi
           echo "zig_version=${zig_version}" >> "$GITHUB_OUTPUT"
 
-          zig build all-targets -Doptimize=ReleaseSafe
+          zig build all-targets -Doptimize=ReleaseSafe "-Dversion=${version}"
 
           mkdir -p dist
           for target in \

@@ -2,8 +2,9 @@
 /// Every abstraction is explicit, inspectable, and replaceable.
 /// No hidden allocations, no runtime magic, no global state.
 const std = @import("std");
+const build_config = @import("build_config");
 
-pub const version = "0.1.0-beta";
+pub const version = build_config.version;
 
 pub const log = @import("log.zig");
 pub const errors = @import("errors.zig");
