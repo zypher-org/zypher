@@ -23,6 +23,7 @@ env:
 jobs:
   gate:
     name: Check branch
+    if: github.event.created == true && github.event.deleted == false
     runs-on: ubuntu-latest
     outputs:
       is_valid: ${{ steps.gate.outputs.is_valid }}
@@ -34,11 +35,6 @@ jobs:
         id: gate
         run: |
           set -eu
-          if [ "${{ github.ref }}" = "refs/heads/prod-nightly" ]; then
-            echo "is_valid=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           if [ "${{ github.event.created }}" != "true" ] || [ "${{ github.event.deleted }}" = "true" ]; then
             echo "is_valid=false" >> "$GITHUB_OUTPUT"
             echo "Ignoring non-created or deleted ref ${{ github.ref }}."
@@ -119,7 +115,7 @@ jobs:
           fi
           echo "zig_version=${zig_version}" >> "$GITHUB_OUTPUT"
 
-          zig build all-targets -Doptimize=ReleaseSafe
+          zig build all-targets -Doptimize=ReleaseSafe "-Dversion=${version}"
 
           mkdir -p dist
           for target in \
