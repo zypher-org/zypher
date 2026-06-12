@@ -23,8 +23,7 @@ const zypherHome = resolveZypherHome();
 const zigTarget = resolveZigTarget(process.platform, process.arch);
 const zigArchiveExt = process.platform === "win32" ? "zip" : "tar.xz";
 const zigArchiveName = `zig-${zigTarget}-${zigVersion}.${zigArchiveExt}`;
-const zigDownloadUrl = `https://ziglang.org/builds/${zigArchiveName}`;
-const zigSumsUrl = "https://ziglang.org/builds/sha256sums.txt";
+const zigIndexUrl = "https://ziglang.org/download/index.json";
 const zigInstallDir = path.join(zypherHome, "zig", zigVersion, zigTarget);
 const zigExeName = process.platform === "win32" ? "zig.exe" : "zig";
 const zigExePath = path.join(zigInstallDir, zigExeName);
@@ -93,10 +92,29 @@ async function installZigToolchain() {
     const extractDir = path.join(tmpDir, "extract");
     fs.mkdirSync(extractDir);
 
+    const indexJson = await httpsGet(zigIndexUrl);
+    const index = JSON.parse(indexJson);
+    let entry = index[zigVersion];
+    if (!entry) {
+      for (const key of Object.keys(index)) {
+        if (index[key].version === zigVersion) {
+          entry = index[key];
+          break;
+        }
+      }
+    }
+    if (!entry) {
+      throw new Error(`could not find Zig ${zigVersion} in release index`);
+    }
+    const targetEntry = entry[zigTarget];
+    if (!targetEntry) {
+      throw new Error(`could not find Zig ${zigVersion} for ${zigTarget} in release index`);
+    }
+    const zigDownloadUrl = targetEntry.tarball;
+    const expectedSha = targetEntry.shasum.toLowerCase();
+
     await download(zigDownloadUrl, archivePath);
-    const zigSumsPath = path.join(tmpDir, "sha256sums.txt");
-    await download(zigSumsUrl, zigSumsPath);
-    await verifySha256(archivePath, zigSumsPath);
+    await verifyInlineSha256(archivePath, expectedSha, zigArchiveName);
     extractArchive(archivePath, extractDir, zigArchiveExt);
 
     const extractedDir = path.join(extractDir, `zig-${zigTarget}-${zigVersion}`);
@@ -184,6 +202,26 @@ function resolveZigTarget(platform, arch) {
   return target;
 }
 
+function httpsGet(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { "User-Agent": "zypher-npm-installer" } }, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        response.resume();
+        httpsGet(response.headers.location).then(resolve, reject);
+        return;
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`HTTP ${response.statusCode}: ${url}`));
+        return;
+      }
+      let data = "";
+      response.on("data", (chunk) => data += chunk);
+      response.on("end", () => resolve(data));
+    }).on("error", reject);
+  });
+}
+
 function download(url, destination) {
   return new Promise((resolve, reject) => {
     const request = https.get(
@@ -220,6 +258,24 @@ function download(url, destination) {
     );
 
     request.on("error", reject);
+  });
+}
+
+function verifyInlineSha256(archivePath, expected, name) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(archivePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => {
+      const actual = hash.digest("hex");
+      if (actual !== expected) {
+        reject(new Error(`checksum mismatch for ${name}`));
+      } else {
+        console.log(`Checksum verified for ${name}`);
+        resolve();
+      }
+    });
+    stream.on("error", reject);
   });
 }
 
