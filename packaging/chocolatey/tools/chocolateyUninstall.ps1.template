@@ -1,0 +1,26 @@
+$ErrorActionPreference = 'Stop'
+
+function Resolve-ZypherHome {
+  if ($env:ZYPHER_HOME) {
+    return $env:ZYPHER_HOME
+  }
+  return Join-Path $env:USERPROFILE '.zypher'
+}
+
+$zypherHome = Resolve-ZypherHome
+if (Test-Path $zypherHome) {
+  Remove-Item -Recurse -Force $zypherHome
+  Write-Host "Removed Zypher runtime data: $zypherHome"
+}
+
+$binDir = "$HOME\.local\bin"
+$wrapperCmd = Join-Path $binDir 'zypher.cmd'
+$wrapperPs1 = Join-Path $binDir 'zypher.ps1'
+if (Test-Path $wrapperCmd) {
+  Remove-Item -Force $wrapperCmd
+  Write-Host "Removed wrapper: $wrapperCmd"
+}
+if (Test-Path $wrapperPs1) {
+  Remove-Item -Force $wrapperPs1
+  Write-Host "Removed wrapper: $wrapperPs1"
+}

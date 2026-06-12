@@ -9,11 +9,13 @@ const path = require("node:path");
 const packageJson = require("../package.json");
 
 const repository = "zypher-org/zypher";
+const crypto = require("node:crypto");
 const version = packageJson.version;
 const zigVersion = packageJson.zypher.zigVersion;
 const target = resolveTarget(process.platform, process.arch);
 const archiveName = `zypher-v${version}-${target}.tar.gz`;
 const downloadUrl = `https://github.com/${repository}/releases/download/v${version}/${archiveName}`;
+const sumsUrl = `https://github.com/${repository}/releases/download/v${version}/SHA256SUMS`;
 const vendorDir = path.join(__dirname, "..", "vendor", target);
 const exeName = process.platform === "win32" ? "zypher.exe" : "zypher";
 const exePath = path.join(vendorDir, exeName);
@@ -22,6 +24,7 @@ const zigTarget = resolveZigTarget(process.platform, process.arch);
 const zigArchiveExt = process.platform === "win32" ? "zip" : "tar.xz";
 const zigArchiveName = `zig-${zigTarget}-${zigVersion}.${zigArchiveExt}`;
 const zigDownloadUrl = `https://ziglang.org/builds/${zigArchiveName}`;
+const zigSumsUrl = "https://ziglang.org/builds/sha256sums.txt";
 const zigInstallDir = path.join(zypherHome, "zig", zigVersion, zigTarget);
 const zigExeName = process.platform === "win32" ? "zig.exe" : "zig";
 const zigExePath = path.join(zigInstallDir, zigExeName);
@@ -57,6 +60,9 @@ async function installZypherBinary() {
     fs.mkdirSync(extractDir);
 
     await download(downloadUrl, archivePath);
+    const sumsPath = path.join(tmpDir, "SHA256SUMS");
+    await download(sumsUrl, sumsPath);
+    await verifySha256(archivePath, sumsPath);
     extractArchive(archivePath, extractDir, "tar.gz");
 
     const packageDir = path.join(extractDir, `zypher-v${version}-${target}`);
@@ -88,6 +94,9 @@ async function installZigToolchain() {
     fs.mkdirSync(extractDir);
 
     await download(zigDownloadUrl, archivePath);
+    const zigSumsPath = path.join(tmpDir, "sha256sums.txt");
+    await download(zigSumsUrl, zigSumsPath);
+    await verifySha256(archivePath, zigSumsPath);
     extractArchive(archivePath, extractDir, zigArchiveExt);
 
     const extractedDir = path.join(extractDir, `zig-${zigTarget}-${zigVersion}`);
@@ -211,6 +220,39 @@ function download(url, destination) {
     );
 
     request.on("error", reject);
+  });
+}
+
+function verifySha256(archivePath, sumsPath) {
+  return new Promise((resolve, reject) => {
+    const archiveName = path.basename(archivePath);
+    const sums = fs.readFileSync(sumsPath, "utf8");
+    let expected = null;
+    for (const line of sums.split("\n")) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length === 2 && parts[1] === archiveName) {
+        expected = parts[0].toLowerCase();
+        break;
+      }
+    }
+    if (!expected) {
+      reject(new Error(`checksum for ${archiveName} not found`));
+      return;
+    }
+
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(archivePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => {
+      const actual = hash.digest("hex");
+      if (actual !== expected) {
+        reject(new Error(`checksum mismatch for ${archiveName}`));
+      } else {
+        console.log(`Checksum verified for ${archiveName}`);
+        resolve();
+      }
+    });
+    stream.on("error", reject);
   });
 }
 

@@ -1,0 +1,9 @@
+post_remove() {
+  local zypher_home="${ZYPHER_HOME:-$HOME/.zypher}"
+  if [ -d "$zypher_home" ]; then
+    echo "==> Removing Zypher runtime data: $zypher_home"
+    echo "    To keep it, press Ctrl-C within 5 seconds..."
+    sleep 5
+    rm -rf "$zypher_home"
+  fi
+}

@@ -132,6 +132,9 @@ function Install-Zig {
   $zigArchiveName = "zig-$zigTarget-$resolvedZigVersion.zip"
   $zigArchivePath = "$tmpZig\$zigArchiveName"
   Download-File "https://ziglang.org/builds/$zigArchiveName" $zigArchivePath
+  $zigSumsPath = "$tmpZig\sha256sums.txt"
+  Download-File "https://ziglang.org/builds/sha256sums.txt" $zigSumsPath
+  Verify-Sha256 $zigArchivePath $zigSumsPath
 
   $extractDir = "$tmpZig\extract"
   New-Item -ItemType Directory -Force -Path $extractDir | Out-Null

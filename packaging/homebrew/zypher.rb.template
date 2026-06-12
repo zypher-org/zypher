@@ -51,8 +51,22 @@ class {{HOMEBREW_CLASS}} < Formula
         tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zypher-zig.XXXXXX")"
         trap 'rm -rf "$tmp_dir" "$zig_dir.partial-$$"' EXIT INT TERM
         mkdir -p "$(dirname "$zig_dir")"
-        curl -fsSL "https://ziglang.org/builds/zig-$zig_target-$zig_version.tar.xz" -o "$tmp_dir/zig.tar.xz"
-        tar -xJf "$tmp_dir/zig.tar.xz" -C "$tmp_dir"
+        zig_archive_name="zig-$zig_target-$zig_version.tar.xz"
+        curl -fsSL "https://ziglang.org/builds/$zig_archive_name" -o "$tmp_dir/$zig_archive_name"
+        curl -fsSL "https://ziglang.org/builds/sha256sums.txt" -o "$tmp_dir/sha256sums.txt"
+        if command -v sha256sum >/dev/null 2>&1; then
+          expected="$(awk -v name="$zig_archive_name" '$2 == name { print $1 }' "$tmp_dir/sha256sums.txt")"
+          [ -n "$expected" ] || { echo "zypher: checksum for $zig_archive_name not found" >&2; exit 1; }
+          actual="$(sha256sum "$tmp_dir/$zig_archive_name" | awk '{ print $1 }')"
+          [ "$actual" = "$expected" ] || { echo "zypher: checksum mismatch for $zig_archive_name" >&2; exit 1; }
+        elif command -v shasum >/dev/null 2>&1; then
+          expected="$(awk -v name="$zig_archive_name" '$2 == name { print $1 }' "$tmp_dir/sha256sums.txt")"
+          [ -n "$expected" ] || { echo "zypher: checksum for $zig_archive_name not found" >&2; exit 1; }
+          actual="$(shasum -a 256 "$tmp_dir/$zig_archive_name" | awk '{ print $1 }')"
+          [ "$actual" = "$expected" ] || { echo "zypher: checksum mismatch for $zig_archive_name" >&2; exit 1; }
+        fi
+        rm -f "$tmp_dir/sha256sums.txt"
+        tar -xJf "$tmp_dir/$zig_archive_name" -C "$tmp_dir"
         rm -rf "$zig_dir.partial-$$"
         mv "$tmp_dir/zig-$zig_target-$zig_version" "$zig_dir.partial-$$"
         rm -rf "$zig_dir"
@@ -81,6 +95,13 @@ class {{HOMEBREW_CLASS}} < Formula
       exec "#{libexec}/zypher-bin" "$@"
     SH
     chmod 0755, bin/"zypher"
+  end
+
+  def caveats
+    <<~EOS
+      To uninstall Zypher and remove all runtime data (~/.zypher), run:
+        curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/uninstall.sh | sh
+    EOS
   end
 
   test do
