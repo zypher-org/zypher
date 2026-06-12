@@ -20,7 +20,8 @@
     "vendor/"
   ],
   "scripts": {
-    "postinstall": "node scripts/install.js"
+    "postinstall": "node scripts/install.js",
+    "preuninstall": "node scripts/uninstall.js"
   },
   "zypher": {
     "zigVersion": "0.17.0-dev.704+b8cb78023"

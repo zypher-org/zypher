@@ -9,6 +9,7 @@ arch=('x86_64' 'aarch64')
 url="https://github.com/zypher-org/zypher"
 license=('Apache-2.0')
 depends=('glibc' 'curl' 'tar' 'xz')
+install=zypher.install
 source_x86_64=("https://github.com/zypher-org/zypher/releases/download/v${pkgver}/zypher-v${pkgver}-x86_64-linux-musl.tar.gz")
 source_aarch64=("https://github.com/zypher-org/zypher/releases/download/v${pkgver}/zypher-v${pkgver}-aarch64-linux-musl.tar.gz")
 sha256sums_x86_64=('{{SHA256_X86_64}}')
@@ -42,8 +43,15 @@ if [ ! -x "$zig_dir/zig" ]; then
   tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zypher-zig.XXXXXX")"
   trap 'rm -rf "$tmp_dir" "$zig_dir.partial-$$"' EXIT INT TERM
   mkdir -p "$(dirname "$zig_dir")"
-  curl -fsSL "https://ziglang.org/builds/zig-$zig_target-$zig_version.tar.xz" -o "$tmp_dir/zig.tar.xz"
-  tar -xJf "$tmp_dir/zig.tar.xz" -C "$tmp_dir"
+  zig_archive_name="zig-$zig_target-$zig_version.tar.xz"
+  curl -fsSL "https://ziglang.org/builds/$zig_archive_name" -o "$tmp_dir/$zig_archive_name"
+  curl -fsSL "https://ziglang.org/builds/sha256sums.txt" -o "$tmp_dir/sha256sums.txt"
+  expected="$(awk -v name="$zig_archive_name" '$2 == name { print $1 }' "$tmp_dir/sha256sums.txt")"
+  [ -n "$expected" ] || { echo "zypher: checksum for $zig_archive_name not found" >&2; exit 1; }
+  actual="$(sha256sum "$tmp_dir/$zig_archive_name" | awk '{ print $1 }')"
+  [ "$actual" = "$expected" ] || { echo "zypher: checksum mismatch for $zig_archive_name" >&2; exit 1; }
+  rm -f "$tmp_dir/sha256sums.txt"
+  tar -xJf "$tmp_dir/$zig_archive_name" -C "$tmp_dir"
   rm -rf "$zig_dir.partial-$$"
   mv "$tmp_dir/zig-$zig_target-$zig_version" "$zig_dir.partial-$$"
   rm -rf "$zig_dir"

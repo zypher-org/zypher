@@ -57,8 +57,15 @@ function Install-ZypherRuntime {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     New-Item -ItemType Directory -Path (Split-Path -Parent $zigInstallDir) -Force | Out-Null
     try {
-      $zigArchive = Join-Path $tmpDir 'zig.zip'
-      Get-ChocolateyWebFile -PackageName $pkgName -FileFullPath $zigArchive -Url "https://ziglang.org/builds/zig-$zigTarget-$zigVersion.zip"
+      $zigArchiveName = "zig-$zigTarget-$zigVersion.zip"
+      $zigArchive = Join-Path $tmpDir $zigArchiveName
+      Get-ChocolateyWebFile -PackageName $pkgName -FileFullPath $zigArchive -Url "https://ziglang.org/builds/$zigArchiveName"
+      $zigSums = Join-Path $tmpDir 'sha256sums.txt'
+      (New-Object System.Net.WebClient).DownloadFile('https://ziglang.org/builds/sha256sums.txt', $zigSums)
+      $expected = (Get-Content $zigSums | Where-Object { $_ -match [regex]::Escape($zigArchiveName) }) -split '\s+' | Select-Object -First 1
+      if (-not $expected) { throw "checksum for $zigArchiveName not found" }
+      $actual = (Get-FileHash $zigArchive -Algorithm SHA256).Hash.ToLower()
+      if ($actual -ne $expected.ToLower()) { throw "checksum mismatch for $zigArchiveName" }
       Expand-Archive -LiteralPath $zigArchive -DestinationPath $tmpDir -Force
       $extractedZig = Join-Path $tmpDir "zig-$zigTarget-$zigVersion"
       if (Test-Path $partialInstallDir) {
@@ -112,9 +119,16 @@ if (-not (Test-Path `$zigExe)) {
   New-Item -ItemType Directory -Path `$tmpDir -Force | Out-Null
   New-Item -ItemType Directory -Path (Split-Path -Parent `$zigDir) -Force | Out-Null
   try {
-    `$zigArchive = Join-Path `$tmpDir 'zig.zip'
-    `$zigUrl = "https://ziglang.org/builds/zig-`$zigTarget-`$zigVersion.zip"
+    `$zigArchiveName = "zig-`$zigTarget-`$zigVersion.zip"
+    `$zigArchive = Join-Path `$tmpDir `$zigArchiveName
+    `$zigUrl = "https://ziglang.org/builds/`$zigArchiveName"
     Invoke-WebRequest -Uri `$zigUrl -OutFile `$zigArchive
+    `$zigSums = Join-Path `$tmpDir 'sha256sums.txt'
+    Invoke-WebRequest -Uri 'https://ziglang.org/builds/sha256sums.txt' -OutFile `$zigSums
+    `$expected = (Get-Content `$zigSums | Where-Object { `$_ -match [regex]::Escape(`$zigArchiveName) }) -split '\s+' | Select-Object -First 1
+    if (-not `$expected) { throw "checksum for `$zigArchiveName not found" }
+    `$actual = (Get-FileHash `$zigArchive -Algorithm SHA256).Hash.ToLower()
+    if (`$actual -ne `$expected.ToLower()) { throw "checksum mismatch for `$zigArchiveName" }
     Expand-Archive -LiteralPath `$zigArchive -DestinationPath `$tmpDir -Force
     `$extractedZig = Join-Path `$tmpDir "zig-`$zigTarget-`$zigVersion"
     if (Test-Path `$partialInstallDir) { Remove-Item `$partialInstallDir -Recurse -Force }

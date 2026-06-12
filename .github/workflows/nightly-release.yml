@@ -143,6 +143,7 @@ jobs:
           done
 
           cp install.sh dist/install.sh
+          cp uninstall.sh dist/uninstall.sh
 
           cd dist
           sha256sum *.tar.gz > SHA256SUMS
@@ -224,6 +225,7 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
             dist/install.sh
+            dist/uninstall.sh
             dist/${{ env.HOMEBREW_FORMULA_FILE }}
 
   npm-release:
@@ -364,9 +366,11 @@ jobs:
             -e "s|{{SHA256_AARCH64}}|${SHA256_AARCH64}|g" \
             ../packaging/aur/SRCINFO.template > .SRCINFO
 
+          cp ../packaging/aur/zypher.install.template .INSTALL
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PKGBUILD .SRCINFO
+          git add PKGBUILD .SRCINFO .INSTALL
 
           if git diff --cached --quiet; then
             echo "AUR package is already current."
@@ -406,6 +410,8 @@ jobs:
             -replace '{{SHA256_X86_64_WINDOWS}}', $env:SHA256_X86_64_WINDOWS `
             -replace '{{SHA256_AARCH64_WINDOWS}}', $env:SHA256_AARCH64_WINDOWS `
           | Set-Content -Path tools/chocolateyinstall.ps1
+
+          Copy-Item packaging/chocolatey/tools/chocolateyUninstall.ps1.template tools/chocolateyUninstall.ps1
 
           choco pack "$env:PACKAGE_NAME.nuspec"
           $package = Get-ChildItem -Path . -Filter '*.nupkg' | Select-Object -First 1
