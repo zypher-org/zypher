@@ -289,7 +289,7 @@ pub fn main(init: std.process.Init) !void {
     var sessions = SessionStore.init(init.gpa);
     defer sessions.deinit();
     zypher.middleware.session.setStore(&sessions);
-    zypher.middleware.session.setCookieConfig(.{ .secure = false });
+    zypher.middleware.session.setCookieConfig(.{ .secure = false }); // DEV_ONLY: set to true in production
 
     const admin_routes = Admin.routes();
     const app_routes = [_]Route{

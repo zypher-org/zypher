@@ -73,7 +73,8 @@ pub const Server = struct {
             if (std.meta.stringToEnum(std.http.Method, method_str)) |std_method| {
                 break :method Method.fromStdString(std_method);
             }
-            break :method .get;
+            log.warn("unknown HTTP method '{s}', returning 400", .{method_str});
+            return error.BadRequest;
         };
 
         const parsed_target = parseRequestTarget(gpa, target);

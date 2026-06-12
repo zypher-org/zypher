@@ -18,7 +18,7 @@ pub const Method = enum {
             .DELETE => .delete,
             .OPTIONS => .options,
             .HEAD => .head,
-            else => .get,
+            else => @panic("unsupported HTTP method"),
         };
     }
 

@@ -433,13 +433,10 @@ test "admin views: pagination — page 1 shows first items" {
 
     const handler = findPageHandler("/page_items/", .get) orelse return error.SkipZigTest;
 
-    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
-    try query_map.put("page", "1");
-
     var req = Request{
         .method = .get,
         .path = "/page_items/",
-        .query = query_map,
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
         .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
         .body = "",
         .allocator = std.testing.allocator,
@@ -522,13 +519,10 @@ test "admin views: pagination — invalid page defaults to 1" {
 
     const handler = findPageHandler("/page_items/", .get) orelse return error.SkipZigTest;
 
-    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
-    try query_map.put("_csrf", csrf.generateToken());
-
     var req = Request{
         .method = .get,
         .path = "/page_items/",
-        .query = query_map,
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
         .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
         .body = "",
         .allocator = std.testing.allocator,
@@ -558,13 +552,10 @@ test "admin views: pagination — page 0 defaults to page 1" {
 
     const handler = findPageHandler("/page_items/", .get) orelse return error.SkipZigTest;
 
-    var query_map = std.StringHashMap([]const u8).init(std.testing.allocator);
-    try query_map.put("_csrf", csrf.generateToken());
-
     var req = Request{
         .method = .get,
         .path = "/page_items/",
-        .query = query_map,
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
         .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
         .body = "",
         .allocator = std.testing.allocator,

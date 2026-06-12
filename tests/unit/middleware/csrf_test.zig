@@ -23,7 +23,7 @@ fn ok_handler(req: *Request, res: *Response) void {
     res.text("ok") catch {};
 }
 
-test "CSRF: GET passes through without token" {
+test "CSRF: GET passes through without session" {
     const gpa = std.testing.allocator;
 
     const MyChain = comptime Chain(.{csrf.middleware});
@@ -36,32 +36,38 @@ test "CSRF: GET passes through without token" {
     MyChain.run(&req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
-    // CSRF token should be set in response
+    // No session, so no CSRF token is set — request still passes
     const token = res.headers.get("X-CSRF-Token");
-    try std.testing.expect(token != null);
+    try std.testing.expect(token == null);
 }
 
-test "CSRF: POST with valid token passes" {
+test "CSRF: POST with valid session-backed token passes" {
     const gpa = std.testing.allocator;
 
-    const MyChain = comptime Chain(.{csrf.middleware});
+    var store = SessionStore.init(gpa);
+    defer store.deinit();
 
-    // First, simulate a GET to get a token
+    var session = try store.create();
+    defer session.deinit(gpa);
+
+    // First, GET to establish a token in the session
     var get_req = makeRequest(gpa, .get, "/page");
     defer get_req.deinit();
+    get_req.user = @ptrCast(&session);
     var get_res = Response.init(gpa);
     defer get_res.deinit();
-    MyChain.run(&get_req, &get_res, ok_handler);
+    csrf.middleware(&get_req, &get_res, ok_handler);
     const token = get_res.headers.get("X-CSRF-Token").?;
 
     // Now POST with the token
     var post_req = makeRequest(gpa, .post, "/submit");
-    try post_req.headers.put("X-CSRF-Token", token);
     defer post_req.deinit();
+    post_req.user = @ptrCast(&session);
+    try post_req.headers.put("X-CSRF-Token", token);
     var post_res = Response.init(gpa);
     defer post_res.deinit();
 
-    MyChain.run(&post_req, &post_res, ok_handler);
+    csrf.middleware(&post_req, &post_res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), post_res.status_code);
 }
@@ -69,15 +75,31 @@ test "CSRF: POST with valid token passes" {
 test "CSRF: POST with valid form token passes" {
     const gpa = std.testing.allocator;
 
-    const MyChain = comptime Chain(.{csrf.middleware});
+    var store = SessionStore.init(gpa);
+    defer store.deinit();
 
+    var session = try store.create();
+    defer session.deinit(gpa);
+
+    // GET to establish a token
+    var get_req = makeRequest(gpa, .get, "/page");
+    defer get_req.deinit();
+    get_req.user = @ptrCast(&session);
+    var get_res = Response.init(gpa);
+    defer get_res.deinit();
+    csrf.middleware(&get_req, &get_res, ok_handler);
+
+    const token = session.get("_csrf_token").?;
+
+    // POST with the token as a form value
     var post_req = makeRequest(gpa, .post, "/submit");
     defer post_req.deinit();
-    try post_req.query.put("_csrf", csrf.generateToken());
+    post_req.user = @ptrCast(&session);
+    try post_req.query.put("_csrf", token);
     var post_res = Response.init(gpa);
     defer post_res.deinit();
 
-    MyChain.run(&post_req, &post_res, ok_handler);
+    csrf.middleware(&post_req, &post_res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), post_res.status_code);
 }
@@ -131,7 +153,7 @@ test "CSRF: session-backed token is stored and required when session is attached
     csrf.middleware(&get_req, &get_res, ok_handler);
     const token = get_res.headers.get("X-CSRF-Token").?;
     try std.testing.expectEqualStrings(token, session.get("_csrf_token").?);
-    try std.testing.expect(!std.mem.eql(u8, token, csrf.generateToken()));
+    try std.testing.expectEqual(@as(usize, 64), token.len);
 
     var post_req = makeRequest(gpa, .post, "/submit");
     defer post_req.deinit();
@@ -146,7 +168,7 @@ test "CSRF: session-backed token is stored and required when session is attached
     var bad_req = makeRequest(gpa, .post, "/submit");
     defer bad_req.deinit();
     bad_req.user = @ptrCast(&session);
-    try bad_req.headers.put("X-CSRF-Token", csrf.generateToken());
+    try bad_req.headers.put("X-CSRF-Token", "invalid-token-value");
     var bad_res = Response.init(gpa);
     defer bad_res.deinit();
 

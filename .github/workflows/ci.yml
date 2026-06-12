@@ -24,6 +24,9 @@ jobs:
       - name: Verify Zig installation
         run: zig version
 
+      - name: Build all examples
+        run: zig build check-examples
+
       - name: Run unit and conformance tests
         run: zig build test
 

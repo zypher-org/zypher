@@ -92,6 +92,28 @@ pub fn build(b: *std.Build) void {
     const run_demo_step = b.step("run-demo", "Run the demo app");
     run_demo_step.dependOn(&run_demo_cmd.step);
 
+    // ── Examples compilation checks ────────────────────────────────
+    const check_examples_step = b.step("check-examples", "Build all example apps");
+
+    inline for (comptime [_]struct { name: []const u8, path: []const u8 }{
+        .{ .name = "notes-app", .path = "examples/notes-app/src/main.zig" },
+        .{ .name = "books-api", .path = "examples/books-api/src/main.zig" },
+        .{ .name = "online-storage", .path = "examples/online-storage/src/main.zig" },
+    }) |example| {
+        const example_exe = b.addExecutable(.{
+            .name = example.name,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(example.path),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "zypher", .module = lib_mod },
+                },
+            }),
+        });
+        check_examples_step.dependOn(&example_exe.step);
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────
     const lib_unit_tests = b.addTest(.{
         .root_module = lib_mod,

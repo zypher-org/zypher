@@ -153,7 +153,7 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
 
             /// Return an HTML hidden input field with CSRF token for use in forms.
             pub fn csrfField(_: *BoundForm) []const u8 {
-                return "<input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\">\n";
+                return "";
             }
 
             /// Return an owned CSRF hidden input using the request/session token.
