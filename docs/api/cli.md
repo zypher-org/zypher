@@ -4,7 +4,7 @@
 CLI command dispatcher with subcommands for project scaffolding, running, documentation, migrations, and admin tasks.
 
 ### Key Functions
-- `dispatchInner(out, err, init, cmd, args) !void` — dispatch a CLI command by name
+- `dispatchInner(out, err, init, cmd, args, version) !void` — dispatch a CLI command by name
 - `buildRunArgv(gpa, zypher_root, port, app_args) ![]const [:0]const u8` — build `zig build run` argv for `zypher run`
 - `buildDocArgv(gpa, zypher_root, project_path, host, port, max_requests) ![]const [:0]const u8` — build `zig build doc` argv for documentation commands
 

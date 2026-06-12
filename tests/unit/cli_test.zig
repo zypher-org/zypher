@@ -25,7 +25,7 @@ fn runCli(args: []const [:0]const u8) ![]u8 {
     defer err.deinit();
 
     const cmd = if (args.len > 1) args[1] else "help";
-    try cli.dispatchInner(&out.writer, &err.writer, testInit(), cmd, args);
+    try cli.dispatchInner(&out.writer, &err.writer, testInit(), cmd, args, "0.0.0-test");
 
     try std.testing.expectEqual(@as(usize, 0), err.written().len);
     return try std.testing.allocator.dupe(u8, out.written());
@@ -401,7 +401,7 @@ test "cli: runserver serves health check and returns after max requests" {
             err_writer: *std.Io.Writer,
             argv: []const [:0]const u8,
         ) !void {
-            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv);
+            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv, "0.0.0-test");
         }
     };
 
@@ -450,7 +450,7 @@ test "cli: runserver responds to health check and stops on SIGINT" {
             err_writer: *std.Io.Writer,
             argv: []const [:0]const u8,
         ) !void {
-            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv);
+            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv, "0.0.0-test");
         }
     };
 
