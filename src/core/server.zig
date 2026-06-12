@@ -73,7 +73,8 @@ pub const Server = struct {
             if (std.meta.stringToEnum(std.http.Method, method_str)) |std_method| {
                 break :method Method.fromStdString(std_method);
             }
-            break :method .get;
+            log.warn("unknown HTTP method '{s}', returning 400", .{method_str});
+            return error.BadRequest;
         };
 
         const parsed_target = parseRequestTarget(gpa, target);
@@ -201,7 +202,7 @@ pub const Server = struct {
             defer req.deinit();
             req.query_owned = true;
 
-            // ── Read POST body and parse URL-encoded form data ──────────
+            // ── Read request body and parse supported form encodings ────
             if (server_req.head.method.requestHasBody()) {
                 var body_read_buf: [4096]u8 = undefined;
                 const body_reader = server_req.readerExpectNone(&body_read_buf);
@@ -224,6 +225,23 @@ pub const Server = struct {
                         while (iter.next()) |entry| {
                             req.query.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
                         }
+                    } else if (std.mem.indexOf(u8, content_type, "multipart/form-data") != null) {
+                        var multipart = Request.parseMultipartFormData(gpa, content_type, body) catch {
+                            log.warn("failed to parse multipart form data", .{});
+                            return;
+                        };
+
+                        var field_iter = multipart.fields.iterator();
+                        while (field_iter.next()) |entry| {
+                            if (try req.query.fetchPut(entry.key_ptr.*, entry.value_ptr.*)) |old| {
+                                req.allocator.free(old.key);
+                                if (old.value.len > 0) req.allocator.free(old.value);
+                            }
+                        }
+                        multipart.fields.deinit();
+
+                        req.files = multipart.files;
+                        req.files_owned = true;
                     }
                 }
             }

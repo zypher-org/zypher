@@ -1,0 +1,429 @@
+name: Nightly Release
+
+on:
+  push:
+    branches:
+      - prod-nightly
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZYPHER_REPOSITORY: zypher-org/zypher
+  PACKAGE_NAME: zypher-cli
+  HOMEBREW_CLASS: ZypherCli
+  HOMEBREW_FORMULA_FILE: zypher-cli.rb
+
+jobs:
+  gate:
+    name: Check branch
+    runs-on: ubuntu-latest
+    outputs:
+      is_valid: ${{ steps.gate.outputs.is_valid }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify tag is on prod-nightly (and not on prod-stable)
+        id: gate
+        run: |
+          set -eu
+          if [ "${{ github.ref }}" = "refs/heads/prod-nightly" ]; then
+            echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event.created }}" != "true" ] || [ "${{ github.event.deleted }}" = "true" ]; then
+            echo "is_valid=false" >> "$GITHUB_OUTPUT"
+            echo "Ignoring non-created or deleted ref ${{ github.ref }}."
+            exit 0
+          fi
+
+          git fetch origin prod-nightly:prod-nightly prod-stable:prod-stable 2>/dev/null || true
+          tag_commit=$(git rev-list -n 1 "${{ github.ref }}")
+          if git merge-base --is-ancestor "$tag_commit" prod-nightly 2>/dev/null; then
+            if git merge-base --is-ancestor "$tag_commit" prod-stable 2>/dev/null; then
+              echo "is_valid=false" >> "$GITHUB_OUTPUT"
+              echo "Tag ${{ github.ref_name }} is also on prod-stable — skipping nightly release."
+            else
+              echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "is_valid=false" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ github.ref_name }} is not on prod-nightly — skipping."
+          fi
+
+  test:
+    name: Verify release
+    needs: gate
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+      - run: zig version
+      - run: zig build test
+      - run: zig fmt --check .
+
+  build:
+    name: Build and package
+    needs: [gate, test]
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+      release_tag: ${{ steps.vars.outputs.release_tag }}
+      zig_version: ${{ steps.vars.outputs.zig_version }}
+      sha_x86_64_linux: ${{ steps.vars.outputs.sha_x86_64_linux }}
+      sha_aarch64_linux: ${{ steps.vars.outputs.sha_aarch64_linux }}
+      sha_x86_64_macos: ${{ steps.vars.outputs.sha_x86_64_macos }}
+      sha_aarch64_macos: ${{ steps.vars.outputs.sha_aarch64_macos }}
+      sha_x86_64_windows: ${{ steps.vars.outputs.sha_x86_64_windows }}
+      sha_aarch64_windows: ${{ steps.vars.outputs.sha_aarch64_windows }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+
+      - name: Build and package everything
+        id: vars
+        run: |
+          set -eu
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            release_tag="${GITHUB_REF_NAME}"
+            version="${release_tag#v}"
+          else
+            base_version=$(sed -n 's/.*\.version = "\([^"]*\)".*/\1/p' build.zig.zon | head -n 1)
+            if [ -z "${base_version}" ]; then
+              echo "::error::Could not read .version from build.zig.zon."
+              exit 1
+            fi
+            case "${base_version}" in
+              *-*) version="${base_version}.nightly.${GITHUB_RUN_NUMBER}" ;;
+              *) version="${base_version}-nightly.${GITHUB_RUN_NUMBER}" ;;
+            esac
+            release_tag="v${version}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+
+          zig_version=$(sed -n 's/.*\.minimum_zig_version = "\([^"]*\)".*/\1/p' build.zig.zon | head -n 1)
+          if [ -z "${zig_version}" ]; then
+            echo "::error::Could not read .minimum_zig_version from build.zig.zon."
+            exit 1
+          fi
+          echo "zig_version=${zig_version}" >> "$GITHUB_OUTPUT"
+
+          zig build all-targets -Doptimize=ReleaseSafe
+
+          mkdir -p dist
+          for target in \
+            x86_64-linux-musl \
+            aarch64-linux-musl \
+            x86_64-macos \
+            aarch64-macos \
+            x86_64-windows-gnu \
+            aarch64-windows-gnu
+          do
+            exe="zypher"
+            [ "${target#*windows}" != "${target}" ] && exe="zypher.exe"
+            pkg="zypher-v${version}-${target}"
+            mkdir -p "dist/${pkg}"
+            cp "zig-out/bin/${target}/${exe}" "dist/${pkg}/${exe}"
+            cp README.md LICENSE "dist/${pkg}/"
+            mkdir -p "dist/${pkg}/source"
+            cp build.zig build.zig.zon install.sh LICENSE README.md "dist/${pkg}/source/"
+            cp -R src templates tools vendor "dist/${pkg}/source/"
+            tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
+          done
+
+          cp install.sh dist/install.sh
+
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS
+
+          sha_x86_64_linux=$(sha256sum "zypher-v${version}-x86_64-linux-musl.tar.gz" | cut -d' ' -f1)
+          sha_aarch64_linux=$(sha256sum "zypher-v${version}-aarch64-linux-musl.tar.gz" | cut -d' ' -f1)
+          sha_x86_64_macos=$(sha256sum "zypher-v${version}-x86_64-macos.tar.gz" | cut -d' ' -f1)
+          sha_aarch64_macos=$(sha256sum "zypher-v${version}-aarch64-macos.tar.gz" | cut -d' ' -f1)
+          sha_x86_64_windows=$(sha256sum "zypher-v${version}-x86_64-windows-gnu.tar.gz" | cut -d' ' -f1)
+          sha_aarch64_windows=$(sha256sum "zypher-v${version}-aarch64-windows-gnu.tar.gz" | cut -d' ' -f1)
+
+          echo "sha_x86_64_linux=${sha_x86_64_linux}" >> "$GITHUB_OUTPUT"
+          echo "sha_aarch64_linux=${sha_aarch64_linux}" >> "$GITHUB_OUTPUT"
+          echo "sha_x86_64_macos=${sha_x86_64_macos}" >> "$GITHUB_OUTPUT"
+          echo "sha_aarch64_macos=${sha_aarch64_macos}" >> "$GITHUB_OUTPUT"
+          echo "sha_x86_64_windows=${sha_x86_64_windows}" >> "$GITHUB_OUTPUT"
+          echo "sha_aarch64_windows=${sha_aarch64_windows}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-nightly
+          path: dist/
+          if-no-files-found: error
+
+  nightly-release:
+    name: Publish nightly GitHub release
+    needs: [gate, build]
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts-nightly
+          path: dist/
+
+      - name: Render Homebrew formula
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -eu
+          base_url="https://github.com/${ZYPHER_REPOSITORY}/releases/download/v${VERSION}"
+          sha_x86_64_linux="${{ needs.build.outputs.sha_x86_64_linux }}"
+          sha_aarch64_linux="${{ needs.build.outputs.sha_aarch64_linux }}"
+          sha_x86_64_macos="${{ needs.build.outputs.sha_x86_64_macos }}"
+          sha_aarch64_macos="${{ needs.build.outputs.sha_aarch64_macos }}"
+          zig_version="${{ needs.build.outputs.zig_version }}"
+          sed \
+            -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{ZIG_VERSION}}|${zig_version}|g" \
+            -e "s|{{BASE_URL}}|${base_url}|g" \
+            -e "s|{{SHA_X86_64_LINUX}}|${sha_x86_64_linux}|g" \
+            -e "s|{{SHA_AARCH64_LINUX}}|${sha_aarch64_linux}|g" \
+            -e "s|{{SHA_X86_64_MACOS}}|${sha_x86_64_macos}|g" \
+            -e "s|{{SHA_AARCH64_MACOS}}|${sha_aarch64_macos}|g" \
+            -e "s|{{HOMEBREW_CLASS}}|${HOMEBREW_CLASS}|g" \
+            packaging/homebrew/zypher.rb.template > "dist/${HOMEBREW_FORMULA_FILE}"
+
+      - name: Upload Homebrew formula as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula-nightly
+          path: dist/${{ env.HOMEBREW_FORMULA_FILE }}
+          if-no-files-found: error
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          name: nightly-build
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          overwrite_files: true
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/install.sh
+            dist/${{ env.HOMEBREW_FORMULA_FILE }}
+
+  npm-release:
+    name: Publish npm package
+    needs: [gate, build]
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Prepare npm metadata
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          npm --prefix npm pkg set name="${PACKAGE_NAME}"
+          npm --prefix npm pkg set zypher.zigVersion="${{ needs.build.outputs.zig_version }}"
+          npm --prefix npm version "${VERSION}" --no-git-tag-version --allow-same-version
+
+      - name: Publish npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN is not set — skipping npm publish."
+            exit 0
+          fi
+          npm publish ./npm --access public --tag latest
+
+  homebrew-release:
+    name: Publish Homebrew formula
+    needs: [gate, build, nightly-release]
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download rendered formula
+        uses: actions/download-artifact@v4
+        with:
+          name: homebrew-formula-nightly
+          path: dist
+
+      - name: Upload formula to tap
+        env:
+          HOMEBREW_TAP_REPO: ${{ secrets.HOMEBREW_TAP_REPO }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -eu
+          if [ -z "${HOMEBREW_TAP_REPO}" ] || [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "Homebrew tap credentials not configured — skipping."
+            exit 0
+          fi
+          tap_repo="${HOMEBREW_TAP_REPO#https://github.com/}"
+          tap_repo="${tap_repo#http://github.com/}"
+          tap_repo="${tap_repo#git@github.com:}"
+          tap_repo="${tap_repo%.git}"
+          tap_repo="${tap_repo%/}"
+          case "${tap_repo}" in
+            */*) ;;
+            *)
+              echo "::error::HOMEBREW_TAP_REPO must be owner/repo or a GitHub repository URL."
+              exit 1
+              ;;
+          esac
+          tap_url="https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${tap_repo}.git"
+          if ! git ls-remote "${tap_url}" >/dev/null 2>&1; then
+            echo "::error::Homebrew tap '${tap_repo}' is not accessible with HOMEBREW_TAP_TOKEN. Check that the repo exists and the token has contents write access."
+            exit 1
+          fi
+          git clone "${tap_url}" homebrew-tap
+          mkdir -p homebrew-tap/Formula
+          cp "dist/${HOMEBREW_FORMULA_FILE}" "homebrew-tap/Formula/${HOMEBREW_FORMULA_FILE}"
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "Formula/${HOMEBREW_FORMULA_FILE}"
+          if git diff --cached --quiet; then
+            echo "Homebrew formula is already current."
+            exit 0
+          fi
+          git commit -m "Update ${PACKAGE_NAME} to v${VERSION}"
+          git push
+
+  aur-publish:
+    name: Publish to AUR
+    needs: [gate, build]
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish AUR package
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256_X86_64: ${{ needs.build.outputs.sha_x86_64_linux }}
+          SHA256_AARCH64: ${{ needs.build.outputs.sha_aarch64_linux }}
+          ZIG_VERSION: ${{ needs.build.outputs.zig_version }}
+        run: |
+          set -eu
+          if [ -z "${AUR_SSH_KEY}" ]; then
+            echo "AUR_SSH_KEY is not set — skipping AUR publish."
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%b\n' "${AUR_SSH_KEY}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          if ! git ls-remote "aur@aur.archlinux.org:${PACKAGE_NAME}.git" >/dev/null 2>&1; then
+            echo "::error::AUR package '${PACKAGE_NAME}' is not accessible with AUR_SSH_KEY. Check that the public key is registered on the AUR account and the package base exists or is owned by that account."
+            exit 1
+          fi
+
+          git clone "aur@aur.archlinux.org:${PACKAGE_NAME}.git" aur-pkg
+          cd aur-pkg
+
+          sed \
+            -e "s|{{PACKAGE_NAME}}|${PACKAGE_NAME}|g" \
+            -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{ZIG_VERSION}}|${ZIG_VERSION}|g" \
+            -e "s|{{SHA256_X86_64}}|${SHA256_X86_64}|g" \
+            -e "s|{{SHA256_AARCH64}}|${SHA256_AARCH64}|g" \
+            ../packaging/aur/PKGBUILD.template > PKGBUILD
+
+          sed \
+            -e "s|{{PACKAGE_NAME}}|${PACKAGE_NAME}|g" \
+            -e "s|{{VERSION}}|${VERSION}|g" \
+            -e "s|{{ZIG_VERSION}}|${ZIG_VERSION}|g" \
+            -e "s|{{SHA256_X86_64}}|${SHA256_X86_64}|g" \
+            -e "s|{{SHA256_AARCH64}}|${SHA256_AARCH64}|g" \
+            ../packaging/aur/SRCINFO.template > .SRCINFO
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+
+          if git diff --cached --quiet; then
+            echo "AUR package is already current."
+            exit 0
+          fi
+
+          git commit -m "Update ${PACKAGE_NAME} to v${VERSION}"
+          git push origin master
+
+  chocolatey-publish:
+    name: Publish to Chocolatey
+    needs: [gate, build]
+    if: needs.gate.outputs.is_valid == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Chocolatey package
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          ZIG_VERSION: ${{ needs.build.outputs.zig_version }}
+          SHA256_X86_64_WINDOWS: ${{ needs.build.outputs.sha_x86_64_windows }}
+          SHA256_AARCH64_WINDOWS: ${{ needs.build.outputs.sha_aarch64_windows }}
+        run: |
+          (Get-Content packaging/chocolatey/zypher.nuspec.template) `
+            -replace '{{PACKAGE_NAME}}', $env:PACKAGE_NAME `
+            -replace '{{VERSION}}', $env:VERSION `
+          | Set-Content -Path "$env:PACKAGE_NAME.nuspec"
+
+          New-Item -ItemType Directory -Path tools -Force | Out-Null
+
+          (Get-Content packaging/chocolatey/tools/chocolateyinstall.ps1.template) `
+            -replace '{{PACKAGE_NAME}}', $env:PACKAGE_NAME `
+            -replace '{{VERSION}}', $env:VERSION `
+            -replace '{{ZIG_VERSION}}', $env:ZIG_VERSION `
+            -replace '{{SHA256_X86_64_WINDOWS}}', $env:SHA256_X86_64_WINDOWS `
+            -replace '{{SHA256_AARCH64_WINDOWS}}', $env:SHA256_AARCH64_WINDOWS `
+          | Set-Content -Path tools/chocolateyinstall.ps1
+
+          choco pack "$env:PACKAGE_NAME.nuspec"
+          $package = Get-ChildItem -Path . -Filter '*.nupkg' | Select-Object -First 1
+          if (-not $package) {
+            throw "Chocolatey package was not created."
+          }
+
+      - name: Push to Chocolatey
+        shell: pwsh
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          if (-not $env:CHOCOLATEY_API_KEY) {
+            Write-Host "CHOCOLATEY_API_KEY is not set — skipping Chocolatey push."
+            exit 0
+          }
+          $package = Get-ChildItem -Path . -Filter '*.nupkg' | Select-Object -First 1
+          if (-not $package) {
+            throw "Chocolatey package file was not found."
+          }
+          choco push $package.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/

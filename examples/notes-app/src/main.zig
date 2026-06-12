@@ -30,9 +30,9 @@ const Admin = AdminSite(.{
 const AdminRateLimit = zypher.middleware.rate_limit.middlewareWith(.{ .max_requests = 240, .window_seconds = 60 });
 const MiddlewareChain = zypher.middleware.Chain(.{
     zypher.middleware.logger.middleware,
-    zypher.middleware.csrf.middleware,
     AdminRateLimit.handle,
     zypher.middleware.session.middleware,
+    zypher.middleware.csrf.middleware,
     zypher.middleware.security_headers.middleware,
 });
 
@@ -64,6 +64,10 @@ fn renderLayout(res: *Response, title: []const u8, content: []const u8) void {
     html.render(app_context.get().engine, res, "layout.html", &ctx);
 }
 
+fn csrfField(req: *Request) ![]u8 {
+    return zypher.middleware.csrf.formFieldForRequest(req.allocator, req);
+}
+
 fn listHandler(req: *Request, res: *Response) void {
     const ctx = app_context.get();
     const gpa = res.allocator;
@@ -83,7 +87,9 @@ fn listHandler(req: *Request, res: *Response) void {
         };
     defer notes.freeRows(gpa, &rows);
 
-    const cards = html.noteCards(gpa, rows.items) catch {
+    const csrf_field = csrfField(req) catch "";
+    defer if (csrf_field.len > 0) req.allocator.free(csrf_field);
+    const cards = html.noteCards(gpa, rows.items, csrf_field) catch {
         _ = res.status(500);
         res.text("Unable to render notes") catch {};
         return;
@@ -106,7 +112,7 @@ fn listHandler(req: *Request, res: *Response) void {
     renderLayout(res, "Notes", content.items);
 }
 
-fn archivedHandler(_: *Request, res: *Response) void {
+fn archivedHandler(req: *Request, res: *Response) void {
     const ctx = app_context.get();
     const gpa = res.allocator;
     var rows = notes.listArchived(ctx.db, gpa) catch {
@@ -116,7 +122,9 @@ fn archivedHandler(_: *Request, res: *Response) void {
     };
     defer notes.freeRows(gpa, &rows);
 
-    const cards = html.noteCards(gpa, rows.items) catch return;
+    const csrf_field = csrfField(req) catch "";
+    defer if (csrf_field.len > 0) req.allocator.free(csrf_field);
+    const cards = html.noteCards(gpa, rows.items, csrf_field) catch return;
     defer gpa.free(cards);
     var content: std.ArrayList(u8) = .empty;
     defer content.deinit(gpa);
@@ -126,7 +134,7 @@ fn archivedHandler(_: *Request, res: *Response) void {
     renderLayout(res, "Archived Notes", content.items);
 }
 
-fn noteForm(res: *Response, page_title: []const u8, action: []const u8, input: note_domain.NoteInput, err: []const u8) void {
+fn noteForm(req: *Request, res: *Response, page_title: []const u8, action: []const u8, input: note_domain.NoteInput, err: []const u8) void {
     var ctx = Context.init(res.allocator);
     defer ctx.deinit();
     ctx.put("page_title", .{ .string = page_title }) catch {};
@@ -137,18 +145,21 @@ fn noteForm(res: *Response, page_title: []const u8, action: []const u8, input: n
     ctx.put("pinned_checked", .{ .string = if (input.pinned) "checked" else "" }) catch {};
     ctx.put("archived_checked", .{ .string = if (input.archived) "checked" else "" }) catch {};
     ctx.put("error", .{ .string = err }) catch {};
+    const csrf_field = csrfField(req) catch "";
+    defer if (csrf_field.len > 0) req.allocator.free(csrf_field);
+    ctx.put("csrf_field", .{ .string = csrf_field }) catch {};
     html.render(app_context.get().engine, res, "form.html", &ctx);
 }
 
-fn newNoteHandler(_: *Request, res: *Response) void {
-    noteForm(res, "New Note", "/notes/new", .{ .title = "", .body = "" }, "");
+fn newNoteHandler(req: *Request, res: *Response) void {
+    noteForm(req, res, "New Note", "/notes/new", .{ .title = "", .body = "" }, "");
 }
 
 fn createNoteHandler(req: *Request, res: *Response) void {
     const input = noteInputFromRequest(req);
     if (input.title.len == 0 or input.body.len == 0) {
         _ = res.status(422);
-        noteForm(res, "New Note", "/notes/new", input, "Title and body are required.");
+        noteForm(req, res, "New Note", "/notes/new", input, "Title and body are required.");
         return;
     }
     const id = notes.create(app_context.get().db, input, unixTimestamp()) catch {
@@ -174,7 +185,9 @@ fn viewNoteHandler(req: *Request, res: *Response) void {
     };
     defer notes.freeRow(res.allocator, &row);
 
-    const content = html.noteView(res.allocator, row) catch {
+    const csrf_field = csrfField(req) catch "";
+    defer if (csrf_field.len > 0) req.allocator.free(csrf_field);
+    const content = html.noteView(res.allocator, row, csrf_field) catch {
         _ = res.status(500);
         res.text("Unable to render note") catch {};
         return;
@@ -198,7 +211,7 @@ fn editNoteHandler(req: *Request, res: *Response) void {
 
     var action_buf: [80]u8 = undefined;
     const action = std.fmt.bufPrint(&action_buf, "/notes/{d}/edit", .{id}) catch "/";
-    noteForm(res, "Edit Note", action, .{
+    noteForm(req, res, "Edit Note", action, .{
         .title = row[1],
         .body = row[2],
         .tags = row[3],
@@ -218,7 +231,7 @@ fn updateNoteHandler(req: *Request, res: *Response) void {
         _ = res.status(422);
         var action_buf: [80]u8 = undefined;
         const action = std.fmt.bufPrint(&action_buf, "/notes/{d}/edit", .{id}) catch "/";
-        noteForm(res, "Edit Note", action, input, "Title and body are required.");
+        noteForm(req, res, "Edit Note", action, input, "Title and body are required.");
         return;
     }
     notes.update(app_context.get().db, id, input, unixTimestamp()) catch {
@@ -249,10 +262,13 @@ fn deleteNoteHandler(req: *Request, res: *Response) void {
     redirect(res, "/");
 }
 
-fn loginFormHandler(_: *Request, res: *Response) void {
+fn loginFormHandler(req: *Request, res: *Response) void {
     var ctx = Context.init(res.allocator);
     defer ctx.deinit();
     ctx.put("error", .{ .string = "" }) catch {};
+    const csrf_field = csrfField(req) catch "";
+    defer if (csrf_field.len > 0) req.allocator.free(csrf_field);
+    ctx.put("csrf_field", .{ .string = csrf_field }) catch {};
     html.render(app_context.get().engine, res, "login.html", &ctx);
 }
 
@@ -322,12 +338,37 @@ fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
     return false;
 }
 
-fn generateRecoveryCode(gpa: std.mem.Allocator, req: *Request) ![]u8 {
-    var seed: u64 = @intFromPtr(req);
-    seed ^= @intFromPtr(gpa.ptr);
-    var prng = std.Random.DefaultPrng.init(seed);
-    const n = prng.random().uintLessThan(u32, 1_000_000);
-    return std.fmt.allocPrint(gpa, "{d:0>6}", .{n});
+fn randomBytes(buf: []u8) !void {
+    if (buf.len == 0) return;
+    if (@import("builtin").os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const remaining = buf[filled..];
+            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
+            switch (std.posix.errno(rc)) {
+                .SUCCESS => {
+                    const n: usize = @intCast(rc);
+                    if (n == 0) return error.EntropyUnavailable;
+                    filled += n;
+                },
+                .INTR => continue,
+                else => return error.EntropyUnavailable,
+            }
+        }
+        return;
+    }
+    if (@import("builtin").link_libc and @hasDecl(std.posix.system, "arc4random_buf")) {
+        std.posix.system.arc4random_buf(buf.ptr, buf.len);
+        return;
+    }
+    return error.EntropyUnavailable;
+}
+
+fn generateRecoveryCode(gpa: std.mem.Allocator) ![]u8 {
+    var bytes: [4]u8 = undefined;
+    try randomBytes(&bytes);
+    const raw = (@as(u32, bytes[0]) << 24) | (@as(u32, bytes[1]) << 16) | (@as(u32, bytes[2]) << 8) | @as(u32, bytes[3]);
+    return std.fmt.allocPrint(gpa, "{d:0>6}", .{raw % 1_000_000});
 }
 
 fn passwordStrong(plain: []const u8) bool {
@@ -341,18 +382,22 @@ fn passwordStrong(plain: []const u8) bool {
     return has_letter and has_digit;
 }
 
-fn forgotPasswordFormHandler(_: *Request, res: *Response) void {
-    renderLayout(res, "Forgot Password",
+fn forgotPasswordFormHandler(req: *Request, res: *Response) void {
+    const csrf_field = csrfField(req) catch "";
+    defer if (csrf_field.len > 0) req.allocator.free(csrf_field);
+    const body = std.fmt.allocPrint(req.allocator,
         \\<section class="form-panel">
         \\  <h1>Forgot Password</h1>
         \\  <form method="post" action="/admin/forgot-password">
-        \\    <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+        \\    {s}
         \\    <label>Email</label>
         \\    <input type="email" name="email">
         \\    <button type="submit">Send Recovery Code</button>
         \\  </form>
         \\</section>
-    );
+    , .{csrf_field}) catch return;
+    defer req.allocator.free(body);
+    renderLayout(res, "Forgot Password", body);
 }
 
 fn forgotPasswordHandler(req: *Request, res: *Response) void {
@@ -369,30 +414,32 @@ fn forgotPasswordHandler(req: *Request, res: *Response) void {
         renderLayout(res, "Recovery Code", "<p>If an admin account exists for that email, a recovery code was sent.</p>");
         return;
     }
-    const code = generateRecoveryCode(req.allocator, req) catch return;
+    const code = generateRecoveryCode(req.allocator) catch return;
     defer req.allocator.free(code);
-    var update = db.prepare("UPDATE users SET reset_code = ?, reset_code_expires_at = 0 WHERE email = ?") catch return;
+    var update = db.prepare("UPDATE users SET reset_code = ?, reset_code_expires_at = ? WHERE email = ?") catch return;
     defer update.finalize();
     update.bind(.{ .text = code }, 1) catch return;
-    update.bind(.{ .text = email }, 2) catch return;
+    update.bind(.{ .int = unixTimestamp() + 900 }, 2) catch return;
+    update.bind(.{ .text = email }, 3) catch return;
     _ = update.step() catch return;
     const body = std.fmt.allocPrint(req.allocator,
         \\<section class="form-panel">
-        \\  <p>A 6-digit recovery code was sent for {s}.</p>
-        \\  <p>Development code: <strong>{s}</strong></p>
+        \\  <p>If an admin account exists for {s}, a recovery code was sent.</p>
         \\  <p><a href="/admin/reset-password">Reset password</a></p>
         \\</section>
-    , .{ email, code }) catch return;
+    , .{email}) catch return;
     defer req.allocator.free(body);
     renderLayout(res, "Recovery Code", body);
 }
 
-fn resetPasswordFormHandler(_: *Request, res: *Response) void {
-    renderLayout(res, "Reset Password",
+fn resetPasswordFormHandler(req: *Request, res: *Response) void {
+    const csrf_field = csrfField(req) catch "";
+    defer if (csrf_field.len > 0) req.allocator.free(csrf_field);
+    const body = std.fmt.allocPrint(req.allocator,
         \\<section class="form-panel">
         \\  <h1>Reset Password</h1>
         \\  <form method="post" action="/admin/reset-password">
-        \\    <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+        \\    {s}
         \\    <label>Email</label>
         \\    <input type="email" name="email">
         \\    <label>Recovery Code</label>
@@ -404,7 +451,9 @@ fn resetPasswordFormHandler(_: *Request, res: *Response) void {
         \\    <button type="submit">Reset Password</button>
         \\  </form>
         \\</section>
-    );
+    , .{csrf_field}) catch return;
+    defer req.allocator.free(body);
+    renderLayout(res, "Reset Password", body);
 }
 
 fn resetPasswordHandler(req: *Request, res: *Response) void {
@@ -419,7 +468,7 @@ fn resetPasswordHandler(req: *Request, res: *Response) void {
     }
     const db = app_context.get().db;
     ensureAuthRecoverySchema(db);
-    var stmt = db.prepare("SELECT reset_code FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch return;
+    var stmt = db.prepare("SELECT reset_code, reset_code_expires_at FROM users WHERE email = ? AND role = 'admin' AND is_active = 1") catch return;
     defer stmt.finalize();
     stmt.bind(.{ .text = email }, 1) catch return;
     if (!(stmt.step() catch false)) {
@@ -432,7 +481,12 @@ fn resetPasswordHandler(req: *Request, res: *Response) void {
         renderLayout(res, "Reset Password", "<p>Invalid recovery code.</p>");
         return;
     };
-    if (!std.mem.eql(u8, stored.text, code)) {
+    const expires = stmt.column(.integer, 1) catch {
+        _ = res.status(400);
+        renderLayout(res, "Reset Password", "<p>Invalid recovery code.</p>");
+        return;
+    };
+    if (expires.int < unixTimestamp() or !std.mem.eql(u8, stored.text, code)) {
         _ = res.status(400);
         renderLayout(res, "Reset Password", "<p>Invalid recovery code.</p>");
         return;
@@ -499,7 +553,7 @@ pub fn main(init: std.process.Init) !void {
     zypher.middleware.session.setStore(&sessions);
     zypher.middleware.session.setCookieConfig(.{
         .httponly = true,
-        .secure = false,
+        .secure = false, // DEV_ONLY: set to true in production
         .samesite = "Strict",
         .path = "/",
         .max_age = 86400,

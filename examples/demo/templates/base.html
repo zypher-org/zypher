@@ -27,7 +27,7 @@
         <a href="/post/new">New Post</a>
         {% if authenticated %}
             <form method="post" action="/logout">
-                <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+                {{ csrf_field|safe }}
                 <button type="submit">Logout ({{ username }})</button>
             </form>
         {% else %}

@@ -63,3 +63,19 @@ test "Compression: gzip accepted sets Content-Encoding header" {
     try std.testing.expectEqual(@as(u8, 0x8b), body[1]);
     try std.testing.expect(!std.mem.eql(u8, body, "Hello, World! This is a test response that should be compressible."));
 }
+
+test "Compression: accepts lowercase accept-encoding request header" {
+    const gpa = std.testing.allocator;
+
+    const MyChain = comptime Chain(.{compress.middleware});
+
+    var req = makeRequest(gpa, .get, "/test");
+    try req.headers.put("accept-encoding", "gzip");
+    defer req.deinit();
+    var res = Response.init(gpa);
+    defer res.deinit();
+
+    MyChain.run(&req, &res, text_handler);
+
+    try std.testing.expectEqualStrings("gzip", res.headers.get("Content-Encoding").?);
+}

@@ -46,7 +46,7 @@ test "session middleware can emit non-secure cookie for local HTTP" {
 
     MyChain.run(&req, &res, okHandler);
 
-    const cookie = res.headers.get("Set-Cookie").?;
+    const cookie = res.set_cookie_headers.items[0];
     try std.testing.expect(std.mem.indexOf(u8, cookie, "zypher_session=") != null);
     try std.testing.expect(std.mem.indexOf(u8, cookie, "HttpOnly") != null);
     try std.testing.expect(std.mem.indexOf(u8, cookie, "SameSite=Strict") != null);

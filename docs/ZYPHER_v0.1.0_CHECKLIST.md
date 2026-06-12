@@ -30,8 +30,8 @@ Those come later.
 
 ### 2.1 Core Types
 
-- [ ] `Request` (frozen v1)
-- [ ] `Response` (frozen v1)
+- [ ] `Request` (intended v1 shape)
+- [ ] `Response` (intended v1 shape)
 - [ ] `Context`
 
 ---
@@ -111,7 +111,7 @@ Before tagging v0.1.0:
 - [ ] All exported symbols reviewed
 - [ ] No accidental exports
 - [ ] Naming consistent
-- [ ] Frozen APIs unchanged
+- [ ] Compatibility-sensitive APIs reviewed
 
 > Once released, breaking these requires **v0.2.0+**
 
@@ -178,6 +178,5 @@ zypher v0.1.0 is **DONE** when:
 A small, correct release beats a big, unstable one.
 
 zypher’s strength is **discipline** — protect it.
-
 
 

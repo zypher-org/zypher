@@ -5,7 +5,7 @@
   <h1>Admin Login</h1>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="post" action="/admin/login">
-    <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+    {{ csrf_field|safe }}
     <label>Username</label>
     <input type="text" name="username" value="admin">
     <label>Password</label>

@@ -1,21 +1,15 @@
-/// zypher Recovery middleware — catches errors in downstream handlers
-/// and returns a 500 Internal Server Error instead of crashing the process.
+/// zypher Recovery middleware — placeholder boundary for supervised recovery.
 ///
-/// NOTE: Zig does not support catching panics at runtime (no try/catch for
-/// @panic). This middleware wraps the handler to ensure any error that
-/// surfaces as an unhandled exception is caught and converted to a 500
-/// response. For true panic recovery, consider process-level signal
-/// handling or running requests in sub-processes.
+/// NOTE: Zig does not support catching panics at runtime through this
+/// middleware signature. Handler and middleware functions currently return
+/// void, so error-union recovery is not available here either. Use process
+/// supervision for panic isolation.
 const std = @import("std");
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
-const log = std.log.scoped(.recovery);
 
-/// Recovery middleware. Wraps next in an error-catching scope.
+/// Recovery middleware. Calls the next handler.
 pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-    if (res.status_code == 0) {
-        _ = res.status(500);
-    }
     next(req, res);
 }
 

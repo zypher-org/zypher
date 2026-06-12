@@ -1,11 +1,10 @@
-# zypher — Request & Response API (FROZEN v1)
+# zypher — Request & Response API
 
-> ️ **API FREEZE NOTICE**
+> **Current Status**
 >
-> This document defines the **stable v1 API contract** for `Request` and `Response`.
-> Any breaking change requires a major version bump or a formal RFC.
->
-> All higher-level modules (router, middleware, views, templates, auth, ORM) MUST depend on this API exactly as defined.
+> This document describes the current pre-1.0 `Request` and `Response` API.
+> It is the intended v1 shape, but the repository has not shipped a frozen v1
+> contract yet. Breaking changes should be documented and covered by tests.
 
 ---
 
@@ -53,7 +52,7 @@ Rules:
 
 ---
 
-## 3. Request API (FROZEN)
+## 3. Request API
 
 ```zig
 pub const Request = struct {
@@ -72,6 +71,12 @@ pub const Request = struct {
     /// Raw request body
     body: []const u8,
 
+    /// Whether body was allocated and must be freed in deinit
+    body_owned: bool = false,
+
+    /// Whether query/form entries were allocated by decodeUrlEncoded
+    query_owned: bool = false,
+
     /// Allocator scoped to this request
     allocator: std.mem.Allocator,
 
@@ -83,6 +88,10 @@ pub const Request = struct {
     pub fn header(self: *const Request, name: []const u8) ?[]const u8 {}
 
     pub fn queryParam(self: *const Request, name: []const u8) ?[]const u8 {}
+
+    pub fn formValue(self: *const Request, name: []const u8) ?[]const u8 {}
+
+    pub fn cookie(self: *const Request, name: []const u8) ?[]const u8 {}
 
     pub fn json(self: *const Request, comptime T: type) !T {}
 };
@@ -97,14 +106,16 @@ pub const Request = struct {
 
 ---
 
-## 4. Response API (FROZEN)
+## 4. Response API
 
 ```zig
 pub const Response = struct {
     status_code: u16 = 200,
     reason_phrase: ?[]const u8 = "OK",
     headers: HeaderMap,
+    set_cookie_headers: std.ArrayList([]const u8),
     body: ?[]const u8 = null,
+    use_chunked: bool = false,
 
     allocator: std.mem.Allocator,
 
@@ -113,6 +124,12 @@ pub const Response = struct {
     pub fn status(self: *Response, code: u16) *Response {}
 
     pub fn header(self: *Response, name: []const u8, value: []const u8) *Response {}
+
+    pub fn addSetCookie(self: *Response, value: []const u8) *Response {}
+
+    pub fn setCookie(self: *Response, cookie: Cookie) *Response {}
+
+    pub fn deleteCookie(self: *Response, name: []const u8) *Response {}
 
     // ───────────── Writers ─────────────
 
@@ -136,6 +153,7 @@ pub const Response = struct {
 - `json()` automatically sets `Content-Type: application/json`
 - `json()` accepts `anytype`; byte strings are treated as already serialized JSON, while typed values are serialized with `std.json`
 - `redirect()` clears the body, sets `Location`, and uses the caller-provided redirect status
+- `Set-Cookie` is stored separately from the singleton header map so multiple cookies serialize as multiple `Set-Cookie` lines
 - `send()` always emits `Content-Length`, including `Content-Length: 0` for empty responses
 
 ---
@@ -171,9 +189,9 @@ Rules:
 
 ---
 
-## 8. Forbidden Changes (v1)
+## 8. Compatibility Guardrails
 
-The following are **explicitly forbidden** in v1:
+Avoid these changes unless they are part of an explicit versioned API update:
 
 - Adding runtime reflection to Request / Response
 - Exposing raw `std.http` types
@@ -194,13 +212,10 @@ CI must fail if these tests fail.
 
 ---
 
-## 10. Stability Promise
+## 10. Stability Direction
 
-This API is guaranteed stable for all `v1.x` releases.
-
-Breaking changes require:
-- RFC document
-- Version bump to `v2.0`
+The project is still pre-1.0. Once a v1 release is declared, this document
+should be tightened into a compatibility contract and tied to conformance tests.
 
 ---
 

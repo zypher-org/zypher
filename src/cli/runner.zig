@@ -9,6 +9,7 @@ const migration = @import("../orm/migration.zig");
 const password = @import("../auth/password.zig");
 const validators = @import("../forms/validators.zig");
 const static_files = @import("../middleware/static.zig");
+const embedded_templates = @import("embedded_templates.zig");
 const zypher_log = @import("../log.zig");
 const log = std.log.scoped(.cli);
 
@@ -31,6 +32,7 @@ pub fn dispatchInner(
     init: std.process.Init,
     cmd: []const u8,
     args: []const [:0]const u8,
+    version: []const u8,
 ) !void {
     logCliCommand("invoked", cmd, args);
     defer logCliCommand("completed", cmd, args);
@@ -57,6 +59,8 @@ pub fn dispatchInner(
         try cmdDemo(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "makemigrations")) {
         try cmdMakemigrations(out_writer, err_writer, init, args);
+    } else if (std.mem.eql(u8, cmd, "version") or std.mem.eql(u8, cmd, "--version")) {
+        try cmdVersion(out_writer, version);
     } else if (std.mem.eql(u8, cmd, "shell")) {
         try cmdShell(out_writer, err_writer, init, args);
     } else {
@@ -124,7 +128,12 @@ fn printHelp(w: *std.Io.Writer) !void {
     try w.print("  makemigrations     Generate migration files\n", .{});
     try w.print("  createsuperuser    Create a superuser account\n", .{});
     try w.print("  shell              Open interactive REPL\n", .{});
+    try w.print("  version            Show the zypher version\n", .{});
     try w.print("  help               Show this help message\n", .{});
+}
+
+fn cmdVersion(w: *std.Io.Writer, version: []const u8) !void {
+    try w.print("zypher {s}\n", .{version});
 }
 
 fn parseDbPath(args: []const [:0]const u8) ?[:0]const u8 {
@@ -990,7 +999,7 @@ const RunOptions = struct {
 
 const DocOptions = struct {
     project_path: []const u8 = ".",
-    zypher_root: []const u8 = ".",
+    zypher_root: ?[]const u8 = null,
     host: []const u8 = "127.0.0.1",
     port: u16 = 8080,
     max_requests: ?usize = null,
@@ -1098,18 +1107,29 @@ fn scaffoldProject(
     const source_path = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ opts.template_dir, source_template });
     defer gpa.free(source_path);
 
-    var source_dir = cwd.openDir(io, source_path, .{ .iterate = true }) catch {
-        try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ source_template, opts.template_dir });
-        cwd.deleteTree(io, opts.project_path) catch {};
-        std.process.exit(1);
-    };
-    defer source_dir.close(io);
-
-    copyTemplateDir(gpa, io, source_dir, cwd, opts.project_path, opts.project_name) catch {
-        try err_writer.print("zypher: failed to copy template '{s}'\n", .{source_template});
-        cwd.deleteTree(io, opts.project_path) catch {};
-        std.process.exit(1);
-    };
+    if (cwd.openDir(io, source_path, .{ .iterate = true })) |source_dir| {
+        defer source_dir.close(io);
+        copyTemplateDir(gpa, io, source_dir, cwd, opts.project_path, opts.project_name) catch {
+            try err_writer.print("zypher: failed to copy template '{s}'\n", .{source_template});
+            cwd.deleteTree(io, opts.project_path) catch {};
+            std.process.exit(1);
+        };
+    } else |err| switch (err) {
+        error.FileNotFound => {
+            if (std.mem.eql(u8, opts.template_dir, default_template_dir)) {
+                try scaffoldFromEmbedded(out_writer, err_writer, io, gpa, cwd, opts.project_path, opts.project_name, source_template);
+                return;
+            }
+            try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ source_template, opts.template_dir });
+            cwd.deleteTree(io, opts.project_path) catch {};
+            std.process.exit(1);
+        },
+        else => {
+            try err_writer.print("zypher: template '{s}' not found in {s}\n", .{ source_template, opts.template_dir });
+            cwd.deleteTree(io, opts.project_path) catch {};
+            std.process.exit(1);
+        },
+    }
 
     log.info("scaffolded project '{s}' from template '{s}'", .{ opts.project_path, source_template });
     try out_writer.print("Created project '{s}' from template '{s}'\n", .{ opts.project_path, source_template });
@@ -1129,6 +1149,8 @@ fn copyTemplateDir(
     defer walker.deinit();
 
     while (try walker.next(io)) |entry| {
+        if (isGeneratedTemplatePath(entry.path)) continue;
+
         const replaced_rel = try replaceProjectName(gpa, entry.path, project_name);
         defer gpa.free(replaced_rel);
         const dest_path = try std.fs.path.join(gpa, &.{ project_root, replaced_rel });
@@ -1137,7 +1159,10 @@ fn copyTemplateDir(
         switch (entry.kind) {
             .directory => try dest_root.createDirPath(io, dest_path),
             .file => {
-                const data = try entry.dir.readFileAlloc(io, entry.basename, gpa, .limited(1024 * 1024));
+                if (std.fs.path.dirname(dest_path)) |parent| {
+                    try dest_root.createDirPath(io, parent);
+                }
+                const data = try source_dir.readFileAlloc(io, entry.path, gpa, .limited(1024 * 1024));
                 defer gpa.free(data);
                 const rendered = try replaceProjectName(gpa, data, project_name);
                 defer gpa.free(rendered);
@@ -1146,6 +1171,15 @@ fn copyTemplateDir(
             else => {},
         }
     }
+}
+
+fn isGeneratedTemplatePath(path: []const u8) bool {
+    var parts = std.mem.splitScalar(u8, path, std.fs.path.sep);
+    while (parts.next()) |part| {
+        if (std.mem.eql(u8, part, ".zig-cache")) return true;
+        if (std.mem.eql(u8, part, "zig-out")) return true;
+    }
+    return false;
 }
 
 fn replaceProjectName(gpa: std.mem.Allocator, input: []const u8, project_name: []const u8) ![]u8 {
@@ -1160,6 +1194,47 @@ fn replaceProjectName(gpa: std.mem.Allocator, input: []const u8, project_name: [
     }
     try out.appendSlice(gpa, rest);
     return out.toOwnedSlice(gpa);
+}
+
+fn scaffoldFromEmbedded(
+    out_writer: *std.Io.Writer,
+    err_writer: *std.Io.Writer,
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    cwd: std.Io.Dir,
+    project_path: []const u8,
+    project_name: []const u8,
+    source_template: []const u8,
+) !void {
+    const files = embedded_templates.getFiles(source_template) orelse {
+        try err_writer.print("zypher: template '{s}' not found in embedded templates\n", .{source_template});
+        cwd.deleteTree(io, project_path) catch {};
+        std.process.exit(1);
+    };
+    for (files) |file| {
+        const replaced_rel = try replaceProjectName(gpa, file.path, project_name);
+        defer gpa.free(replaced_rel);
+        const dest_path = try std.fs.path.join(gpa, &.{ project_path, replaced_rel });
+        defer gpa.free(dest_path);
+        if (std.fs.path.dirname(dest_path)) |parent| {
+            cwd.createDirPath(io, parent) catch {
+                try err_writer.print("zypher: failed to create directory '{s}'\n", .{parent});
+                cwd.deleteTree(io, project_path) catch {};
+                std.process.exit(1);
+            };
+        }
+        const rendered = try replaceProjectName(gpa, file.content, project_name);
+        defer gpa.free(rendered);
+        cwd.writeFile(io, .{ .sub_path = dest_path, .data = rendered }) catch {
+            try err_writer.print("zypher: failed to write '{s}'\n", .{dest_path});
+            cwd.deleteTree(io, project_path) catch {};
+            std.process.exit(1);
+        };
+    }
+    log.info("scaffolded project '{s}' from embedded template '{s}'", .{ project_path, source_template });
+    try out_writer.print("Created project '{s}' from embedded template '{s}'\n", .{ project_path, source_template });
+    try out_writer.print("  cd {s}\n", .{project_path});
+    try out_writer.print("  zypher run\n", .{});
 }
 
 fn cmdTemplates(
@@ -1186,6 +1261,10 @@ fn cmdTemplates(
     }
 
     var dir = std.Io.Dir.cwd().openDir(io, template_dir, .{ .iterate = true }) catch {
+        if (std.mem.eql(u8, template_dir, default_template_dir)) {
+            try listEmbeddedTemplates(out_writer);
+            return;
+        }
         try err_writer.print("zypher: template directory '{s}' not found\n", .{template_dir});
         std.process.exit(1);
     };
@@ -1195,6 +1274,13 @@ fn cmdTemplates(
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
         if (entry.kind == .directory) try out_writer.print("  {s}\n", .{entry.name});
+    }
+}
+
+fn listEmbeddedTemplates(out_writer: *std.Io.Writer) !void {
+    try out_writer.writeAll("Available embedded templates:\n");
+    for (embedded_templates.embedded_template_names) |name| {
+        try out_writer.print("  {s}\n", .{name});
     }
 }
 
@@ -1208,7 +1294,7 @@ fn cmdRun(
     const zypher_root = if (opts.zypher_root) |root|
         try init.gpa.dupe(u8, root)
     else
-        inferZypherRoot(init.gpa, init.io) catch {
+        inferZypherRootWithEnv(init.gpa, init.io, init.environ_map) catch {
             try err_writer.print("zypher: failed to locate Zypher source tree; pass --zypher-root <path>\n", .{});
             std.process.exit(1);
         };
@@ -1221,8 +1307,8 @@ fn cmdRun(
     var child = std.process.spawn(init.io, .{
         .argv = argv,
         .cwd = .{ .path = opts.project_path },
-    }) catch {
-        try err_writer.print("zypher: failed to spawn zig build run\n", .{});
+    }) catch |err| {
+        try err_writer.print("zypher: failed to spawn zig build run ({s}). Is Zig installed?\n", .{@errorName(err)});
         std.process.exit(1);
     };
     const term = child.wait(init.io) catch {
@@ -1270,12 +1356,27 @@ fn parseRunOptions(err_writer: *std.Io.Writer, args: []const [:0]const u8) !RunO
 }
 
 pub fn inferZypherRoot(gpa: std.mem.Allocator, io: std.Io) ![]const u8 {
+    return inferZypherRootWithEnv(gpa, io, null);
+}
+
+pub fn inferZypherRootWithEnv(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    environ_map: ?*const std.process.Environ.Map,
+) ![]const u8 {
+    if (environ_map) |map| if (map.get("ZYPHER_ROOT")) |env_root| {
+        if (try candidateZypherRootFromPath(gpa, io, env_root)) |root| {
+            return root;
+        }
+    };
+
     const exe_dir = std.process.executableDirPathAlloc(io, gpa) catch {
         return gpa.dupe(u8, default_zypher_root);
     };
     defer gpa.free(exe_dir);
 
     if (try candidateZypherRootFromExeDir(gpa, io, exe_dir)) |root| return root;
+    if (try candidateZypherRootFromPackagedInstall(gpa, io, exe_dir)) |root| return root;
     if (try candidateZypherRootFromPath(gpa, io, ".")) |root| return root;
     return gpa.dupe(u8, default_zypher_root);
 }
@@ -1288,6 +1389,21 @@ fn candidateZypherRootFromExeDir(gpa: std.mem.Allocator, io: std.Io, exe_dir: []
     if (!std.mem.eql(u8, std.fs.path.basename(zig_out_dir), "zig-out")) return null;
 
     const root = std.fs.path.dirname(zig_out_dir) orelse return null;
+    return candidateZypherRootFromPath(gpa, io, root);
+}
+
+fn candidateZypherRootFromPackagedInstall(gpa: std.mem.Allocator, io: std.Io, exe_dir: []const u8) !?[]const u8 {
+    if (try candidateZypherRootFromJoinedPath(gpa, io, &.{ exe_dir, "source" })) |root| return root;
+
+    const prefix = std.fs.path.dirname(exe_dir) orelse return null;
+    if (try candidateZypherRootFromJoinedPath(gpa, io, &.{ prefix, "share", "zypher" })) |root| return root;
+
+    return null;
+}
+
+fn candidateZypherRootFromJoinedPath(gpa: std.mem.Allocator, io: std.Io, parts: []const []const u8) !?[]const u8 {
+    const root = try std.fs.path.join(gpa, parts);
+    defer gpa.free(root);
     return candidateZypherRootFromPath(gpa, io, root);
 }
 
@@ -1324,7 +1440,7 @@ pub fn buildRunArgv(gpa: std.mem.Allocator, zypher_root: []const u8, port: u16, 
     return argv.toOwnedSlice(gpa);
 }
 
-pub fn buildDocArgv(gpa: std.mem.Allocator) ![][]const u8 {
+pub fn buildDocArgv(gpa: std.mem.Allocator, zypher_root: ?[]const u8) ![][]const u8 {
     var argv: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (argv.items) |arg| gpa.free(arg);
@@ -1333,6 +1449,9 @@ pub fn buildDocArgv(gpa: std.mem.Allocator) ![][]const u8 {
 
     try argv.append(gpa, try gpa.dupe(u8, "zig"));
     try argv.append(gpa, try gpa.dupe(u8, "build"));
+    if (zypher_root) |root| {
+        try argv.append(gpa, try std.fmt.allocPrint(gpa, "-Dzypher-root={s}", .{root}));
+    }
     try argv.append(gpa, try gpa.dupe(u8, "doc"));
     return argv.toOwnedSlice(gpa);
 }
@@ -1349,7 +1468,18 @@ fn cmdDoc(
     args: []const [:0]const u8,
 ) !void {
     const opts = parseDocOptions(err_writer, args, .framework) catch return;
-    try buildAndServeDocs(out_writer, err_writer, init, opts.zypher_root, opts);
+    const zypher_root = if (opts.zypher_root) |root|
+        try init.gpa.dupe(u8, root)
+    else
+        inferZypherRootWithEnv(init.gpa, init.io, init.environ_map) catch {
+            try err_writer.print("zypher: failed to locate Zypher source tree; pass --zypher-root <path>\n", .{});
+            std.process.exit(1);
+        };
+    defer init.gpa.free(zypher_root);
+
+    var resolved_opts = opts;
+    resolved_opts.zypher_root = zypher_root;
+    try buildAndServeDocs(out_writer, err_writer, init, zypher_root, resolved_opts);
 }
 
 fn cmdDocUser(
@@ -1425,15 +1555,15 @@ fn buildAndServeDocs(
     build_cwd: []const u8,
     opts: DocOptions,
 ) !void {
-    const argv = try buildDocArgv(init.gpa);
+    const argv = try buildDocArgv(init.gpa, opts.zypher_root);
     defer freeArgv(init.gpa, argv);
 
     try out_writer.print("Building documentation in {s}\n", .{build_cwd});
     var child = std.process.spawn(init.io, .{
         .argv = argv,
         .cwd = .{ .path = build_cwd },
-    }) catch {
-        try err_writer.print("zypher: failed to spawn zig build doc\n", .{});
+    }) catch |err| {
+        try err_writer.print("zypher: failed to spawn zig build doc ({s}). Is Zig installed?\n", .{@errorName(err)});
         std.process.exit(1);
     };
     const term = child.wait(init.io) catch {

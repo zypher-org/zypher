@@ -5,7 +5,7 @@ const builtin = @import("builtin");
 const log = std.log.scoped(.password);
 const pbkdf2 = std.crypto.pwhash.pbkdf2;
 const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
-const Random = std.Random;
+const posix = std.posix;
 
 /// Hash output length in bytes.
 const HASH_LEN = 32;
@@ -20,29 +20,40 @@ pub const PasswordError = error{
     HashMismatch,
 };
 
+fn randomBytes(buf: []u8) !void {
+    if (buf.len == 0) return;
+
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const remaining = buf[filled..];
+            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
+            switch (posix.errno(rc)) {
+                .SUCCESS => {
+                    const n: usize = @intCast(rc);
+                    if (n == 0) return error.EntropyUnavailable;
+                    filled += n;
+                },
+                .INTR => continue,
+                else => return error.EntropyUnavailable,
+            }
+        }
+        return;
+    }
+
+    if (builtin.link_libc and @TypeOf(posix.system.arc4random_buf) != void) {
+        posix.system.arc4random_buf(buf.ptr, buf.len);
+        return;
+    }
+
+    return error.EntropyUnavailable;
+}
+
 /// Hash a password using PBKDF2-HMAC-SHA256 with a random salt.
 /// Returns an owned string in the format: "$pbkdf2-sha256${iterations}${salt_hex}${hash_hex}"
 pub fn hash(gpa: std.mem.Allocator, plaintext: []const u8) ![]const u8 {
-    // Generate random salt
     var salt: [SALT_LEN]u8 = undefined;
-    var seed: [Random.DefaultCsprng.secret_seed_length]u8 = undefined;
-    if (builtin.os.tag == .windows) {
-        @memset(&seed, 0);
-        var pc: std.os.windows.LARGE_INTEGER = undefined;
-        _ = std.os.windows.ntdll.RtlQueryPerformanceCounter(&pc);
-        @memcpy(seed[0..@sizeOf(std.os.windows.LARGE_INTEGER)], std.mem.asBytes(&pc));
-    } else {
-        var ts: std.c.timespec = undefined;
-        _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
-        @memcpy(seed[0..8], std.mem.asBytes(&ts.sec));
-        @memcpy(seed[8..16], std.mem.asBytes(&ts.nsec));
-        var i: usize = 16;
-        while (i < seed.len) : (i += 8) {
-            @memcpy(seed[i..@min(i + 8, seed.len)], seed[0..@min(8, seed.len - i)]);
-        }
-    }
-    var csprng = Random.DefaultCsprng.init(seed);
-    csprng.random().bytes(&salt);
+    try randomBytes(&salt);
 
     // Derive key
     var dk: [HASH_LEN]u8 = undefined;

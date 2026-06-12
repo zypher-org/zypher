@@ -72,6 +72,36 @@ test "Static: serves file from configured directory" {
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expectEqualStrings("body{color:red}", res.body.?);
     try std.testing.expectEqualStrings("text/css", res.headers.get("Content-Type").?);
+    try std.testing.expect(res.headers.get("Last-Modified") != null);
+}
+
+test "Static: If-Modified-Since returns 304 for matching Last-Modified" {
+    const gpa = std.testing.allocator;
+    const root_dir = ".zig-cache/tmp/zypher-static-last-modified";
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDirPath(std.testing.io, root_dir) catch {};
+    try cwd.writeFile(std.testing.io, .{ .sub_path = root_dir ++ "/app.js", .data = "console.log('ok')" });
+
+    const MyChain = comptime Chain(.{static_mw.middlewareWith(.{ .root_dir = root_dir, .prefix = "/static" })});
+
+    var first_req = makeRequest(gpa, .get, "/static/app.js");
+    defer first_req.deinit();
+    var first_res = Response.init(gpa);
+    defer first_res.deinit();
+    MyChain.run(&first_req, &first_res, ok_handler);
+    const last_modified = first_res.headers.get("Last-Modified").?;
+
+    var cached_req = makeRequest(gpa, .get, "/static/app.js");
+    defer cached_req.deinit();
+    try cached_req.headers.put("If-Modified-Since", last_modified);
+    var cached_res = Response.init(gpa);
+    defer cached_res.deinit();
+
+    MyChain.run(&cached_req, &cached_res, ok_handler);
+
+    try std.testing.expectEqual(@as(u16, 304), cached_res.status_code);
+    try std.testing.expect(cached_res.body == null);
+    try std.testing.expectEqualStrings(last_modified, cached_res.headers.get("Last-Modified").?);
 }
 
 test "Static: missing file passes through to handler" {

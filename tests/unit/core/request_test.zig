@@ -106,6 +106,40 @@ test "parse form body — URL-encoded special characters" {
     try std.testing.expectEqualStrings("a@b.com", form.get("email").?);
 }
 
+test "parse multipart/form-data body with text field and file upload" {
+    const body =
+        "--zypher-boundary\r\n" ++
+        "Content-Disposition: form-data; name=\"title\"\r\n" ++
+        "\r\n" ++
+        "Quarterly Report\r\n" ++
+        "--zypher-boundary\r\n" ++
+        "Content-Disposition: form-data; name=\"attachment\"; filename=\"report.txt\"\r\n" ++
+        "Content-Type: text/plain\r\n" ++
+        "\r\n" ++
+        "hello file\r\n" ++
+        "--zypher-boundary--\r\n";
+
+    var multipart = try Request.parseMultipartFormData(
+        std.testing.allocator,
+        "multipart/form-data; boundary=zypher-boundary",
+        body,
+    );
+    defer multipart.deinit();
+
+    try std.testing.expectEqualStrings("Quarterly Report", multipart.fields.get("title").?);
+    const upload = multipart.files.get("attachment").?;
+    try std.testing.expectEqualStrings("report.txt", upload.filename);
+    try std.testing.expectEqualStrings("text/plain", upload.content_type);
+    try std.testing.expectEqualStrings("hello file", upload.data);
+}
+
+test "parse multipart/form-data requires boundary" {
+    try std.testing.expectError(
+        error.MissingMultipartBoundary,
+        Request.parseMultipartFormData(std.testing.allocator, "multipart/form-data", ""),
+    );
+}
+
 // ── Cookie parsing ──────────────────────────────────────────────
 
 test "parse cookies from Cookie header" {

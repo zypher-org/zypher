@@ -67,6 +67,71 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 
 ## Quick Start
 
+Install the latest published CLI with the standalone installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/install.sh | sh
+zypher help
+```
+
+The installer detects Linux/macOS and CPU architecture, downloads the matching
+Zypher release, downloads the pinned Zig toolchain from Zig's official website,
+and stores the runtime under `~/.zypher`. For an exact release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/install.sh | ZYPHER_VERSION=0.1.0-beta sh
+```
+
+Install the nightly CLI from npm:
+
+```sh
+npm install -g zypher-cli@latest
+zypher help
+```
+
+Nightly package-manager installs use `zypher-cli`:
+
+```sh
+brew install zypher-cli
+choco install zypher-cli
+# AUR publishing is TODO: paru -S zypher-cli
+```
+
+Stable binary packages use `zypher-cli-bin`:
+
+```sh
+npm install -g zypher-cli-bin@latest
+brew install zypher-cli-bin
+choco install zypher-cli-bin
+# AUR publishing is TODO: paru -S zypher-cli-bin
+```
+
+If global npm installs target a system directory such as `/usr/lib/node_modules`,
+configure a user-level npm prefix before installing:
+
+```sh
+mkdir -p ~/.local
+npm config set prefix ~/.local
+export PATH="$HOME/.local/bin:$PATH"
+npm install -g zypher-cli@latest
+```
+
+Add `export PATH="$HOME/.local/bin:$PATH"` to your shell profile if it is not
+already present. Avoid `sudo npm install -g` when possible; if sudo is used,
+Zypher stores its toolchain and source cache under the invoking user's
+`~/.zypher` directory instead of `/root/.zypher`.
+
+Package-manager wrappers install and use the Zig version pinned in
+`build.zig.zon` plus the matching Zypher source tree under `~/.zypher`, while
+templates are embedded at compile time. That means `zypher new`, `zypher demo`,
+`zypher templates`, and docs/build commands can work from an install without
+manual Zig setup:
+
+```sh
+zypher new my-project --template mvc
+cd my-project
+```
+
 Build the local CLI once from the repository root:
 
 ```sh

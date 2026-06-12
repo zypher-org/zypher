@@ -25,7 +25,7 @@ fn runCli(args: []const [:0]const u8) ![]u8 {
     defer err.deinit();
 
     const cmd = if (args.len > 1) args[1] else "help";
-    try cli.dispatchInner(&out.writer, &err.writer, testInit(), cmd, args);
+    try cli.dispatchInner(&out.writer, &err.writer, testInit(), cmd, args, "0.0.0-test");
 
     try std.testing.expectEqual(@as(usize, 0), err.written().len);
     return try std.testing.allocator.dupe(u8, out.written());
@@ -224,7 +224,7 @@ test "cli: run infers zypher root from current checkout" {
 }
 
 test "cli: doc builds zig build doc argv" {
-    const argv = try cli.buildDocArgv(std.testing.allocator);
+    const argv = try cli.buildDocArgv(std.testing.allocator, null);
     defer {
         for (argv) |arg| std.testing.allocator.free(arg);
         std.testing.allocator.free(argv);
@@ -234,6 +234,20 @@ test "cli: doc builds zig build doc argv" {
     try std.testing.expectEqualStrings("zig", argv[0]);
     try std.testing.expectEqualStrings("build", argv[1]);
     try std.testing.expectEqualStrings("doc", argv[2]);
+}
+
+test "cli: doc can pass zypher root to user project build" {
+    const argv = try cli.buildDocArgv(std.testing.allocator, "/tmp/zypher");
+    defer {
+        for (argv) |arg| std.testing.allocator.free(arg);
+        std.testing.allocator.free(argv);
+    }
+
+    try std.testing.expectEqual(@as(usize, 4), argv.len);
+    try std.testing.expectEqualStrings("zig", argv[0]);
+    try std.testing.expectEqualStrings("build", argv[1]);
+    try std.testing.expectEqualStrings("-Dzypher-root=/tmp/zypher", argv[2]);
+    try std.testing.expectEqualStrings("doc", argv[3]);
 }
 
 test "cli: migrate applies SQL files in order and skips applied migrations" {
@@ -387,7 +401,7 @@ test "cli: runserver serves health check and returns after max requests" {
             err_writer: *std.Io.Writer,
             argv: []const [:0]const u8,
         ) !void {
-            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv);
+            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv, "0.0.0-test");
         }
     };
 
@@ -436,7 +450,7 @@ test "cli: runserver responds to health check and stops on SIGINT" {
             err_writer: *std.Io.Writer,
             argv: []const [:0]const u8,
         ) !void {
-            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv);
+            try cli.dispatchInner(out_writer, err_writer, testInit(), "runserver", argv, "0.0.0-test");
         }
     };
 

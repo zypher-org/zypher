@@ -41,7 +41,7 @@ pub fn htmlEscape(allocator: std.mem.Allocator, value: []const u8) ![]const u8 {
     return out.toOwnedSlice(allocator);
 }
 
-pub fn noteCards(allocator: std.mem.Allocator, rows: []const domain.NoteRow) ![]u8 {
+pub fn noteCards(allocator: std.mem.Allocator, rows: []const domain.NoteRow, csrf_field: []const u8) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -67,18 +67,18 @@ pub fn noteCards(allocator: std.mem.Allocator, rows: []const domain.NoteRow) ![]
         try out.appendSlice(allocator, "<footer>");
         try out.print(allocator, "<a href=\"/notes/{d}/edit\">Edit</a>", .{row[0]});
         if (row[5]) {
-            try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/restore\"><input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\"><button>Restore</button></form>", .{row[0]});
+            try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/restore\">{s}<button>Restore</button></form>", .{ row[0], csrf_field });
         } else {
-            try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/archive\"><input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\"><button>Archive</button></form>", .{row[0]});
+            try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/archive\">{s}<button>Archive</button></form>", .{ row[0], csrf_field });
         }
-        try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/delete\"><input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\"><button class=\"danger\">Delete</button></form>", .{row[0]});
+        try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/delete\">{s}<button class=\"danger\">Delete</button></form>", .{ row[0], csrf_field });
         try out.appendSlice(allocator, "</footer></article>");
     }
 
     return out.toOwnedSlice(allocator);
 }
 
-pub fn noteView(allocator: std.mem.Allocator, row: domain.NoteRow) ![]u8 {
+pub fn noteView(allocator: std.mem.Allocator, row: domain.NoteRow, csrf_field: []const u8) ![]u8 {
     const title = try htmlEscape(allocator, row[1]);
     defer allocator.free(title);
     const body = try htmlEscape(allocator, row[2]);
@@ -96,11 +96,11 @@ pub fn noteView(allocator: std.mem.Allocator, row: domain.NoteRow) ![]u8 {
     try out.appendSlice(allocator, "</div><div class=\"actions\">");
     try out.print(allocator, "<a class=\"button\" href=\"/notes/{d}/edit\">Edit</a>", .{row[0]});
     if (row[5]) {
-        try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/restore\"><input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\"><button>Restore</button></form>", .{row[0]});
+        try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/restore\">{s}<button>Restore</button></form>", .{ row[0], csrf_field });
     } else {
-        try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/archive\"><input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\"><button>Archive</button></form>", .{row[0]});
+        try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/archive\">{s}<button>Archive</button></form>", .{ row[0], csrf_field });
     }
-    try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/delete\"><input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\"><button class=\"danger\">Delete</button></form>", .{row[0]});
+    try out.print(allocator, "<form method=\"post\" action=\"/notes/{d}/delete\">{s}<button class=\"danger\">Delete</button></form>", .{ row[0], csrf_field });
     try out.appendSlice(allocator, "</div></header>");
     if (row[4]) try out.appendSlice(allocator, "<span class=\"pin\">Pinned</span>");
     try out.print(allocator, "<p class=\"note-body\">{s}</p>", .{body});

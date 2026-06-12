@@ -4,6 +4,29 @@ const RouteParams = @import("../router/params.zig").RouteParams;
 const log = std.log.scoped(.request);
 
 pub const Request = struct {
+    pub const FileUpload = struct {
+        filename: []const u8,
+        content_type: []const u8,
+        data: []const u8,
+
+        pub fn deinit(self: *FileUpload, gpa: std.mem.Allocator) void {
+            gpa.free(self.filename);
+            gpa.free(self.content_type);
+            gpa.free(@constCast(self.data));
+        }
+    };
+
+    pub const MultipartForm = struct {
+        fields: std.StringHashMap([]const u8),
+        files: std.StringHashMap(FileUpload),
+        allocator: std.mem.Allocator,
+
+        pub fn deinit(self: *MultipartForm) void {
+            deinitQueryString(&self.fields, self.allocator);
+            deinitFiles(&self.files, self.allocator);
+        }
+    };
+
     /// HTTP method
     method: Method,
 
@@ -24,6 +47,12 @@ pub const Request = struct {
 
     /// Whether query/form entries were allocated by decodeUrlEncoded
     query_owned: bool = false,
+
+    /// Uploaded files parsed from multipart/form-data, keyed by field name.
+    files: std.StringHashMap(FileUpload) = undefined,
+
+    /// Whether files has been initialized and owns its entries.
+    files_owned: bool = false,
 
     /// Route-extracted URL parameters (populated by Router.dispatch)
     params: RouteParams = .{ .names = undefined, .values = undefined, .len = 0, .allocator = undefined },
@@ -51,6 +80,12 @@ pub const Request = struct {
         return self.query.get(name);
     }
 
+    /// Uploaded file lookup by multipart field name.
+    pub fn file(self: *const Request, name: []const u8) ?FileUpload {
+        if (!self.files_owned) return null;
+        return self.files.get(name);
+    }
+
     /// Cookie lookup.
     pub fn cookie(self: *const Request, name: []const u8) ?[]const u8 {
         const cookie_header = self.header("Cookie") orelse return null;
@@ -76,6 +111,9 @@ pub const Request = struct {
         }
         if (self.body_owned) {
             self.allocator.free(@constCast(self.body));
+        }
+        if (self.files_owned) {
+            deinitFiles(&self.files, self.allocator);
         }
     }
 
@@ -128,6 +166,22 @@ pub const Request = struct {
         return parseQueryString(gpa, body);
     }
 
+    /// Parse multipart/form-data into text fields and uploaded files.
+    pub fn parseMultipartFormData(gpa: std.mem.Allocator, content_type: []const u8, body: []const u8) !MultipartForm {
+        const boundary = multipartBoundary(content_type) orelse return error.MissingMultipartBoundary;
+        return parseMultipartFormDataWithBoundary(gpa, boundary, body);
+    }
+
+    /// Free all memory from a file upload map.
+    pub fn deinitFiles(files: *std.StringHashMap(FileUpload), gpa: std.mem.Allocator) void {
+        var it = files.iterator();
+        while (it.next()) |entry| {
+            gpa.free(entry.key_ptr.*);
+            entry.value_ptr.deinit(gpa);
+        }
+        files.deinit();
+    }
+
     /// Parse cookies from a Cookie header value.
     pub fn parseCookies(gpa: std.mem.Allocator, cookie_header: []const u8) !std.StringHashMap([]const u8) {
         var map = std.StringHashMap([]const u8).init(gpa);
@@ -161,6 +215,111 @@ pub const Request = struct {
     }
 };
 
+fn multipartBoundary(content_type: []const u8) ?[]const u8 {
+    var params = std.mem.splitScalar(u8, content_type, ';');
+    _ = params.next() orelse return null;
+    while (params.next()) |param| {
+        const trimmed = std.mem.trim(u8, param, " \t");
+        if (std.mem.startsWith(u8, trimmed, "boundary=")) {
+            var value = trimmed["boundary=".len..];
+            if (value.len >= 2 and value[0] == '"' and value[value.len - 1] == '"') {
+                value = value[1 .. value.len - 1];
+            }
+            return value;
+        }
+    }
+    return null;
+}
+
+fn parseMultipartFormDataWithBoundary(gpa: std.mem.Allocator, boundary: []const u8, body: []const u8) !Request.MultipartForm {
+    var result = Request.MultipartForm{
+        .fields = std.StringHashMap([]const u8).init(gpa),
+        .files = std.StringHashMap(Request.FileUpload).init(gpa),
+        .allocator = gpa,
+    };
+    errdefer result.deinit();
+
+    const marker = try std.fmt.allocPrint(gpa, "--{s}", .{boundary});
+    defer gpa.free(marker);
+
+    var sections = std.mem.splitSequence(u8, body, marker);
+    _ = sections.next();
+    while (sections.next()) |raw_section| {
+        if (std.mem.startsWith(u8, raw_section, "--")) break;
+
+        var section = raw_section;
+        if (std.mem.startsWith(u8, section, "\r\n")) section = section[2..];
+        if (std.mem.endsWith(u8, section, "\r\n")) section = section[0 .. section.len - 2];
+        if (section.len == 0) continue;
+
+        const header_end = std.mem.indexOf(u8, section, "\r\n\r\n") orelse continue;
+        const header_block = section[0..header_end];
+        const payload = section[header_end + 4 ..];
+
+        var name: ?[]const u8 = null;
+        var filename: ?[]const u8 = null;
+        var content_type: []const u8 = "";
+
+        var header_lines = std.mem.splitSequence(u8, header_block, "\r\n");
+        while (header_lines.next()) |line| {
+            if (std.mem.indexOfScalar(u8, line, ':')) |idx| {
+                const header_name = std.mem.trim(u8, line[0..idx], " \t");
+                const header_value = std.mem.trim(u8, line[idx + 1 ..], " \t");
+                if (std.ascii.eqlIgnoreCase(header_name, "Content-Disposition")) {
+                    name = dispositionParam(header_value, "name");
+                    filename = dispositionParam(header_value, "filename");
+                } else if (std.ascii.eqlIgnoreCase(header_name, "Content-Type")) {
+                    content_type = header_value;
+                }
+            }
+        }
+
+        const field_name = name orelse continue;
+        const owned_key = try gpa.dupe(u8, field_name);
+        errdefer gpa.free(owned_key);
+
+        if (filename) |file_name| {
+            var upload = Request.FileUpload{
+                .filename = try gpa.dupe(u8, file_name),
+                .content_type = try gpa.dupe(u8, content_type),
+                .data = try gpa.dupe(u8, payload),
+            };
+            errdefer upload.deinit(gpa);
+            if (try result.files.fetchPut(owned_key, upload)) |old| {
+                gpa.free(old.key);
+                var old_upload = old.value;
+                old_upload.deinit(gpa);
+            }
+        } else {
+            const owned_value = try gpa.dupe(u8, payload);
+            errdefer gpa.free(owned_value);
+            if (try result.fields.fetchPut(owned_key, owned_value)) |old| {
+                gpa.free(old.key);
+                gpa.free(old.value);
+            }
+        }
+    }
+
+    return result;
+}
+
+fn dispositionParam(value: []const u8, param_name: []const u8) ?[]const u8 {
+    var parts = std.mem.splitScalar(u8, value, ';');
+    _ = parts.next();
+    while (parts.next()) |part| {
+        const trimmed = std.mem.trim(u8, part, " \t");
+        const eq = std.mem.indexOfScalar(u8, trimmed, '=') orelse continue;
+        const key = std.mem.trim(u8, trimmed[0..eq], " \t");
+        if (!std.mem.eql(u8, key, param_name)) continue;
+        var param_value = std.mem.trim(u8, trimmed[eq + 1 ..], " \t");
+        if (param_value.len >= 2 and param_value[0] == '"' and param_value[param_value.len - 1] == '"') {
+            param_value = param_value[1 .. param_value.len - 1];
+        }
+        return param_value;
+    }
+    return null;
+}
+
 /// Decode a URL-encoded string, replacing + with space and %XX with bytes.
 fn decodeUrlEncoded(gpa: std.mem.Allocator, raw: []const u8) ![]const u8 {
     var buf: std.ArrayList(u8) = .empty;
@@ -170,7 +329,7 @@ fn decodeUrlEncoded(gpa: std.mem.Allocator, raw: []const u8) ![]const u8 {
         if (raw[i] == '+') {
             try buf.append(gpa, ' ');
         } else if (raw[i] == '%' and i + 2 < raw.len) {
-            const byte = std.fmt.parseInt(u8, raw[i + 1 .. i + 3], 16) catch 0;
+            const byte = std.fmt.parseInt(u8, raw[i + 1 .. i + 3], 16) catch return error.InvalidPercentEncoding;
             try buf.append(gpa, byte);
             i += 2;
         } else {

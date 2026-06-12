@@ -26,6 +26,13 @@ test "filters: capitalize converts first char to upper" {
     try std.testing.expectEqualStrings("Hello world", result.value.string);
 }
 
+test "filters: title converts words to title case" {
+    const gpa = std.testing.allocator;
+    var result = try filters.apply(gpa, "title", Value{ .string = "hello WORLD" });
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("Hello World", result.value.string);
+}
+
 test "filters: trim removes leading/trailing whitespace" {
     const gpa = std.testing.allocator;
     var result = try filters.apply(gpa, "trim", Value{ .string = "  hello  " });
@@ -60,6 +67,27 @@ test "filters: default returns fallback when null" {
     var result = try filters.applyDefault(gpa, Value.null_val, Value{ .string = "fallback" });
     defer result.deinit(gpa);
     try std.testing.expectEqualStrings("fallback", result.value.string);
+}
+
+test "filters: default returns fallback when empty string" {
+    const gpa = std.testing.allocator;
+    var result = try filters.applyWithArg(gpa, "default", Value{ .string = "" }, "\"fallback\"");
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("fallback", result.value.string);
+}
+
+test "filters: reverse reverses string bytes" {
+    const gpa = std.testing.allocator;
+    var result = try filters.apply(gpa, "reverse", Value{ .string = "abc" });
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("cba", result.value.string);
+}
+
+test "filters: escape converts HTML special characters" {
+    const gpa = std.testing.allocator;
+    var result = try filters.apply(gpa, "escape", Value{ .string = "<b>&\"'" });
+    defer result.deinit(gpa);
+    try std.testing.expectEqualStrings("&lt;b&gt;&amp;&quot;&#x27;", result.value.string);
 }
 
 test "filters: unknown filter passes value through unchanged" {

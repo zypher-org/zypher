@@ -30,6 +30,22 @@ fn create_handler(req: *Request, res: *Response) void {
     res.text("created") catch {};
 }
 
+fn static_handler(req: *Request, res: *Response) void {
+    _ = req;
+    _ = res.status(200);
+    res.text("static") catch {};
+}
+
+fn wildcard_handler(req: *Request, res: *Response) void {
+    _ = res.status(200);
+    res.text(req.params.get("*") orelse "wildcard") catch {};
+}
+
+fn named_file_handler(req: *Request, res: *Response) void {
+    _ = res.status(200);
+    res.text(req.params.get("name") orelse "missing name") catch {};
+}
+
 fn not_found_handler(req: *Request, res: *Response) void {
     _ = req;
     _ = res.status(404);
@@ -165,4 +181,54 @@ test "Router: method mismatch returns 405 with Allow header" {
     try std.testing.expect(allow != null);
     try std.testing.expect(std.mem.indexOf(u8, allow.?, "GET") != null);
     try std.testing.expect(std.mem.indexOf(u8, allow.?, "PUT") != null);
+}
+
+test "Router: static route takes precedence over earlier param route" {
+    const routes = comptime .{
+        Router.route(.get, "/users/:id", user_handler),
+        Router.route(.get, "/users/new", static_handler),
+    };
+    const router = comptime Router.init(routes, not_found_handler);
+
+    var req: Request = .{
+        .method = .get,
+        .path = "/users/new",
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = &.{},
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+
+    var res = @import("zypher").core.Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    router.dispatch(&req, &res);
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expectEqualStrings("static", res.body.?);
+}
+
+test "Router: param route takes precedence over earlier wildcard route" {
+    const routes = comptime .{
+        Router.route(.get, "/files/*", wildcard_handler),
+        Router.route(.get, "/files/:name", named_file_handler),
+    };
+    const router = comptime Router.init(routes, not_found_handler);
+
+    var req: Request = .{
+        .method = .get,
+        .path = "/files/readme",
+        .query = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .headers = std.StringHashMap([]const u8).init(std.testing.allocator),
+        .body = &.{},
+        .allocator = std.testing.allocator,
+    };
+    defer req.deinit();
+
+    var res = @import("zypher").core.Response.init(std.testing.allocator);
+    defer res.deinit();
+
+    router.dispatch(&req, &res);
+    try std.testing.expectEqual(@as(u16, 200), res.status_code);
+    try std.testing.expectEqualStrings("readme", res.body.?);
 }

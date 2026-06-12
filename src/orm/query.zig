@@ -127,6 +127,7 @@ pub fn deleteById(comptime M: type, db: *sqlite.Db, id: i64) QueryError!void {
 }
 
 /// ORDER BY a column expression. Returns all rows sorted.
+/// WARNING: `order_by` is a raw SQL fragment. Do not pass user input directly.
 /// Caller owns the rows and their text memory — call freeRow on each when done.
 pub fn order(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, order_by: []const u8) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
@@ -232,6 +233,7 @@ pub fn count(comptime M: type, db: *sqlite.Db) QueryError!u64 {
 }
 
 /// FILTER with WHERE clause. Values are bound as parameters (SQL injection safe).
+/// WARNING: `where` is a raw SQL fragment after the WHERE keyword. Do not pass user input directly.
 /// Caller owns the rows and their text memory — call freeRow on each when done.
 pub fn filter(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
@@ -251,6 +253,7 @@ pub fn filter(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [
 }
 
 /// FILTER with WHERE, LIMIT, and OFFSET.
+/// WARNING: `where` is a raw SQL fragment after the WHERE keyword. Do not pass user input directly.
 /// Caller owns the rows and their text memory — call freeRow on each when done.
 pub fn filterLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value, limit: u64, offset: u64) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
@@ -277,6 +280,7 @@ pub fn filterLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocato
 }
 
 /// FILTER with WHERE, ORDER BY, LIMIT, and OFFSET.
+/// WARNING: `where` and `order_by` are raw SQL fragments. Do not pass user input directly.
 /// Caller owns the rows and their text memory — call freeRow on each when done.
 pub fn filterOrderLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value, order_by: []const u8, limit: u64, offset: u64) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
@@ -314,6 +318,7 @@ pub fn filterOrderLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.All
 }
 
 /// SELECT first matching row. Returns null if no match.
+/// WARNING: `where` is a raw SQL fragment after the WHERE keyword. Do not pass user input directly.
 /// Caller owns the row's text memory — call freeRow when done.
 pub fn first(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value) QueryError!?RowType(M) {
     var rows = try filterLimitOffset(M, db, gpa, where, values, 1, 0);
@@ -351,14 +356,12 @@ pub fn save(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, row: *RowT
         return new_id;
     } else {
         // UPDATE
-        const values = blk: {
-            var arr: [M.fields_len - 1]sqlite.Value = undefined;
-            inline for (1..M.fields_len) |i| {
-                const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
-                arr[i - 1] = if (FieldType == i64) .{ .int = row[i] } else if (FieldType == f64) .{ .float = row[i] } else if (FieldType == []const u8) .{ .text = row[i] } else if (FieldType == bool) .{ .int = if (row[i]) 1 else 0 } else .{ .int = 0 };
-            }
-            break :blk &arr;
-        };
+        var arr: [M.fields_len - 1]sqlite.Value = undefined;
+        const values: []const sqlite.Value = &arr;
+        inline for (1..M.fields_len) |i| {
+            const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
+            arr[i - 1] = if (FieldType == i64) .{ .int = row[i] } else if (FieldType == f64) .{ .float = row[i] } else if (FieldType == []const u8) .{ .text = row[i] } else if (FieldType == bool) .{ .int = if (row[i]) 1 else 0 } else .{ .int = 0 };
+        }
         try updateById(M, db, id, values);
         return id;
     }

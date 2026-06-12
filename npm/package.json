@@ -1,0 +1,40 @@
+{
+  "name": "zypher-cli",
+  "version": "0.1.0-beta",
+  "description": "A batteries-included web framework built the Zig way.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/zypher-org/zypher#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zypher-org/zypher.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zypher-org/zypher/issues"
+  },
+  "bin": {
+    "zypher": "bin/zypher.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "vendor/"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "zypher": {
+    "zigVersion": "0.17.0-dev.704+b8cb78023"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

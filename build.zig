@@ -6,6 +6,19 @@ pub fn build(b: *std.Build) void {
     });
     const optimize = b.standardOptimizeOption(.{});
 
+    // ── Extract version from build.zig.zon ─────────────────────────
+    const version_string = comptime blk: {
+        const zon = @embedFile("build.zig.zon");
+        const marker = ".version = \"";
+        const start = std.mem.indexOf(u8, zon, marker) orelse break :blk "0.0.0";
+        const value_start = start + marker.len;
+        const end = std.mem.indexOfScalar(u8, zon[value_start..], '"') orelse break :blk "0.0.0";
+        break :blk zon[value_start..][0..end];
+    };
+    const opts = b.addOptions();
+    opts.addOption([]const u8, "version", version_string);
+    const build_config_mod = opts.createModule();
+
     // ── Vendored SQLite3 ─────────────────────────────────────────────
     const sqlite3_lib = createSqlite3Library(b, target, optimize);
 
@@ -19,6 +32,19 @@ pub fn build(b: *std.Build) void {
     lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
     lib_mod.link_libc = true;
 
+    // ── Generate embedded templates ────────────────────────────────
+    const gen_templates_mod = b.createModule(.{
+        .root_source_file = b.path("tools/generate_templates.zig"),
+        .target = b.resolveTargetQuery(.{}),
+    });
+    const gen_templates = b.addExecutable(.{
+        .name = "gen-embedded-templates",
+        .root_module = gen_templates_mod,
+    });
+    const run_gen_templates = b.addRunArtifact(gen_templates);
+    const gen_templates_step = b.step("gen-templates", "Regenerate embedded_templates.zig from templates/");
+    gen_templates_step.dependOn(&run_gen_templates.step);
+
     // ── CLI executable ──────────────────────────────────────────────
     const exe = b.addExecutable(.{
         .name = "zypher",
@@ -28,10 +54,12 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "build_config", .module = build_config_mod },
             },
         }),
     });
     b.installArtifact(exe);
+    exe.step.dependOn(&run_gen_templates.step);
 
     // ── Cross-target CLI binaries ──────────────────────────────────
     const all_targets_step = b.step("all-targets", "Build zypher CLI binaries for all supported targets");
@@ -39,10 +67,11 @@ pub fn build(b: *std.Build) void {
         const release_resolved_target = b.resolveTargetQuery(release_target.query);
         const release_sqlite3_lib = createSqlite3Library(b, release_resolved_target, optimize);
         const release_lib_mod = createZypherModule(b, release_resolved_target, optimize, release_sqlite3_lib);
-        const release_exe = createCliExecutable(b, release_resolved_target, optimize, release_lib_mod);
+        const release_exe = createCliExecutable(b, release_resolved_target, optimize, release_lib_mod, build_config_mod);
         const install_release_exe = b.addInstallArtifact(release_exe, .{
             .dest_sub_path = b.fmt("{s}/zypher{s}", .{ release_target.name, release_target.exe_suffix }),
         });
+        release_exe.step.dependOn(&run_gen_templates.step);
 
         all_targets_step.dependOn(&install_release_exe.step);
         b.getInstallStep().dependOn(&install_release_exe.step);
@@ -76,6 +105,28 @@ pub fn build(b: *std.Build) void {
 
     const run_demo_step = b.step("run-demo", "Run the demo app");
     run_demo_step.dependOn(&run_demo_cmd.step);
+
+    // ── Examples compilation checks ────────────────────────────────
+    const check_examples_step = b.step("check-examples", "Build all example apps");
+
+    inline for (comptime [_]struct { name: []const u8, path: []const u8 }{
+        .{ .name = "notes-app", .path = "examples/notes-app/src/main.zig" },
+        .{ .name = "books-api", .path = "examples/books-api/src/main.zig" },
+        .{ .name = "online-storage", .path = "examples/online-storage/src/main.zig" },
+    }) |example| {
+        const example_exe = b.addExecutable(.{
+            .name = example.name,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(example.path),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "zypher", .module = lib_mod },
+                },
+            }),
+        });
+        check_examples_step.dependOn(&example_exe.step);
+    }
 
     // ── Test infrastructure ─────────────────────────────────────────
     const lib_unit_tests = b.addTest(.{
@@ -265,6 +316,7 @@ fn createCliExecutable(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     lib_mod: *std.Build.Module,
+    build_config_mod: *std.Build.Module,
 ) *std.Build.Step.Compile {
     return b.addExecutable(.{
         .name = "zypher",
@@ -274,6 +326,7 @@ fn createCliExecutable(
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "build_config", .module = build_config_mod },
             },
         }),
     });
