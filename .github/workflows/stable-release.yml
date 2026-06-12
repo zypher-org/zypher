@@ -2,6 +2,8 @@ name: Stable Release
 
 on:
   push:
+    branches:
+      - prod-stable
     tags:
       - "v*"
 
