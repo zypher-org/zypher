@@ -4,6 +4,7 @@ const log = std.log.scoped(.user);
 const password = @import("password.zig");
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
+const csrf = @import("../middleware/csrf.zig");
 
 /// User model with hashed password, role, and active status.
 pub const User = struct {
@@ -100,16 +101,19 @@ pub fn superuserRequired(req: *Request, res: *Response, next: *const fn (*Reques
 /// POST handler processes form submission; GET shows the form.
 pub fn loginView(req: *Request, res: *Response) void {
     if (req.method == .get) {
-        const html =
+        const csrf_field = csrf.formFieldForRequest(res.allocator, req) catch "";
+        defer if (csrf_field.len > 0) res.allocator.free(csrf_field);
+        const html = std.fmt.allocPrint(res.allocator,
             \\<!DOCTYPE html><html><head><title>Login</title></head><body>
             \\<h1>Login</h1>
             \\<form method="post" action="/login">
-            \\<input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+            \\{s}
             \\<label>Username: <input type="text" name="username" required></label>
             \\<label>Password: <input type="password" name="password" required></label>
             \\<button type="submit">Log In</button>
             \\</form></body></html>
-        ;
+        , .{csrf_field}) catch return;
+        defer res.allocator.free(html);
         res.html(html) catch {};
         log.info("loginView: GET rendered form", .{});
     } else if (req.method == .post) {
@@ -134,16 +138,19 @@ pub fn logoutView(req: *Request, res: *Response) void {
 /// GET shows registration form. POST processes registration.
 pub fn registerView(req: *Request, res: *Response) void {
     if (req.method == .get) {
-        const html =
+        const csrf_field = csrf.formFieldForRequest(res.allocator, req) catch "";
+        defer if (csrf_field.len > 0) res.allocator.free(csrf_field);
+        const html = std.fmt.allocPrint(res.allocator,
             \\<!DOCTYPE html><html><head><title>Register</title></head><body>
             \\<h1>Register</h1>
             \\<form method="post" action="/register">
-            \\<input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+            \\{s}
             \\<label>Username: <input type="text" name="username" required></label>
             \\<label>Password: <input type="password" name="password" required></label>
             \\<button type="submit">Register</button>
             \\</form></body></html>
-        ;
+        , .{csrf_field}) catch return;
+        defer res.allocator.free(html);
         res.html(html) catch {};
         log.info("registerView: GET rendered form", .{});
     } else if (req.method == .post) {

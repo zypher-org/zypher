@@ -4,16 +4,12 @@
 /// For POST/PUT/DELETE/PATCH: validates the X-CSRF-Token request header against the stored token.
 /// If missing or mismatched, returns 403.
 ///
-/// Note: This is a simplified implementation using a per-process secret.
-/// A production implementation would store tokens in session storage.
 const std = @import("std");
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const Session = @import("../auth/session.zig").Session;
 const log = std.log.scoped(.csrf);
 
-/// Fallback token for apps that do not install session middleware.
-const secret = "zypher-csrf-secret-key-2026";
 const session_key = "_csrf_token";
 
 fn randomBytes(buf: []u8) !void {
@@ -45,19 +41,9 @@ fn randomBytes(buf: []u8) !void {
     return error.EntropyUnavailable;
 }
 
-/// Generate the no-session fallback CSRF token.
-pub fn generateToken() []const u8 {
-    return secret;
-}
-
-/// Validate a CSRF token against the no-session fallback value.
-pub fn validateToken(token: []const u8) bool {
-    return std.mem.eql(u8, token, secret);
-}
-
-/// Return the request CSRF token, creating and storing one in the session when present.
+/// Return the request CSRF token, creating and storing one in the session.
 pub fn ensureToken(req: *Request) ![]const u8 {
-    const user_ptr = req.user orelse return generateToken();
+    const user_ptr = req.user orelse return error.CsrfSessionUnavailable;
     const session: *Session = @ptrCast(@alignCast(user_ptr));
     if (session.get(session_key)) |token| return token;
 
@@ -68,7 +54,7 @@ pub fn ensureToken(req: *Request) ![]const u8 {
     return session.get(session_key) orelse error.CsrfTokenUnavailable;
 }
 
-/// Validate a token against the request session when present, otherwise the fallback token.
+/// Validate a token against the request session.
 pub fn validateTokenForRequest(req: *Request, token: []const u8) bool {
     if (req.user) |user_ptr| {
         const session: *Session = @ptrCast(@alignCast(user_ptr));
@@ -76,7 +62,7 @@ pub fn validateTokenForRequest(req: *Request, token: []const u8) bool {
         if (expected.len != token.len or expected.len != 64) return false;
         return std.crypto.timing_safe.eql([64]u8, expected[0..64].*, token[0..64].*);
     }
-    return validateToken(token);
+    return false;
 }
 
 /// CSRF middleware function.
@@ -85,13 +71,12 @@ pub fn validateTokenForRequest(req: *Request, token: []const u8) bool {
 pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
     switch (req.method) {
         .get, .head, .options => {
-            const token = ensureToken(req) catch {
-                _ = res.status(500);
-                res.text("CSRF token unavailable") catch {};
-                return;
-            };
-            _ = res.header("X-CSRF-Token", token);
-            log.debug("CSRF token set for {s} {s}", .{ @tagName(req.method), req.path });
+            if (ensureToken(req)) |token| {
+                _ = res.header("X-CSRF-Token", token);
+                log.debug("CSRF token set for {s} {s}", .{ @tagName(req.method), req.path });
+            } else |_| {
+                log.debug("CSRF token not available (no session) for {s} {s}", .{ @tagName(req.method), req.path });
+            }
             next(req, res);
         },
         .post, .put, .delete, .patch => {
@@ -113,7 +98,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
 ///   {{ form_fields|safe }}
 ///   <input type="hidden" name="_csrf" value="{{ csrf_token }}">
 pub fn formField() []const u8 {
-    return "<input type=\"hidden\" name=\"_csrf\" value=\"zypher-csrf-secret-key-2026\">\n";
+    return "";
 }
 
 /// Return an owned hidden input field using the request/session token.

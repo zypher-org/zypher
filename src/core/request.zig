@@ -329,7 +329,7 @@ fn decodeUrlEncoded(gpa: std.mem.Allocator, raw: []const u8) ![]const u8 {
         if (raw[i] == '+') {
             try buf.append(gpa, ' ');
         } else if (raw[i] == '%' and i + 2 < raw.len) {
-            const byte = std.fmt.parseInt(u8, raw[i + 1 .. i + 3], 16) catch 0;
+            const byte = std.fmt.parseInt(u8, raw[i + 1 .. i + 3], 16) catch return error.InvalidPercentEncoding;
             try buf.append(gpa, byte);
             i += 2;
         } else {

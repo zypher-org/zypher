@@ -127,7 +127,7 @@ fn renderPage(res: *Response, ctx: *Context) void {
     gpa.free(owned);
 }
 
-fn setupContext(req: *const Request, ctx: *Context, title: []const u8) void {
+fn setupContext(req: *Request, ctx: *Context, title: []const u8) void {
     ctx.put("title", .{ .string = title }) catch {};
     const user = getSessionUser(req);
     ctx.put("authenticated", .{ .bool = user != null }) catch {};
@@ -135,6 +135,9 @@ fn setupContext(req: *const Request, ctx: *Context, title: []const u8) void {
     ctx.put("flash", .{ .string = "" }) catch {};
     ctx.put("flash_type", .{ .string = "" }) catch {};
     ctx.put("content", .{ .string = "" }) catch {};
+    const csrf_field = csrf.formFieldForRequest(req.allocator, req) catch return;
+    defer req.allocator.free(csrf_field);
+    ctx.put("csrf_field", .{ .string = csrf_field }) catch {};
 }
 
 fn intStr(buf: []u8, n: i64) []const u8 {
@@ -160,10 +163,10 @@ fn redirect(res: *Response, url: []const u8) void {
     _ = res.header("Location", url);
 }
 
-fn appendCsrfInput(gpa: std.mem.Allocator, html: *std.ArrayList(u8)) !void {
-    try html.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"");
-    try html.appendSlice(gpa, csrf.generateToken());
-    try html.appendSlice(gpa, "\">");
+fn appendCsrfInput(req: *Request, gpa: std.mem.Allocator, html: *std.ArrayList(u8)) !void {
+    const field = try csrf.formFieldForRequest(gpa, req);
+    defer gpa.free(field);
+    try html.appendSlice(gpa, field);
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────
@@ -238,7 +241,7 @@ fn newPostFormHandler(req: *Request, res: *Response) void {
         \\<h1>New Post</h1>
         \\<form method="post" action="/post/new">
     ) catch return;
-    appendCsrfInput(gpa, &html) catch return;
+    appendCsrfInput(req, gpa, &html) catch return;
     html.appendSlice(gpa,
         \\<label>Title: <input type="text" name="title" required></label>
         \\<label>Body: <textarea name="body" rows="10" required></textarea></label>
@@ -381,7 +384,7 @@ fn postDetailHandler(req: *Request, res: *Response) void {
         html.appendSlice(gpa,
             \\/comment">
         ) catch return;
-        appendCsrfInput(gpa, &html) catch return;
+        appendCsrfInput(req, gpa, &html) catch return;
         html.appendSlice(gpa,
             \\<label>Comment: <textarea name="body" rows="3" required></textarea></label>
             \\<button type="submit">Submit</button>
@@ -467,7 +470,7 @@ fn registerFormHandler(req: *Request, res: *Response) void {
         \\<h1>Register</h1>
         \\<form method="post" action="/register">
     ) catch return;
-    appendCsrfInput(gpa, &html) catch return;
+    appendCsrfInput(req, gpa, &html) catch return;
     html.appendSlice(gpa,
         \\<label>Username: <input type="text" name="username" required></label>
         \\<label>Password: <input type="password" name="password" required></label>
@@ -566,7 +569,7 @@ fn loginFormHandler(req: *Request, res: *Response) void {
         \\<h1>Login</h1>
         \\<form method="post" action="/login">
     ) catch return;
-    appendCsrfInput(gpa, &html) catch return;
+    appendCsrfInput(req, gpa, &html) catch return;
     html.appendSlice(gpa,
         \\<label>Username: <input type="text" name="username" required></label>
         \\<label>Password: <input type="password" name="password" required></label>
@@ -687,7 +690,7 @@ fn loggerMw(req: *Request, res: *Response, next: *const fn (*Request, *Response)
 }
 
 const DemoRateLimit = zypher.middleware.rate_limit.middlewareWith(.{ .max_requests = 100, .window_seconds = 60 });
-const MwChain = Chain(.{ loggerMw, zypher.middleware.csrf.middleware, DemoRateLimit.handle, zypher.middleware.session.middleware });
+const MwChain = Chain(.{ loggerMw, DemoRateLimit.handle, zypher.middleware.session.middleware, zypher.middleware.csrf.middleware });
 
 fn dispatchWrapper(req: *Request, res: *Response) void {
     const r = tlrouter orelse return;
@@ -766,7 +769,7 @@ pub fn main(init: std.process.Init) !void {
         \\        <a href="/post/new">New Post</a>
         \\        {% if authenticated %}
         \\            <form method="post" action="/logout">
-        \\                <input type="hidden" name="_csrf" value="zypher-csrf-secret-key-2026">
+        \\                {{ csrf_field|safe }}
         \\                <button type="submit">Logout ({{ username }})</button>
         \\            </form>
         \\        {% else %}
@@ -792,7 +795,7 @@ pub fn main(init: std.process.Init) !void {
     zypher.middleware.session.setStore(&store);
     zypher.middleware.session.setCookieConfig(.{
         .httponly = true,
-        .secure = false,
+        .secure = false, // DEV_ONLY: set to true in production
         .samesite = "Strict",
         .path = "/",
         .max_age = 86400,

@@ -46,6 +46,14 @@ fn reasonPhrase(code: u16) ?[]const u8 {
     };
 }
 
+/// Reject or sanitize CR/LF in header values to prevent header injection.
+fn sanitizeHeaderValue(value: []const u8) bool {
+    for (value) |c| {
+        if (c == '\r' or c == '\n') return false;
+    }
+    return true;
+}
+
 fn rawJsonSlice(content: anytype) ?[]const u8 {
     const T = @TypeOf(content);
     return switch (@typeInfo(T)) {
@@ -109,6 +117,7 @@ pub const Response = struct {
 
     /// Set a response header.
     pub fn header(self: *Response, name: []const u8, value: []const u8) *Response {
+        if (!sanitizeHeaderValue(name) or !sanitizeHeaderValue(value)) return self;
         if (self.headers.getPtr(name)) |stored_value| {
             const owned_value = self.allocator.dupe(u8, value) catch return self;
             self.allocator.free(stored_value.*);
@@ -132,6 +141,7 @@ pub const Response = struct {
 
     /// Add a raw Set-Cookie header value. Multiple Set-Cookie headers are preserved.
     pub fn addSetCookie(self: *Response, value: []const u8) *Response {
+        if (!sanitizeHeaderValue(value)) return self;
         const owned_value = self.allocator.dupe(u8, value) catch return self;
         self.set_cookie_headers.append(self.allocator, owned_value) catch {
             self.allocator.free(owned_value);
