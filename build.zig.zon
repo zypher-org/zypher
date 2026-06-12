@@ -76,6 +76,7 @@
         "LICENSE",
         "README.md",
         "install.sh",
+        "install.ps1",
         "src",
         "templates",
         "tools",

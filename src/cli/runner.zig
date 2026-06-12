@@ -32,6 +32,7 @@ pub fn dispatchInner(
     init: std.process.Init,
     cmd: []const u8,
     args: []const [:0]const u8,
+    version: []const u8,
 ) !void {
     logCliCommand("invoked", cmd, args);
     defer logCliCommand("completed", cmd, args);
@@ -58,6 +59,8 @@ pub fn dispatchInner(
         try cmdDemo(out_writer, err_writer, init, args);
     } else if (std.mem.eql(u8, cmd, "makemigrations")) {
         try cmdMakemigrations(out_writer, err_writer, init, args);
+    } else if (std.mem.eql(u8, cmd, "version") or std.mem.eql(u8, cmd, "--version")) {
+        try cmdVersion(out_writer, version);
     } else if (std.mem.eql(u8, cmd, "shell")) {
         try cmdShell(out_writer, err_writer, init, args);
     } else {
@@ -125,7 +128,12 @@ fn printHelp(w: *std.Io.Writer) !void {
     try w.print("  makemigrations     Generate migration files\n", .{});
     try w.print("  createsuperuser    Create a superuser account\n", .{});
     try w.print("  shell              Open interactive REPL\n", .{});
+    try w.print("  version            Show the zypher version\n", .{});
     try w.print("  help               Show this help message\n", .{});
+}
+
+fn cmdVersion(w: *std.Io.Writer, version: []const u8) !void {
+    try w.print("zypher {s}\n", .{version});
 }
 
 fn parseDbPath(args: []const [:0]const u8) ?[:0]const u8 {

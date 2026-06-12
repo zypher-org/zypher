@@ -6,6 +6,19 @@ pub fn build(b: *std.Build) void {
     });
     const optimize = b.standardOptimizeOption(.{});
 
+    // ── Extract version from build.zig.zon ─────────────────────────
+    const version_string = comptime blk: {
+        const zon = @embedFile("build.zig.zon");
+        const marker = ".version = \"";
+        const start = std.mem.indexOf(u8, zon, marker) orelse break :blk "0.0.0";
+        const value_start = start + marker.len;
+        const end = std.mem.indexOfScalar(u8, zon[value_start..], '"') orelse break :blk "0.0.0";
+        break :blk zon[value_start..][0..end];
+    };
+    const opts = b.addOptions();
+    opts.addOption([]const u8, "version", version_string);
+    const build_config_mod = opts.createModule();
+
     // ── Vendored SQLite3 ─────────────────────────────────────────────
     const sqlite3_lib = createSqlite3Library(b, target, optimize);
 
@@ -41,6 +54,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "build_config", .module = build_config_mod },
             },
         }),
     });
@@ -53,7 +67,7 @@ pub fn build(b: *std.Build) void {
         const release_resolved_target = b.resolveTargetQuery(release_target.query);
         const release_sqlite3_lib = createSqlite3Library(b, release_resolved_target, optimize);
         const release_lib_mod = createZypherModule(b, release_resolved_target, optimize, release_sqlite3_lib);
-        const release_exe = createCliExecutable(b, release_resolved_target, optimize, release_lib_mod);
+        const release_exe = createCliExecutable(b, release_resolved_target, optimize, release_lib_mod, build_config_mod);
         const install_release_exe = b.addInstallArtifact(release_exe, .{
             .dest_sub_path = b.fmt("{s}/zypher{s}", .{ release_target.name, release_target.exe_suffix }),
         });
@@ -302,6 +316,7 @@ fn createCliExecutable(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     lib_mod: *std.Build.Module,
+    build_config_mod: *std.Build.Module,
 ) *std.Build.Step.Compile {
     return b.addExecutable(.{
         .name = "zypher",
@@ -311,6 +326,7 @@ fn createCliExecutable(
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "build_config", .module = build_config_mod },
             },
         }),
     });

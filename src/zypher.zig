@@ -3,6 +3,8 @@
 /// No hidden allocations, no runtime magic, no global state.
 const std = @import("std");
 
+pub const version = "0.1.0-beta";
+
 pub const log = @import("log.zig");
 pub const errors = @import("errors.zig");
 
