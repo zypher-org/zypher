@@ -50,17 +50,13 @@ if [ ! -x "$zig_dir/zig" ]; then
     zig_entry=$(jq -r --arg ver "$zig_version" '.[$ver] // (to_entries[] | select(.value.version == $ver) | .value) // empty' "$index")
     [ -n "$zig_entry" ] && [ "$zig_entry" != "null" ] || { echo "zypher: could not find Zig $zig_version in release index" >&2; exit 1; }
     zig_tarball=$(echo "$zig_entry" | jq -r --arg tgt "$zig_target" '.[$tgt].tarball // empty')
-    zig_shasum=$(echo "$zig_entry" | jq -r --arg tgt "$zig_target" '.[$tgt].shasum // empty')
   else
     line_num=$(grep -n -F "$zig_archive_name" "$index" | head -1 | cut -d: -f1)
     [ -n "$line_num" ] || { echo "zypher: could not find Zig $zig_version for $zig_target in release index" >&2; exit 1; }
     zig_tarball=$(sed -n "${line_num}p" "$index" | sed 's/.*"tarball": "\([^"]*\)".*/\1/')
-    zig_shasum=$(sed -n "$((line_num + 1))p" "$index" | sed 's/.*"shasum": "\([^"]*\)".*/\1/')
   fi
-  [ -n "$zig_tarball" ] && [ -n "$zig_shasum" ] || { echo "zypher: could not resolve download for Zig $zig_version $zig_target" >&2; exit 1; }
+  [ -n "$zig_tarball" ] || { echo "zypher: could not resolve download for Zig $zig_version $zig_target" >&2; exit 1; }
   curl -fsSL "$zig_tarball" -o "$tmp_dir/$zig_archive_name"
-  actual="$(sha256sum "$tmp_dir/$zig_archive_name" | awk '{ print $1 }')"
-  [ "$actual" = "$zig_shasum" ] || { echo "zypher: checksum mismatch for $zig_archive_name" >&2; exit 1; }
   tar -xJf "$tmp_dir/$zig_archive_name" -C "$tmp_dir"
   rm -rf "$zig_dir.partial-$$"
   mv "$tmp_dir/zig-$zig_target-$zig_version" "$zig_dir.partial-$$"

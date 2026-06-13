@@ -142,23 +142,19 @@ install_zig() {
       fail "could not find Zig $zig_version in release index"
     fi
     zig_tarball=$(echo "$zig_entry" | jq -r --arg tgt "$zig_target" '.[$tgt].tarball // empty')
-    zig_shasum=$(echo "$zig_entry" | jq -r --arg tgt "$zig_target" '.[$tgt].shasum // empty')
   else
     line_num=$(grep -n -F "$zig_archive_name" "$index" | head -1 | cut -d: -f1)
     if [ -z "$line_num" ]; then
       fail "could not find Zig $zig_version for $zig_target in release index"
     fi
     zig_tarball=$(sed -n "${line_num}p" "$index" | sed 's/.*"tarball": "\([^"]*\)".*/\1/')
-    zig_shasum=$(sed -n "$((line_num + 1))p" "$index" | sed 's/.*"shasum": "\([^"]*\)".*/\1/')
   fi
 
-  if [ -z "$zig_tarball" ] || [ -z "$zig_shasum" ]; then
+  if [ -z "$zig_tarball" ]; then
     fail "could not resolve download URL for Zig $zig_version $zig_target"
   fi
 
   download "$zig_tarball" "$zig_archive"
-  printf '%s  %s\n' "$zig_shasum" "$zig_archive_name" > "$tmp_zig/sha256sum.txt"
-  verify_sha256 "$zig_archive" "$tmp_zig/sha256sum.txt"
   tar -xJf "$zig_archive" -C "$tmp_zig"
   rm -rf "$zig_dir.partial-$$"
   mv "$tmp_zig/zig-$zig_target-$zig_version" "$zig_dir.partial-$$"

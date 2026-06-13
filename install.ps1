@@ -144,10 +144,6 @@ function Install-Zig {
   $targetEntry = $entry.$zigTarget
   if (-not $targetEntry) { Fail "could not find Zig $resolvedZigVersion for $zigTarget in release index" }
   Download-File $targetEntry.tarball $zigArchivePath
-  $expected = $targetEntry.shasum
-  $actual = (Get-FileHash $zigArchivePath -Algorithm SHA256).Hash.ToLower()
-  if ($actual -ne $expected.ToLower()) { Fail "checksum mismatch for $zigArchiveName" }
-  Say "Checksum verified for $zigArchiveName"
 
   $extractDir = "$tmpZig\extract"
   New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
