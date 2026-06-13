@@ -133,27 +133,7 @@ install_zig() {
   zig_archive_name="zig-$zig_target-$zig_version.tar.xz"
   zig_archive="$tmp_zig/$zig_archive_name"
 
-  index="$tmp_zig/index.json"
-  download "https://ziglang.org/download/index.json" "$index"
-
-  if command -v jq >/dev/null 2>&1; then
-    zig_entry=$(jq -r --arg ver "$zig_version" '.[$ver] // (to_entries[] | select(.value.version == $ver) | .value) // empty' "$index")
-    if [ -z "$zig_entry" ] || [ "$zig_entry" = "null" ]; then
-      fail "could not find Zig $zig_version in release index"
-    fi
-    zig_tarball=$(echo "$zig_entry" | jq -r --arg tgt "$zig_target" '.[$tgt].tarball // empty')
-  else
-    line_num=$(grep -n -F "$zig_archive_name" "$index" | head -1 | cut -d: -f1)
-    if [ -z "$line_num" ]; then
-      fail "could not find Zig $zig_version for $zig_target in release index"
-    fi
-    zig_tarball=$(sed -n "${line_num}p" "$index" | sed 's/.*"tarball": "\([^"]*\)".*/\1/')
-  fi
-
-  if [ -z "$zig_tarball" ]; then
-    fail "could not resolve download URL for Zig $zig_version $zig_target"
-  fi
-
+  zig_tarball="https://ziglang.org/builds/$zig_archive_name"
   download "$zig_tarball" "$zig_archive"
   tar -xJf "$zig_archive" -C "$tmp_zig"
   rm -rf "$zig_dir.partial-$$"
