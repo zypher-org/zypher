@@ -68,7 +68,7 @@ The goal is **correctness, clarity, and learning value**, not maximum buzzwords.
 ## Quick Start
 
 Install the latest published CLI with the standalone installer:
-
+### Linux/MacOs
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/install.sh | sh
 zypher help
@@ -79,6 +79,16 @@ To uninstall zypher cli run:
 curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/uninstall.sh | sh
 ```
 
+### Windows
+```sh
+curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/install.ps1 | sh
+zypher help
+```
+
+To uninstall zypher cli run:
+```sh
+curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/uninstall.ps1 | sh
+```
 
 The installer detects Linux/macOS and CPU architecture, downloads the matching
 Zypher release, downloads the pinned Zig toolchain from Zig's official website,
