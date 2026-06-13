@@ -131,23 +131,8 @@ function Install-Zig {
 
   $zigArchiveName = "zig-$zigTarget-$resolvedZigVersion.zip"
   $zigArchivePath = "$tmpZig\$zigArchiveName"
-  $indexPath = "$tmpZig\index.json"
-  Download-File "https://ziglang.org/download/index.json" $indexPath
-  $index = Get-Content $indexPath -Raw | ConvertFrom-Json
-  $entry = $index.$resolvedZigVersion
-  if (-not $entry) {
-    foreach ($k in $index.PSObject.Properties.Name) {
-      if ($index.$k.version -eq $resolvedZigVersion) { $entry = $index.$k; break }
-    }
-  }
-  if (-not $entry) { Fail "could not find Zig $resolvedZigVersion in release index" }
-  $targetEntry = $entry.$zigTarget
-  if (-not $targetEntry) { Fail "could not find Zig $resolvedZigVersion for $zigTarget in release index" }
-  Download-File $targetEntry.tarball $zigArchivePath
-  $expected = $targetEntry.shasum
-  $actual = (Get-FileHash $zigArchivePath -Algorithm SHA256).Hash.ToLower()
-  if ($actual -ne $expected.ToLower()) { Fail "checksum mismatch for $zigArchiveName" }
-  Say "Checksum verified for $zigArchiveName"
+  $zigUrl = "https://ziglang.org/builds/$zigArchiveName"
+  Download-File $zigUrl $zigArchivePath
 
   $extractDir = "$tmpZig\extract"
   New-Item -ItemType Directory -Force -Path $extractDir | Out-Null

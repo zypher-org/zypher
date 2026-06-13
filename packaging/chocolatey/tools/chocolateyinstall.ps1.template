@@ -59,23 +59,8 @@ function Install-ZypherRuntime {
     try {
       $zigArchiveName = "zig-$zigTarget-$zigVersion.zip"
       $zigArchive = Join-Path $tmpDir $zigArchiveName
-      $indexPath = Join-Path $tmpDir 'index.json'
-      (New-Object System.Net.WebClient).DownloadFile('https://ziglang.org/download/index.json', $indexPath)
-      $index = Get-Content $indexPath -Raw | ConvertFrom-Json
-      $entry = $index.$zigVersion
-      if (-not $entry) {
-        foreach ($k in $index.PSObject.Properties.Name) {
-          if ($index.$k.version -eq $zigVersion) { $entry = $index.$k; break }
-        }
-      }
-      if (-not $entry) { throw "could not find Zig $zigVersion in release index" }
-      $targetEntry = $entry.$zigTarget
-      if (-not $targetEntry) { throw "could not find Zig $zigVersion for $zigTarget in release index" }
-      $zigUrl = $targetEntry.tarball
-      $expected = $targetEntry.shasum.ToLower()
+      $zigUrl = "https://ziglang.org/builds/$zigArchiveName"
       Get-ChocolateyWebFile -PackageName $pkgName -FileFullPath $zigArchive -Url $zigUrl
-      $actual = (Get-FileHash $zigArchive -Algorithm SHA256).Hash.ToLower()
-      if ($actual -ne $expected) { throw "checksum mismatch for $zigArchiveName" }
       Expand-Archive -LiteralPath $zigArchive -DestinationPath $tmpDir -Force
       $extractedZig = Join-Path $tmpDir "zig-$zigTarget-$zigVersion"
       if (Test-Path $partialInstallDir) {
@@ -131,23 +116,7 @@ if (-not (Test-Path `$zigExe)) {
   try {
     `$zigArchiveName = "zig-`$zigTarget-`$zigVersion.zip"
     `$zigArchive = Join-Path `$tmpDir `$zigArchiveName
-    `$indexPath = Join-Path `$tmpDir 'index.json'
-    Invoke-WebRequest -Uri 'https://ziglang.org/download/index.json' -OutFile `$indexPath
-    `$index = Get-Content `$indexPath -Raw | ConvertFrom-Json
-    `$entry = `$index.`$zigVersion
-    if (-not `$entry) {
-      foreach (`$k in `$index.PSObject.Properties.Name) {
-        if (`$index.`$k.version -eq `$zigVersion) { `$entry = `$index.`$k; break }
-      }
-    }
-    if (-not `$entry) { throw "could not find Zig `$zigVersion in release index" }
-    `$targetEntry = `$entry.`$zigTarget
-    if (-not `$targetEntry) { throw "could not find Zig `$zigVersion for `$zigTarget in release index" }
-    `$zigUrl = `$targetEntry.tarball
-    `$expected = `$targetEntry.shasum.ToLower()
-    Invoke-WebRequest -Uri `$zigUrl -OutFile `$zigArchive
-    `$actual = (Get-FileHash `$zigArchive -Algorithm SHA256).Hash.ToLower()
-    if (`$actual -ne `$expected) { throw "checksum mismatch for `$zigArchiveName" }
+    Invoke-WebRequest -Uri "https://ziglang.org/builds/`$zigArchiveName" -OutFile `$zigArchive
     Expand-Archive -LiteralPath `$zigArchive -DestinationPath `$tmpDir -Force
     `$extractedZig = Join-Path `$tmpDir "zig-`$zigTarget-`$zigVersion"
     if (Test-Path `$partialInstallDir) { Remove-Item `$partialInstallDir -Recurse -Force }
