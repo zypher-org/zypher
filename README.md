@@ -74,6 +74,12 @@ curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/install.sh |
 zypher help
 ```
 
+To uninstall zypher cli run:
+```sh
+curl -fsSL https://raw.githubusercontent.com/zypher-org/zypher/main/uninstall.sh | sh
+```
+
+
 The installer detects Linux/macOS and CPU architecture, downloads the matching
 Zypher release, downloads the pinned Zig toolchain from Zig's official website,
 and stores the runtime under `~/.zypher`. For an exact release:
@@ -92,8 +98,8 @@ zypher help
 Nightly package-manager installs use `zypher-cli`:
 
 ```sh
-brew install zypher-cli
-choco install zypher-cli
+brew install zypher-org/pkgs/zypher-cli
+choco install zypher-cli --pre
 # AUR publishing is TODO: paru -S zypher-cli
 ```
 
@@ -101,7 +107,7 @@ Stable binary packages use `zypher-cli-bin`:
 
 ```sh
 npm install -g zypher-cli-bin@latest
-brew install zypher-cli-bin
+brew install zypher-org/pkgs/zypher-cli-bin
 choco install zypher-cli-bin
 # AUR publishing is TODO: paru -S zypher-cli-bin
 ```
