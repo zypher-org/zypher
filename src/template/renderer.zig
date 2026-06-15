@@ -281,30 +281,28 @@ pub const Template = struct {
         const iterable = ctx.get(node.value) orelse return;
         switch (iterable) {
             .list => |items| {
+                var child_ctx = Context.init(self.allocator);
+                defer child_ctx.deinit();
+
+                var it = ctx.data.iterator();
+                while (it.next()) |entry| {
+                    try child_ctx.data.put(entry.key_ptr.*, entry.value_ptr.*);
+                }
+
+                var forloop_ctx = Context.init(self.allocator);
+                defer forloop_ctx.deinit();
+
                 for (items, 0..) |item, i| {
-                    var child_ctx = Context.init(self.allocator);
-                    defer child_ctx.deinit();
-
-                    var it = ctx.data.iterator();
-                    while (it.next()) |entry| {
-                        try child_ctx.data.put(entry.key_ptr.*, entry.value_ptr.*);
-                    }
-                    try child_ctx.put(node.loop_var, item);
-
-                    var forloop_ctx = try self.allocator.create(Context);
-                    forloop_ctx.* = Context.init(self.allocator);
-                    try forloop_ctx.put("counter0", .{ .int = @as(i64, @intCast(i)) });
-                    try forloop_ctx.put("counter", .{ .int = @as(i64, @intCast(i + 1)) });
-                    try forloop_ctx.put("first", .{ .bool = i == 0 });
-                    try forloop_ctx.put("last", .{ .bool = i == items.len - 1 });
-                    try child_ctx.put("forloop", .{ .map = forloop_ctx });
+                    try child_ctx.data.put(node.loop_var, item);
+                    try forloop_ctx.data.put("counter0", .{ .int = @as(i64, @intCast(i)) });
+                    try forloop_ctx.data.put("counter", .{ .int = @as(i64, @intCast(i + 1)) });
+                    try forloop_ctx.data.put("first", .{ .bool = i == 0 });
+                    try forloop_ctx.data.put("last", .{ .bool = i == items.len - 1 });
+                    try child_ctx.data.put("forloop", .{ .map = &forloop_ctx });
 
                     for (node.children.items) |child| {
                         try self.renderNode(child, &child_ctx, writer);
                     }
-
-                    forloop_ctx.deinit();
-                    self.allocator.destroy(forloop_ctx);
                 }
             },
             else => log.warn("for iterable '{s}' is not a list", .{node.value}),

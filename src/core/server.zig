@@ -77,10 +77,14 @@ pub const Server = struct {
             return error.BadRequest;
         };
 
-        const parsed_target = parseRequestTarget(gpa, target);
+        var parsed_target = parseRequestTarget(gpa, target);
+        errdefer {
+            Request.deinitQueryString(&parsed_target.query, gpa);
+        }
 
         // Parse headers
         var headers = std.StringHashMap([]const u8).init(gpa);
+        errdefer headers.deinit();
         while (line_it.next()) |line| {
             if (line.len == 0) break;
             if (std.mem.indexOfScalar(u8, line, ':')) |i| {
@@ -188,7 +192,7 @@ pub const Server = struct {
             var req = buildRequest(gpa, server_req.head_buffer, self.config.max_body_size) catch |err| {
                 log.warn("failed to build request: {t}", .{err});
                 var err_res = Response.init(gpa);
-                errdefer err_res.deinit();
+                defer err_res.deinit();
                 _ = err_res.status(400);
                 try err_res.text("Bad Request");
                 var res_buf: std.ArrayList(u8) = .empty;
@@ -196,8 +200,7 @@ pub const Server = struct {
                 try err_res.send(gpa, &res_buf);
                 try stream_writer.interface.writeAll(res_buf.items);
                 try stream_writer.interface.flush();
-                err_res.deinit();
-                continue;
+                return;
             };
             defer req.deinit();
             req.query_owned = true;

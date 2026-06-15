@@ -48,9 +48,8 @@ pub const RateLimiter = struct {
     pub fn allow(self: *Self, key: []const u8) !bool {
         const now = blk: {
             var ts: std.posix.timespec = undefined;
-            const rc = std.os.linux.clock_gettime(std.posix.CLOCK.REALTIME, &ts);
-            if (rc == 0) break :blk ts.sec;
-            break :blk @as(i64, 0);
+            _ = std.posix.system.clock_gettime(std.posix.CLOCK.REALTIME, &ts);
+            break :blk ts.sec;
         };
 
         if (self.entries.getPtr(key)) |entry| {
@@ -95,7 +94,7 @@ pub fn middlewareWith(comptime config: Config) type {
 
         pub fn handle(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
             if (!initialized) {
-                limiter = RateLimiter.init(req.allocator, config);
+                limiter = RateLimiter.init(std.heap.page_allocator, config);
                 initialized = true;
             }
 

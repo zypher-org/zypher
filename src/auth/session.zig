@@ -1,8 +1,8 @@
 /// zypher auth — session management with in-memory store.
 const std = @import("std");
-const builtin = @import("builtin");
 const log = std.log.scoped(.session);
 const posix = std.posix;
+const util = @import("../util.zig");
 
 /// Session ID length in bytes (256-bit random).
 pub const SESSION_ID_LEN = 32;
@@ -23,41 +23,11 @@ pub fn cookieConfig() CookieConfig {
     return default_cookie_config;
 }
 
-/// Get current unix timestamp using clock_gettime.
+/// Get current unix timestamp.
 fn unixTimestamp() i64 {
     var ts: posix.timespec = undefined;
     _ = posix.system.clock_gettime(posix.CLOCK.REALTIME, &ts);
     return ts.sec;
-}
-
-/// Fill buffer with entropy from the operating system.
-fn randomBytes(buf: []u8) !void {
-    if (buf.len == 0) return;
-
-    if (builtin.os.tag == .linux) {
-        var filled: usize = 0;
-        while (filled < buf.len) {
-            const remaining = buf[filled..];
-            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
-            switch (posix.errno(rc)) {
-                .SUCCESS => {
-                    const n: usize = @intCast(rc);
-                    if (n == 0) return error.EntropyUnavailable;
-                    filled += n;
-                },
-                .INTR => continue,
-                else => return error.EntropyUnavailable,
-            }
-        }
-        return;
-    }
-
-    if (builtin.link_libc and @TypeOf(posix.system.arc4random_buf) != void) {
-        posix.system.arc4random_buf(buf.ptr, buf.len);
-        return;
-    }
-
-    return error.EntropyUnavailable;
 }
 
 /// A single session with ID, data, and expiry.
@@ -139,7 +109,7 @@ pub const SessionStore = struct {
     /// Create a new session with a specific expiry timestamp.
     pub fn createWithExpiry(self: *Self, expires_at: i64) !Session {
         var id: [SESSION_ID_LEN]u8 = undefined;
-        try randomBytes(&id);
+        try util.randomBytes(&id);
 
         const s = Session{
             .id = id,

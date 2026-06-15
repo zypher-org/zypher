@@ -6,6 +6,7 @@ const log = std.log.scoped(.password);
 const pbkdf2 = std.crypto.pwhash.pbkdf2;
 const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
 const posix = std.posix;
+const util = @import("../util.zig");
 
 /// Hash output length in bytes.
 const HASH_LEN = 32;
@@ -20,40 +21,11 @@ pub const PasswordError = error{
     HashMismatch,
 };
 
-fn randomBytes(buf: []u8) !void {
-    if (buf.len == 0) return;
-
-    if (builtin.os.tag == .linux) {
-        var filled: usize = 0;
-        while (filled < buf.len) {
-            const remaining = buf[filled..];
-            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
-            switch (posix.errno(rc)) {
-                .SUCCESS => {
-                    const n: usize = @intCast(rc);
-                    if (n == 0) return error.EntropyUnavailable;
-                    filled += n;
-                },
-                .INTR => continue,
-                else => return error.EntropyUnavailable,
-            }
-        }
-        return;
-    }
-
-    if (builtin.link_libc and @TypeOf(posix.system.arc4random_buf) != void) {
-        posix.system.arc4random_buf(buf.ptr, buf.len);
-        return;
-    }
-
-    return error.EntropyUnavailable;
-}
-
 /// Hash a password using PBKDF2-HMAC-SHA256 with a random salt.
 /// Returns an owned string in the format: "$pbkdf2-sha256${iterations}${salt_hex}${hash_hex}"
 pub fn hash(gpa: std.mem.Allocator, plaintext: []const u8) ![]const u8 {
     var salt: [SALT_LEN]u8 = undefined;
-    try randomBytes(&salt);
+    try util.randomBytes(&salt);
 
     // Derive key
     var dk: [HASH_LEN]u8 = undefined;

@@ -2,6 +2,7 @@
 const std = @import("std");
 const log = std.log.scoped(.user);
 const password = @import("password.zig");
+const Session = @import("session.zig").Session;
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const csrf = @import("../middleware/csrf.zig");
@@ -86,9 +87,11 @@ pub fn superuserRequired(req: *Request, res: *Response, next: *const fn (*Reques
         _ = res.header("Location", "/login");
         return;
     }
-    const user: *User = @ptrCast(@alignCast(req.user.?));
-    if (!std.mem.eql(u8, user.role, "admin")) {
-        log.warn("non-admin access to {s} by user '{s}'", .{ req.path, user.username });
+    const session: *Session = @ptrCast(@alignCast(req.user.?));
+    const user_role = session.get("user_role") orelse "";
+    if (!std.mem.eql(u8, user_role, "admin")) {
+        const username = session.get("username") orelse "unknown";
+        log.warn("non-admin access to {s} by user '{s}'", .{ req.path, username });
         _ = res.status(403);
         res.text("Forbidden: admin access required") catch {};
         return;

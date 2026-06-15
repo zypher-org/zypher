@@ -68,7 +68,7 @@ fn chain_dispatch(req: *Request, res: *Response) void {
 }
 
 // CORS chain dispatch
-const CorsChain = Chain(.{cors.middleware});
+const CorsChain = Chain(.{cors.middlewareWith(.{ .allowed_origins = &.{"http://example.com"} })});
 
 fn cors_dispatch(req: *Request, res: *Response) void {
     CorsChain.run(req, res, home_handler);

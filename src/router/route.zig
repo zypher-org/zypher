@@ -133,9 +133,8 @@ pub const Route = struct {
     /// Returns a slice into `path` from the segment onward.
     fn remainingPath(path: []const u8, current_segment: []const u8) []const u8 {
         if (current_segment.len == 0) return "";
-        // Find where current_segment starts in path
-        const idx = std.mem.indexOf(u8, path, current_segment) orelse return "";
-        return path[idx..];
+        const offset = @intFromPtr(current_segment.ptr) - @intFromPtr(path.ptr);
+        return path[offset..];
     }
 };
 

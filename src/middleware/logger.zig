@@ -5,11 +5,9 @@ const Response = @import("../core/response.zig").Response;
 const log = std.log.scoped(.http);
 
 /// Get a monotonic timestamp in nanoseconds.
-/// Uses the Linux syscall directly to avoid libc dependency.
 fn nanoNow() i128 {
     var ts: std.posix.timespec = undefined;
-    const rc = std.os.linux.clock_gettime(std.posix.CLOCK.MONOTONIC, &ts);
-    if (rc != 0) return 0;
+    _ = std.posix.system.clock_gettime(std.posix.CLOCK.MONOTONIC, &ts);
     return @as(i128, ts.sec) * std.time.ns_per_s + @as(i128, ts.nsec);
 }
 

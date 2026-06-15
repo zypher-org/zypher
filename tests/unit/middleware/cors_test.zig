@@ -25,7 +25,7 @@ fn ok_handler(req: *Request, res: *Response) void {
 test "CORS: adds Allow-Origin header on normal request" {
     const gpa = std.testing.allocator;
 
-    const MyChain = comptime Chain(.{cors.middleware});
+    const MyChain = comptime Chain(.{cors.middlewareWith(.{ .allowed_origins = &.{"http://example.com"} })});
 
     var req = makeRequest(gpa, .get, "/api/data");
     try req.headers.put("Origin", "http://example.com");
@@ -44,7 +44,7 @@ test "CORS: adds Allow-Origin header on normal request" {
 test "CORS: accepts lowercase origin request header" {
     const gpa = std.testing.allocator;
 
-    const MyChain = comptime Chain(.{cors.middleware});
+    const MyChain = comptime Chain(.{cors.middlewareWith(.{ .allowed_origins = &.{"http://example.com"} })});
 
     var req = makeRequest(gpa, .get, "/api/data");
     try req.headers.put("origin", "http://example.com");
@@ -61,7 +61,7 @@ test "CORS: accepts lowercase origin request header" {
 test "CORS: handles preflight OPTIONS request" {
     const gpa = std.testing.allocator;
 
-    const MyChain = comptime Chain(.{cors.middleware});
+    const MyChain = comptime Chain(.{cors.middlewareWith(.{ .allowed_origins = &.{"http://example.com"} })});
 
     var req = makeRequest(gpa, .options, "/api/data");
     try req.headers.put("Origin", "http://example.com");

@@ -8,38 +8,10 @@ const std = @import("std");
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const Session = @import("../auth/session.zig").Session;
+const util = @import("../util.zig");
 const log = std.log.scoped(.csrf);
 
 const session_key = "_csrf_token";
-
-fn randomBytes(buf: []u8) !void {
-    if (buf.len == 0) return;
-
-    if (@import("builtin").os.tag == .linux) {
-        var filled: usize = 0;
-        while (filled < buf.len) {
-            const remaining = buf[filled..];
-            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
-            switch (std.posix.errno(rc)) {
-                .SUCCESS => {
-                    const n: usize = @intCast(rc);
-                    if (n == 0) return error.EntropyUnavailable;
-                    filled += n;
-                },
-                .INTR => continue,
-                else => return error.EntropyUnavailable,
-            }
-        }
-        return;
-    }
-
-    if (@import("builtin").link_libc and @TypeOf(std.posix.system.arc4random_buf) != void) {
-        std.posix.system.arc4random_buf(buf.ptr, buf.len);
-        return;
-    }
-
-    return error.EntropyUnavailable;
-}
 
 /// Return the request CSRF token, creating and storing one in the session.
 pub fn ensureToken(req: *Request) ![]const u8 {
@@ -48,7 +20,7 @@ pub fn ensureToken(req: *Request) ![]const u8 {
     if (session.get(session_key)) |token| return token;
 
     var random: [32]u8 = undefined;
-    try randomBytes(&random);
+    try util.randomBytes(&random);
     const hex = std.fmt.bytesToHex(random, .lower);
     try session.put(req.allocator, session_key, &hex);
     return session.get(session_key) orelse error.CsrfTokenUnavailable;
@@ -80,7 +52,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
             next(req, res);
         },
         .post, .put, .delete, .patch => {
-            const token = req.headers.get("X-CSRF-Token") orelse req.formValue("_csrf");
+            const token = req.header("X-CSRF-Token") orelse req.formValue("_csrf");
             if (token == null or !validateTokenForRequest(req, token.?)) {
                 log.warn("CSRF validation failed for {s} {s}", .{ @tagName(req.method), req.path });
                 _ = res.status(403);
@@ -93,12 +65,9 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
     }
 }
 
-/// Returns an HTML hidden input field with the CSRF token.
-/// Use this to inject CSRF protection into forms:
-///   {{ form_fields|safe }}
-///   <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-pub fn formField() []const u8 {
-    return "";
+/// Returns an HTML hidden input field with the CSRF token from the request session.
+pub fn formField(req: *Request) ![]u8 {
+    return formFieldForRequest(req.allocator, req);
 }
 
 /// Return an owned hidden input field using the request/session token.

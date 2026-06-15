@@ -174,25 +174,31 @@ fn httpDate(buf: []u8, timestamp: std.Io.Timestamp) ![]const u8 {
 }
 
 fn fileMtime(gpa: std.mem.Allocator, path: []const u8) ?std.Io.Timestamp {
-    if (@import("builtin").os.tag != .linux) return null;
     const path_z = gpa.dupeSentinel(u8, path, 0) catch return null;
     defer gpa.free(path_z);
 
-    var stx: std.os.linux.Statx = undefined;
-    const rc = std.os.linux.statx(
-        std.posix.AT.FDCWD,
-        path_z.ptr,
-        std.os.linux.AT.NO_AUTOMOUNT,
-        .{ .MTIME = true },
-        &stx,
-    );
-    switch (std.posix.errno(rc)) {
-        .SUCCESS => {
-            const nanos = @as(i96, @intCast(stx.mtime.sec)) * std.time.ns_per_s + @as(i96, @intCast(stx.mtime.nsec));
-            return std.Io.Timestamp.fromNanoseconds(nanos);
-        },
-        else => return null,
+    if (@import("builtin").os.tag == .linux) {
+        var stx: std.os.linux.Statx = undefined;
+        const rc = std.os.linux.statx(
+            std.posix.AT.FDCWD,
+            path_z.ptr,
+            std.os.linux.AT.NO_AUTOMOUNT,
+            .{ .MTIME = true },
+            &stx,
+        );
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => {
+                const nanos = @as(i96, @intCast(stx.mtime.sec)) * std.time.ns_per_s + @as(i96, @intCast(stx.mtime.nsec));
+                return std.Io.Timestamp.fromNanoseconds(nanos);
+            },
+            else => return null,
+        }
     }
+
+    var st: std.posix.Stat = undefined;
+    _ = std.posix.system.stat(path_z.ptr, &st);
+    const nanos = @as(i96, @intCast(st.mtim.sec)) * std.time.ns_per_s;
+    return std.Io.Timestamp.fromNanoseconds(nanos);
 }
 
 fn relativeStaticPath(comptime config: Config, path: []const u8) ?[]const u8 {
