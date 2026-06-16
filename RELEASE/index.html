@@ -1,0 +1,1697 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A batteries-included web framework, built the Zig way.">
+      
+      
+      
+        <link rel="canonical" href="https://zypher-org.github.io/zypher/RELEASE/">
+      
+      
+        <link rel="prev" href="../MILESTONES/">
+      
+      
+        <link rel="next" href="../REQUEST_RESPONSE/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Release Process - Zypher Framework</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#release-process" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Zypher Framework" class="md-header__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Zypher Framework
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Release Process
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Zypher Documentation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CONTRIBUTING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing to zypher
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../HANDLER_AND_MIDDLEWARE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Handler &amp; Middleware API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../INITIAL_BACKLOG/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  ISSUE BREAKDOWN (INITIAL BACKLOG)
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../MILESTONES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  DEVELOPMENT MILESTONES
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Release Process
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../REQUEST_RESPONSE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — Request &amp; Response API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ROUTER_AND_PATH_MATCHING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Router &amp; Path Matching
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../TEST_SPEC/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Core Conformance Test Specifications
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../VISION/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  VISION
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ZYPHER_PROJECT_SPEC/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — GitHub Project Specification
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ZYPHER_v0.1.0_CHECKLIST/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher v0.1.0 – Release Checklist
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/" class="md-tabs__link">
+          
+  
+  
+  Api
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Zypher Framework" class="md-nav__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Zypher Framework
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONTRIBUTING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing to zypher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HANDLER_AND_MIDDLEWARE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Handler &amp; Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INITIAL_BACKLOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ISSUE BREAKDOWN (INITIAL BACKLOG)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MILESTONES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DEVELOPMENT MILESTONES
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#required-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Required Secrets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-runtime-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Runtime Dependencies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aur-todo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AUR TODO
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-release-assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Release Assets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#npm-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        npm Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#native-package-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native Package Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nightly-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nightly Release
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stable-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stable Release
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REQUEST_RESPONSE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — Request &amp; Response API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROUTER_AND_PATH_MATCHING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Router &amp; Path Matching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEST_SPEC/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Core Conformance Test Specifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../VISION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VISION
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ZYPHER_PROJECT_SPEC/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — GitHub Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ZYPHER_v0.1.0_CHECKLIST/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher v0.1.0 – Release Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_14" >
+        
+          
+          <label class="md-nav__link" for="__nav_14" id="__nav_14_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Api
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_14_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_14">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Api
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/admin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/middleware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/orm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ORM API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/router/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Router API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#required-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Required Secrets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-runtime-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Runtime Dependencies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aur-todo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AUR TODO
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-release-assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Release Assets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#npm-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        npm Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#native-package-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native Package Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nightly-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nightly Release
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stable-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stable Release
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="release-process">Release Process<a class="headerlink" href="#release-process" title="Permanent link">&para;</a></h1>
+<p>Zypher releases are driven by <code>prod-nightly</code> branch pushes and annotated Git
+tags matching <code>v*</code>.</p>
+<ul>
+<li>Pushes to <code>prod-nightly</code> publish the nightly package family: <code>zypher-cli</code>.
+  The workflow derives a unique semver prerelease from <code>build.zig.zon</code>, for
+  example <code>0.1.0-beta.nightly.123</code>, and publishes it under the matching
+  generated GitHub release tag.</li>
+<li>Tags whose commits are on <code>prod-nightly</code> and not on <code>prod-stable</code> also
+  publish the nightly package family: <code>zypher-cli</code>.</li>
+<li>Tags whose commits are on <code>prod-stable</code> publish the stable binary package
+  family: <code>zypher-cli-bin</code>.</li>
+</ul>
+<p>Both release workflows build all supported CLI targets, publish a GitHub
+release, publish npm when credentials are available, render a Homebrew formula
+with release checksums, and publish Chocolatey packages when those channel
+credentials are available. AUR publishing is intentionally skipped for now and
+tracked as release-distribution TODO work.</p>
+<h2 id="required-secrets">Required Secrets<a class="headerlink" href="#required-secrets" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>NPM_TOKEN</code> publishes <code>zypher-cli</code> from <code>prod-nightly</code> and <code>zypher-cli-bin</code>
+  from <code>prod-stable</code>. The installed binary command remains <code>zypher</code>.</li>
+<li><code>HOMEBREW_TAP_REPO</code> names the tap repository to update, for example
+  <code>zypher-org/homebrew-tap</code>.</li>
+<li><code>HOMEBREW_TAP_TOKEN</code> pushes the rendered formula to the tap repository.</li>
+<li><code>CHOCOLATEY_API_KEY</code> pushes the rendered Chocolatey package.</li>
+</ul>
+<p>Package-manager credentials are optional in CI. When a secret is absent, the
+matching publish step is skipped; GitHub release artifacts are still produced.</p>
+<h2 id="cli-runtime-dependencies">CLI Runtime Dependencies<a class="headerlink" href="#cli-runtime-dependencies" title="Permanent link">&para;</a></h2>
+<p>The published npm package and release binaries embed all template files at
+compile time. Template discovery therefore does not require a Zypher source
+tree.</p>
+<p>All package-manager installs use the Zig version pinned in
+<code>build.zig.zon</code> (<code>.minimum_zig_version</code>) rather than whatever Zig version the
+host package manager currently provides.</p>
+<p>The npm package installs:</p>
+<ul>
+<li>the pinned Zig toolchain declared in <code>npm/package.json</code></li>
+<li>the tagged Zypher source tree, including <code>vendor/sqlite-amalgamation-*</code></li>
+</ul>
+<p>These are stored under:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>~/.zypher/zig/&lt;zig-version&gt;/&lt;zig-target&gt;/
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>~/.zypher/source/&lt;zypher-version&gt;/
+</code></pre></div>
+<p>The npm <code>zypher</code> wrapper prepends that directory to <code>PATH</code> before launching the
+native CLI and passes the source path as <code>--zypher-root</code> for commands that need
+it. This lets commands that invoke <code>zig build</code> resolve both <code>zig</code> and Zypher's
+vendored SQLite-backed source tree after npm install without additional shell
+setup.</p>
+<p>The standalone <code>install.sh</code> script provides the same runtime layout for
+curl-based installs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/zypher-org/zypher/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+</code></pre></div>
+<p>It resolves the latest GitHub release unless <code>ZYPHER_VERSION</code> is set, detects
+the current OS/architecture, downloads the matching Zypher release archive,
+parses the release source tree's <code>build.zig.zon</code>, downloads that pinned Zig
+binary from <code>https://ziglang.org/builds/</code>, and writes the user-facing wrapper to
+<code>~/.local/bin/zypher</code> by default.</p>
+<p>Native package-manager wrappers use the same layout under the invoking user's
+home directory:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>~/.zypher/zig/&lt;zig-version&gt;/&lt;zig-target&gt;/
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>~/.zypher/source/&lt;zypher-version&gt;/
+</code></pre></div>
+<p>The wrappers prepend the pinned Zig directory to <code>PATH</code>, export
+<code>ZYPHER_ROOT=~/.zypher/source/&lt;zypher-version&gt;</code>, and pass <code>--zypher-root</code> for
+build-backed commands. When invoked through sudo/elevated package-manager
+flows, the runtime cache still targets the invoking user's home directory when
+that home can be resolved by the platform.</p>
+<p>Native packages also keep a copy of the release source tree beside the packaged
+binary so wrappers can populate <code>~/.zypher/source/&lt;zypher-version&gt;</code> without
+requiring a separate source checkout.</p>
+<h2 id="aur-todo">AUR TODO<a class="headerlink" href="#aur-todo" title="Permanent link">&para;</a></h2>
+<p>AUR templates are kept in <code>packaging/aur/</code>, but the release workflows
+intentionally disable AUR publishing until the package ownership, review, and
+runtime bootstrap policy are finalized. Do not treat <code>AUR_SSH_KEY</code> as an active
+release credential yet.</p>
+<p>The following CLI commands work without a Zypher source tree:</p>
+<ul>
+<li><code>help</code> — show help</li>
+<li><code>new</code> — scaffold projects from embedded templates (8 variants)</li>
+<li><code>demo</code> — shortcut for <code>new --template mvc</code></li>
+<li><code>templates</code> — list available embedded templates</li>
+<li><code>runserver</code> — start a health-check HTTP server</li>
+<li><code>createsuperuser</code> — create admin users in a SQLite database</li>
+<li><code>migrate</code> — run SQL migrations</li>
+<li><code>shell</code> — interactive REPL</li>
+</ul>
+<p>Commands that build code require Zig to be available through the pinned
+<code>~/.zypher</code> toolchain installed by the npm package, native wrappers, or
+standalone installer:</p>
+<ul>
+<li><code>run</code> — runs a scaffolded app via <code>zig build run</code></li>
+<li><code>doc</code> — builds and serves Zypher library docs via <code>zig build doc</code></li>
+<li><code>doc-user</code> — builds and serves user project docs</li>
+</ul>
+<p><code>doc</code> additionally requires a Zypher source tree. <code>run</code> and <code>doc-user</code> operate
+on generated/user projects and use their local <code>build.zig</code> files.</p>
+<h2 id="supported-release-assets">Supported Release Assets<a class="headerlink" href="#supported-release-assets" title="Permanent link">&para;</a></h2>
+<p>Each release publishes these archives:</p>
+<ul>
+<li><code>zypher-v&lt;VERSION&gt;-x86_64-linux-musl.tar.gz</code></li>
+<li><code>zypher-v&lt;VERSION&gt;-aarch64-linux-musl.tar.gz</code></li>
+<li><code>zypher-v&lt;VERSION&gt;-x86_64-macos.tar.gz</code></li>
+<li><code>zypher-v&lt;VERSION&gt;-aarch64-macos.tar.gz</code></li>
+<li><code>zypher-v&lt;VERSION&gt;-x86_64-windows-gnu.tar.gz</code></li>
+<li><code>zypher-v&lt;VERSION&gt;-aarch64-windows-gnu.tar.gz</code></li>
+<li><code>SHA256SUMS</code></li>
+<li><code>install.sh</code></li>
+<li><code>zypher-cli.rb</code> for nightly releases, or <code>zypher-cli-bin.rb</code> for stable
+  releases</li>
+</ul>
+<h2 id="npm-installation">npm Installation<a class="headerlink" href="#npm-installation" title="Permanent link">&para;</a></h2>
+<p>Install the nightly CLI globally:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>zypher-cli@latest
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>zypher<span class="w"> </span><span class="nb">help</span>
+</code></pre></div>
+<p>If <code>npm install -g</code> fails with <code>EACCES</code> because npm is writing to a system
+prefix such as <code>/usr/lib/node_modules</code>, move global npm packages to a user-owned
+prefix:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>~/.local
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>npm<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>prefix<span class="w"> </span>~/.local
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/.local/bin:</span><span class="nv">$PATH</span><span class="s2">&quot;</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>zypher-cli@latest
+</code></pre></div>
+<p>The <code>PATH</code> export should be added to the user's shell profile. Package scripts
+cannot change npm's global install prefix before npm creates the package
+directory. Avoid <code>sudo npm install -g</code> when possible; when sudo is used, the
+Zypher npm wrapper resolves its cache root to the invoking user's <code>~/.zypher</code>
+directory instead of <code>/root/.zypher</code>.</p>
+<p>The postinstall script downloads the matching native <code>zypher</code> binary from the
+GitHub release, installs Zig from <code>ziglang.org</code>, and installs the matching
+tagged Zypher source tree into <code>~/.zypher</code>.</p>
+<p>Install an exact nightly version:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>zypher-cli@0.1.0-beta
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>zypher<span class="w"> </span><span class="nb">help</span>
+</code></pre></div>
+<p>Install a stable binary package:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>zypher-cli-bin@latest
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>zypher<span class="w"> </span><span class="nb">help</span>
+</code></pre></div>
+<p>Run without a global install:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>npx<span class="w"> </span>zypher-cli@latest<span class="w"> </span><span class="nb">help</span>
+</code></pre></div>
+<p>For project-local use:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>npm<span class="w"> </span>install<span class="w"> </span>--save-dev<span class="w"> </span>zypher-cli@latest
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>npx<span class="w"> </span>zypher<span class="w"> </span><span class="nb">help</span>
+</code></pre></div>
+<h2 id="native-package-installation">Native Package Installation<a class="headerlink" href="#native-package-installation" title="Permanent link">&para;</a></h2>
+<p>The package name depends on the release branch. The installed command remains
+<code>zypher</code>. AUR commands are shown as TODO until AUR publishing is enabled.</p>
+<p>Nightly packages from <code>prod-nightly</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>brew<span class="w"> </span>install<span class="w"> </span>zypher-cli
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1"># TODO: paru -S zypher-cli</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1"># TODO: yay -S zypher-cli</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>choco<span class="w"> </span>install<span class="w"> </span>zypher-cli
+</code></pre></div>
+<p>Stable binary packages from <code>prod-stable</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>brew<span class="w"> </span>install<span class="w"> </span>zypher-cli-bin
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="c1"># TODO: paru -S zypher-cli-bin</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="c1"># TODO: yay -S zypher-cli-bin</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>choco<span class="w"> </span>install<span class="w"> </span>zypher-cli-bin
+</code></pre></div>
+<h2 id="nightly-release">Nightly Release<a class="headerlink" href="#nightly-release" title="Permanent link">&para;</a></h2>
+<p>Push the commit to <code>prod-nightly</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>HEAD:prod-nightly
+</code></pre></div>
+<p>The workflow publishes a generated nightly version based on the
+<code>build.zig.zon</code> version and the GitHub Actions run number.</p>
+<p>You can also create an annotated beta tag from the commit to release, then push
+it after the commit is present on <code>prod-nightly</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>v0.1.0-beta<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;v0.1.0-beta beta release&quot;</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0-beta
+</code></pre></div>
+<h2 id="stable-release">Stable Release<a class="headerlink" href="#stable-release" title="Permanent link">&para;</a></h2>
+<p>Create a stable tag after promoting the commit to <code>prod-stable</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>v0.1.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;v0.1.0 stable release&quot;</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
+</code></pre></div>
+<p>Nightly npm publishes with the <code>latest</code> dist-tag. Stable npm also publishes
+with the <code>latest</code> dist-tag for the <code>zypher-cli-bin</code> package. GitHub releases,
+including tag-triggered releases from both <code>prod-nightly</code> and <code>prod-stable</code>, are
+explicitly marked latest by the release workflows so the repository sidebar
+points at the most recent published Zypher release.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

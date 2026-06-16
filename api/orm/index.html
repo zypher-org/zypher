@@ -1,0 +1,2037 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A batteries-included web framework, built the Zig way.">
+      
+      
+      
+        <link rel="canonical" href="https://zypher-org.github.io/zypher/api/orm/">
+      
+      
+        <link rel="prev" href="../middleware/">
+      
+      
+        <link rel="next" href="../router/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>ORM API - Zypher Framework</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#orm-api" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Zypher Framework" class="md-header__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Zypher Framework
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              ORM API
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Zypher Documentation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../CONTRIBUTING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing to zypher
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../HANDLER_AND_MIDDLEWARE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Handler &amp; Middleware API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../INITIAL_BACKLOG/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  ISSUE BREAKDOWN (INITIAL BACKLOG)
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../MILESTONES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  DEVELOPMENT MILESTONES
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../RELEASE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Release Process
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../REQUEST_RESPONSE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — Request &amp; Response API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../ROUTER_AND_PATH_MATCHING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Router &amp; Path Matching
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../TEST_SPEC/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Core Conformance Test Specifications
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../VISION/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  VISION
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../ZYPHER_PROJECT_SPEC/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — GitHub Project Specification
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../ZYPHER_v0.1.0_CHECKLIST/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher v0.1.0 – Release Checklist
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Api
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Zypher Framework" class="md-nav__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Zypher Framework
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONTRIBUTING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing to zypher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../HANDLER_AND_MIDDLEWARE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Handler &amp; Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../INITIAL_BACKLOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ISSUE BREAKDOWN (INITIAL BACKLOG)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../MILESTONES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DEVELOPMENT MILESTONES
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../RELEASE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../REQUEST_RESPONSE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — Request &amp; Response API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ROUTER_AND_PATH_MATCHING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Router &amp; Path Matching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../TEST_SPEC/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Core Conformance Test Specifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../VISION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VISION
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ZYPHER_PROJECT_SPEC/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — GitHub Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ZYPHER_v0.1.0_CHECKLIST/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher v0.1.0 – Release Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_14" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_14" id="__nav_14_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Api
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_14_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_14">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Api
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../admin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../middleware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ORM API
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ORM API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#sqlite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SQLite
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SQLite">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stmt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stmt
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schema">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fieldkind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FieldKind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fieldoptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FieldOptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fieldname-kind-opts-fielddef" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Field(name, kind, opts) FieldDef
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modeltable-fields-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model(table, Fields) type
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#query" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Query">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rowtypem-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RowType(M) type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#freerowm-gpa-row-void" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        freeRow(M, gpa, row) void
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#crud-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CRUD Operations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#query-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query Operations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queryset-builder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QuerySet Builder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queryerror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueryError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Migration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migration_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationstatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MigrationStatus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationrunner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MigrationRunner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationerror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MigrationError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../router/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Router API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#sqlite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SQLite
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SQLite">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stmt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stmt
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schema">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fieldkind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FieldKind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fieldoptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FieldOptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fieldname-kind-opts-fielddef" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Field(name, kind, opts) FieldDef
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modeltable-fields-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model(table, Fields) type
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#query" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Query">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rowtypem-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RowType(M) type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#freerowm-gpa-row-void" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        freeRow(M, gpa, row) void
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#crud-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CRUD Operations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#query-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query Operations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queryset-builder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QuerySet Builder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queryerror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueryError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Migration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migration_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationstatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MigrationStatus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationrunner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MigrationRunner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationerror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MigrationError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="orm-api">ORM API<a class="headerlink" href="#orm-api" title="Permanent link">&para;</a></h1>
+<h2 id="sqlite">SQLite<a class="headerlink" href="#sqlite" title="Permanent link">&para;</a></h2>
+<p>Thin SQLite3 C FFI wrapper using manual <code>extern</code> declarations (no <code>@cImport</code>).</p>
+<h3 id="types">Types<a class="headerlink" href="#types" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>ColumnType</code> enum: <code>integer</code>, <code>float</code>, <code>text</code>, <code>blob</code>, <code>null</code></li>
+<li><code>Value</code> union: <code>int: i64</code>, <code>float: f64</code>, <code>text: []const u8</code>, <code>null: void</code></li>
+<li><code>DbError</code> error set: <code>OpenFailed</code>, <code>ExecFailed</code>, <code>PrepareFailed</code>, <code>StepFailed</code>, <code>BindFailed</code>, <code>ColumnFailed</code>, <code>ConstraintViolation</code>, <code>UnexpectedResult</code></li>
+</ul>
+<h3 id="db">Db<a class="headerlink" href="#db" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>Db.open(gpa, path) DbError!Db</code> — open a database; use <code>:memory:</code> for in-memory databases</li>
+<li><code>db.close()</code> — close the database connection</li>
+<li><code>db.isOpen() bool</code> — check if connection is open</li>
+<li><code>db.exec(sql) DbError!void</code> — execute SQL directly (no parameters, no result rows)</li>
+<li><code>db.prepare(sql) DbError!Stmt</code> — prepare a parameterised statement</li>
+<li><code>db.lastInsertRowId() i64</code> — get rowid of last INSERT</li>
+<li><code>db.changes() i64</code> — number of rows changed by last UPDATE/DELETE</li>
+</ul>
+<h3 id="stmt">Stmt<a class="headerlink" href="#stmt" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>stmt.finalize()</code> — finalize the prepared statement</li>
+<li><code>stmt.reset() DbError!void</code> — reset statement for re-execution</li>
+<li><code>stmt.bind(value, idx) DbError!void</code> — bind a value to parameter at 1-based index</li>
+<li><code>stmt.step() DbError!bool</code> — step to next row; returns <code>true</code> if row available, <code>false</code> if done</li>
+<li><code>stmt.column(kind, idx) DbError!Value</code> — read column value from current row</li>
+<li><code>stmt.columnType(idx) DbError!ColumnType</code> — get column type</li>
+</ul>
+<h2 id="schema">Schema<a class="headerlink" href="#schema" title="Permanent link">&para;</a></h2>
+<p>Comptime model and field definition.</p>
+<h3 id="fieldkind">FieldKind<a class="headerlink" href="#fieldkind" title="Permanent link">&para;</a></h3>
+<p>Enum: <code>integer</code>, <code>float</code>, <code>text</code>, <code>boolean</code></p>
+<h3 id="fieldoptions">FieldOptions<a class="headerlink" href="#fieldoptions" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>primary: bool = false</code> — primary key field</li>
+<li><code>required: bool = false</code> — NOT NULL</li>
+<li><code>unique: bool = false</code> — UNIQUE constraint</li>
+<li><code>foreign: ?[:0]const u8 = null</code> — FOREIGN KEY reference (e.g. <code>"users(id)"</code>)</li>
+<li><code>default: ?DefaultValue = null</code> — DEFAULT value</li>
+</ul>
+<h3 id="fieldname-kind-opts-fielddef">Field(name, kind, opts) FieldDef<a class="headerlink" href="#fieldname-kind-opts-fielddef" title="Permanent link">&para;</a></h3>
+<p>Comptime field constructor. Returns a <code>FieldDef</code>:
+- <code>name: [:0]const u8</code>
+- <code>kind: FieldKind</code>
+- <code>primary: bool</code>
+- <code>required: bool</code>
+- <code>unique: bool</code>
+- <code>foreign: ?[:0]const u8</code>
+- <code>default: ?DefaultValue</code></p>
+<h3 id="modeltable-fields-type">Model(table, Fields) type<a class="headerlink" href="#modeltable-fields-type" title="Permanent link">&para;</a></h3>
+<p>Define a model type from a table name and a struct of <code>FieldDef</code> values.</p>
+<p>Generated comptime constants:
+- <code>model.table_name</code> — table name
+- <code>model.fields_len</code> — number of fields
+- <code>model.insert_field_count</code> — number of non-primary-key fields (for INSERT)
+- <code>model.fieldAt(i) FieldDef</code> — get field definition by index
+- <code>model.create_table_sql</code> — <code>CREATE TABLE IF NOT EXISTS ...</code> SQL
+- <code>model.drop_table_sql</code> — <code>DROP TABLE IF EXISTS ...</code> SQL
+- <code>model.insert_sql</code> — <code>INSERT INTO ... (cols) VALUES (?, ...)</code> SQL
+- <code>model.select_all_sql</code> — <code>SELECT col1, col2, ... FROM table</code> SQL
+- <code>model.select_by_id_sql</code> — <code>SELECT ... FROM table WHERE id = ?</code> SQL
+- <code>model.update_by_id_sql</code> — <code>UPDATE table SET col1 = ?, ... WHERE id = ?</code> SQL
+- <code>model.delete_by_id_sql</code> — <code>DELETE FROM table WHERE id = ?</code> SQL</p>
+<h2 id="query">Query<a class="headerlink" href="#query" title="Permanent link">&para;</a></h2>
+<p>Runtime query execution using comptime-generated SQL.</p>
+<h3 id="rowtypem-type">RowType(M) type<a class="headerlink" href="#rowtypem-type" title="Permanent link">&para;</a></h3>
+<p>Returns a tuple type matching the model's fields: <code>i64</code> for integer, <code>f64</code> for float, <code>[]const u8</code> for text, <code>bool</code> for boolean.</p>
+<h3 id="freerowm-gpa-row-void">freeRow(M, gpa, row) void<a class="headerlink" href="#freerowm-gpa-row-void" title="Permanent link">&para;</a></h3>
+<p>Free owned (text) memory in a row tuple.</p>
+<h3 id="crud-operations">CRUD Operations<a class="headerlink" href="#crud-operations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>create(M, db, values) QueryError!i64</code> — INSERT a record; returns rowid</li>
+<li><code>getById(M, db, gpa, id) QueryError!RowType(M)</code> — SELECT by primary key; returns <code>error.NotFound</code> if not found</li>
+<li><code>all(M, db, gpa) QueryError!ArrayList(RowType(M))</code> — SELECT all rows</li>
+<li><code>updateById(M, db, id, values) QueryError!void</code> — UPDATE by primary key</li>
+<li><code>deleteById(M, db, id) QueryError!void</code> — DELETE by primary key</li>
+<li><code>save(M, db, gpa, row) QueryError!i64</code> — INSERT or UPDATE; if <code>row[0]</code> (id) is 0, inserts and updates <code>row[0]</code>; otherwise updates</li>
+</ul>
+<h3 id="query-operations">Query Operations<a class="headerlink" href="#query-operations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>filter(M, db, gpa, where, values) QueryError!ArrayList(RowType(M))</code> — SELECT with WHERE clause; values are bound as parameters (SQL injection safe)</li>
+<li><code>filterLimitOffset(M, db, gpa, where, values, limit, offset) QueryError!ArrayList(RowType(M))</code> — paginated filtered query</li>
+<li><code>filterOrderLimitOffset(M, db, gpa, where, values, order_by, limit, offset) QueryError!ArrayList(RowType(M))</code> — ordered paginated filtered query</li>
+<li><code>order(M, db, gpa, order_by) QueryError!ArrayList(RowType(M))</code> — ORDER BY (standalone)</li>
+<li><code>first(M, db, gpa, where, values) QueryError!?RowType(M)</code> — first matching row or null</li>
+<li><code>count(M, db) QueryError!u64</code> — COUNT all rows</li>
+</ul>
+<h3 id="queryset-builder">QuerySet Builder<a class="headerlink" href="#queryset-builder" title="Permanent link">&para;</a></h3>
+<p>Chainable builder for complex queries:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kr">var</span><span class="w"> </span><span class="n">qs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QuerySet</span><span class="p">(</span><span class="n">Model</span><span class="p">).</span><span class="n">init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">db</span><span class="p">,</span><span class="w"> </span><span class="n">gpa</span><span class="p">);</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">defer</span><span class="w"> </span><span class="n">qs</span><span class="p">.</span><span class="n">deinit</span><span class="p">();</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kr">var</span><span class="w"> </span><span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">qs</span><span class="p">.</span><span class="n">filterBy</span><span class="p">(</span><span class="s">&quot;name LIKE ?&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="p">.{.{</span><span class="w"> </span><span class="p">.</span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;%foo%&quot;</span><span class="w"> </span><span class="p">}})</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="p">.</span><span class="n">orderBy</span><span class="p">(</span><span class="s">&quot;name ASC&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="p">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="p">.</span><span class="n">offset</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="p">.</span><span class="n">exec</span><span class="p">();</span>
+</code></pre></div>
+<p>Methods:
+- <code>qs.init(db, gpa) Self</code> — create a QuerySet
+- <code>qs.deinit()</code> — free where values
+- <code>qs.filterBy(where, values) *Self</code> — set WHERE clause and values
+- <code>qs.orderBy(order_by) *Self</code> — set ORDER BY clause
+- <code>qs.limit(n) *Self</code> — set LIMIT
+- <code>qs.offset(n) *Self</code> — set OFFSET
+- <code>qs.exec() QueryError!ArrayList(RowType(M))</code> — execute the built query</p>
+<h3 id="queryerror">QueryError<a class="headerlink" href="#queryerror" title="Permanent link">&para;</a></h3>
+<p>Error set: <code>NotFound</code>, <code>NoRows</code>, <code>BindFailed</code>, <code>ExecFailed</code>, <code>PrepareFailed</code>, <code>StepFailed</code>, <code>ColumnFailed</code>, <code>AllocatorFailed</code></p>
+<h2 id="migration">Migration<a class="headerlink" href="#migration" title="Permanent link">&para;</a></h2>
+<p>Database schema migration runner.</p>
+<h3 id="migration_1">Migration<a class="headerlink" href="#migration_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>id: i64</code> — unique migration ID</li>
+<li><code>name: [:0]const u8</code> — migration name</li>
+<li><code>up_sql: [:0]const u8</code> — forward SQL</li>
+<li><code>down_sql: [:0]const u8</code> — rollback SQL</li>
+</ul>
+<h3 id="migrationstatus">MigrationStatus<a class="headerlink" href="#migrationstatus" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>id: i64</code> — migration ID</li>
+<li><code>name: [:0]const u8</code> — migration name</li>
+<li><code>applied: bool</code> — whether migration has been applied</li>
+</ul>
+<h3 id="migrationrunner">MigrationRunner<a class="headerlink" href="#migrationrunner" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>MigrationRunner.init(db) MigrationRunner</code> — create a runner</li>
+<li><code>runner.ensureHistoryTable() MigrationError!void</code> — create <code>zypher_migrations</code> tracking table</li>
+<li><code>runner.countApplied() MigrationError!u64</code> — count applied migrations</li>
+<li><code>runner.migrate(migrations) MigrationError!void</code> — apply all pending migrations in order</li>
+<li><code>runner.status(gpa, migrations) MigrationError![]MigrationStatus</code> — return migration application status</li>
+<li><code>runner.rollback(migrations, n) MigrationError!void</code> — roll back the most recent <code>n</code> applied migrations (in reverse order) that have <code>down_sql</code></li>
+</ul>
+<h3 id="migrationerror">MigrationError<a class="headerlink" href="#migrationerror" title="Permanent link">&para;</a></h3>
+<p>Error set: <code>PrepareFailed</code>, <code>StepFailed</code>, <code>ExecFailed</code>, <code>BindFailed</code>, <code>ColumnFailed</code>, <code>AllocatorFailed</code>, <code>NoMigrationsToRollback</code></p>
+<h2 id="full-example">Full Example<a class="headerlink" href="#full-example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kr">const</span><span class="w"> </span><span class="n">zypher</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">@import</span><span class="p">(</span><span class="s">&quot;zypher&quot;</span><span class="p">);</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kr">const</span><span class="w"> </span><span class="n">UserModel</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">zypher</span><span class="p">.</span><span class="n">Model</span><span class="p">(</span><span class="s">&quot;users&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="n">zypher</span><span class="p">.</span><span class="n">Field</span><span class="p">(</span><span class="s">&quot;id&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">integer</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">primary</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="n">zypher</span><span class="p">.</span><span class="n">Field</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">text</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">required</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="n">zypher</span><span class="p">.</span><span class="n">Field</span><span class="p">(</span><span class="s">&quot;age&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">integer</span><span class="p">,</span><span class="w"> </span><span class="p">.{}),</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="n">zypher</span><span class="p">.</span><span class="n">Field</span><span class="p">(</span><span class="s">&quot;active&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">boolean</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">boolean</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">});</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="kr">var</span><span class="w"> </span><span class="n">gpa</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">heap</span><span class="p">.</span><span class="n">GeneralPurposeAllocator</span><span class="p">(.{}).</span><span class="n">init</span><span class="p">;</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="kr">var</span><span class="w"> </span><span class="n">db</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">zypher</span><span class="p">.</span><span class="n">Db</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="n">gpa</span><span class="p">.</span><span class="n">allocator</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;app.db&quot;</span><span class="p">);</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="n">db</span><span class="p">.</span><span class="n">close</span><span class="p">();</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="k">try</span><span class="w"> </span><span class="n">db</span><span class="p">.</span><span class="n">exec</span><span class="p">(</span><span class="n">UserModel</span><span class="p">.</span><span class="n">create_table_sql</span><span class="p">);</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">    </span><span class="c1">// Insert a record</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">    </span><span class="kr">const</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">zypher</span><span class="p">.</span><span class="n">create</span><span class="p">(</span><span class="n">UserModel</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">db</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="p">.{</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">        </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Alice&quot;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">        </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">30</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">        </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="w">    </span><span class="c1">// Fetch by ID</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="kr">const</span><span class="w"> </span><span class="n">row</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">zypher</span><span class="p">.</span><span class="n">getById</span><span class="p">(</span><span class="n">UserModel</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">db</span><span class="p">,</span><span class="w"> </span><span class="n">gpa</span><span class="p">.</span><span class="n">allocator</span><span class="p">(),</span><span class="w"> </span><span class="n">id</span><span class="p">);</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="n">zypher</span><span class="p">.</span><span class="n">freeRow</span><span class="p">(</span><span class="n">UserModel</span><span class="p">,</span><span class="w"> </span><span class="n">gpa</span><span class="p">.</span><span class="n">allocator</span><span class="p">(),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">row</span><span class="p">);</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">    </span><span class="c1">// row[0] == id, row[1] == &quot;Alice&quot;, row[2] == 30, row[3] == true</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="p">}</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

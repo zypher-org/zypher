@@ -1,0 +1,2141 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A batteries-included web framework, built the Zig way.">
+      
+      
+      
+        <link rel="canonical" href="https://zypher-org.github.io/zypher/ZYPHER_PROJECT_SPEC/">
+      
+      
+        <link rel="prev" href="../VISION/">
+      
+      
+        <link rel="next" href="../ZYPHER_v0.1.0_CHECKLIST/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>zypher — GitHub Project Specification - Zypher Framework</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#zypher-github-project-specification" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Zypher Framework" class="md-header__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Zypher Framework
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              zypher — GitHub Project Specification
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Zypher Documentation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CONTRIBUTING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing to zypher
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../HANDLER_AND_MIDDLEWARE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Handler &amp; Middleware API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../INITIAL_BACKLOG/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  ISSUE BREAKDOWN (INITIAL BACKLOG)
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../MILESTONES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  DEVELOPMENT MILESTONES
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../RELEASE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Release Process
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../REQUEST_RESPONSE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — Request &amp; Response API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ROUTER_AND_PATH_MATCHING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Router &amp; Path Matching
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../TEST_SPEC/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Core Conformance Test Specifications
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../VISION/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  VISION
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — GitHub Project Specification
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ZYPHER_v0.1.0_CHECKLIST/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher v0.1.0 – Release Checklist
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/" class="md-tabs__link">
+          
+  
+  
+  Api
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Zypher Framework" class="md-nav__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Zypher Framework
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONTRIBUTING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing to zypher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HANDLER_AND_MIDDLEWARE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Handler &amp; Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INITIAL_BACKLOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ISSUE BREAKDOWN (INITIAL BACKLOG)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MILESTONES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DEVELOPMENT MILESTONES
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REQUEST_RESPONSE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — Request &amp; Response API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROUTER_AND_PATH_MATCHING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Router &amp; Path Matching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEST_SPEC/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Core Conformance Test Specifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../VISION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VISION
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — GitHub Project Specification
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — GitHub Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-project-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Project Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-nongoals-important" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Non‑Goals (Important)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-target-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Target Audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-core-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Core Design Principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-high-level-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. High-Level Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-repository-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Repository Structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-module-specifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Module Specifications
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Module Specifications">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-http-layer-srchttp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 HTTP Layer (src/http/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-core-request-response-srccore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Core Request / Response (src/core/)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7.2 Core Request / Response (src/core/)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#response" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Response
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-router-srcrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 Router (src/router/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-middleware-srcmiddleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 Middleware (src/middleware/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75-views-controllers-srcview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 Views &amp; Controllers (src/view/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76-template-engine-srctemplate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 Template Engine (src/template/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#77-orm-srcorm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.7 ORM (src/orm/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#78-migrations-srcormmigrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.8 Migrations (src/orm/migrations)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#79-forms-validation-srcforms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.9 Forms &amp; Validation (src/forms/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#710-authentication-sessions-srcauth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.10 Authentication &amp; Sessions (src/auth/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#711-admin-panel-srcadmin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.11 Admin Panel (src/admin/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#712-cli-srccli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.12 CLI (src/cli/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-development-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Development Rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-versioning-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Versioning Strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-success-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Success Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ZYPHER_v0.1.0_CHECKLIST/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher v0.1.0 – Release Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_14" >
+        
+          
+          <label class="md-nav__link" for="__nav_14" id="__nav_14_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Api
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_14_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_14">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Api
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/admin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/middleware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/orm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ORM API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/router/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Router API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-project-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Project Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-nongoals-important" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Non‑Goals (Important)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-target-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Target Audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-core-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Core Design Principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-high-level-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. High-Level Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-repository-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Repository Structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-module-specifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Module Specifications
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Module Specifications">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-http-layer-srchttp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 HTTP Layer (src/http/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-core-request-response-srccore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Core Request / Response (src/core/)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7.2 Core Request / Response (src/core/)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#response" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Response
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-router-srcrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 Router (src/router/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-middleware-srcmiddleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 Middleware (src/middleware/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75-views-controllers-srcview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 Views &amp; Controllers (src/view/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76-template-engine-srctemplate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 Template Engine (src/template/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#77-orm-srcorm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.7 ORM (src/orm/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#78-migrations-srcormmigrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.8 Migrations (src/orm/migrations)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#79-forms-validation-srcforms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.9 Forms &amp; Validation (src/forms/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#710-authentication-sessions-srcauth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.10 Authentication &amp; Sessions (src/auth/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#711-admin-panel-srcadmin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.11 Admin Panel (src/admin/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#712-cli-srccli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.12 CLI (src/cli/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-development-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Development Rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-versioning-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Versioning Strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-success-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Success Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="zypher-github-project-specification">zypher — GitHub Project Specification<a class="headerlink" href="#zypher-github-project-specification" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>A batteries-included web framework, built the Zig way.</strong></p>
+</blockquote>
+<hr />
+<h2 id="1-project-overview">1. Project Overview<a class="headerlink" href="#1-project-overview" title="Permanent link">&para;</a></h2>
+<p><strong>zypher</strong> is a Django-inspired, batteries-included web framework written in <strong>Zig</strong>. Its purpose is not just to enable web development in Zig, but to <strong>demonstrate how a modern web framework can be built from first principles using explicit, compile-time–driven abstractions</strong>.</p>
+<p>zypher prioritizes:
+- Explicitness over magic
+- Compile-time correctness
+- Secure-by-default design
+- Minimal runtime overhead
+- Clear, readable APIs</p>
+<p>This project is both a <strong>production-capable framework</strong> and a <strong>learning reference</strong> for systems-level web development.</p>
+<hr />
+<h2 id="2-nongoals-important">2. Non‑Goals (Important)<a class="headerlink" href="#2-nongoals-important" title="Permanent link">&para;</a></h2>
+<p>zypher explicitly does <strong>not</strong> aim to:
+- Compete feature-for-feature with Django
+- Support every database backend
+- Implement HTTP/2 or HTTP/3 initially
+- Provide async-first APIs in v1
+- Hide complexity through runtime reflection</p>
+<p>These constraints keep the project focused and maintainable.</p>
+<hr />
+<h2 id="3-target-audience">3. Target Audience<a class="headerlink" href="#3-target-audience" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Zig developers</li>
+<li>Systems programmers</li>
+<li>Developers interested in framework internals</li>
+<li>Learners who want to understand how Django-like systems work</li>
+</ul>
+<hr />
+<h2 id="4-core-design-principles">4. Core Design Principles<a class="headerlink" href="#4-core-design-principles" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Explicit is better than implicit</strong></li>
+<li><strong>Compile-time &gt; runtime</strong> wherever possible</li>
+<li><strong>Security by default</strong></li>
+<li><strong>Minimal allocations</strong></li>
+<li><strong>One obvious way to do things</strong></li>
+</ol>
+<hr />
+<h2 id="5-high-level-architecture">5. High-Level Architecture<a class="headerlink" href="#5-high-level-architecture" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Browser
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  ↓
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>HTTP Server
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  ↓
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Request Parser
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  ↓
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Router (compile-time routes)
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>  ↓
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>Middleware Pipeline
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>  ↓
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>View / Controller
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>  ↓
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>Template / JSON / Redirect
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>  ↓
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>Response
+</code></pre></div>
+<hr />
+<h2 id="6-repository-structure">6. Repository Structure<a class="headerlink" href="#6-repository-structure" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>zypher/
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── src/
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│   ├── http/          # HTTP server integration
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│   ├── core/          # Request / Response primitives
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│   ├── router/        # Compile-time router
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│   ├── middleware/    # Middleware system
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│   ├── view/          # Controllers and helpers
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│   ├── template/      # Template engine
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│   ├── orm/           # ORM and migrations
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│   ├── forms/         # Forms and validation
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>│   ├── auth/          # Authentication and sessions
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>│   ├── admin/         # Admin panel
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>│   └── cli/           # Command-line tooling
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>├── examples/
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>├── tests/
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>├── docs/
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>├── build.zig
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>└── README.md
+</code></pre></div>
+<hr />
+<h2 id="7-module-specifications">7. Module Specifications<a class="headerlink" href="#7-module-specifications" title="Permanent link">&para;</a></h2>
+<h3 id="71-http-layer-srchttp">7.1 HTTP Layer (<code>src/http/</code>)<a class="headerlink" href="#71-http-layer-srchttp" title="Permanent link">&para;</a></h3>
+<p><strong>Responsibilities</strong>:
+- Bind TCP listener
+- Integrate <code>std.http.Server</code>
+- Manage connection lifecycle</p>
+<p><strong>Constraints</strong>:
+- HTTP/1.1 only
+- No custom protocol parsing</p>
+<hr />
+<h3 id="72-core-request-response-srccore">7.2 Core Request / Response (<code>src/core/</code>)<a class="headerlink" href="#72-core-request-response-srccore" title="Permanent link">&para;</a></h3>
+<h4 id="request">Request<a class="headerlink" href="#request" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">Request</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="n">method</span><span class="o">:</span><span class="w"> </span><span class="n">Method</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="n">path</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="n">headers</span><span class="o">:</span><span class="w"> </span><span class="n">HeaderMap</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="n">query</span><span class="o">:</span><span class="w"> </span><span class="n">QueryMap</span><span class="p">,</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">body</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p">};</span>
+</code></pre></div>
+<h4 id="response">Response<a class="headerlink" href="#response" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">Response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="n">status</span><span class="o">:</span><span class="w"> </span><span class="kt">u16</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">headers</span><span class="o">:</span><span class="w"> </span><span class="n">HeaderMap</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="n">body</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">};</span>
+</code></pre></div>
+<p><strong>Goals</strong>:
+- Zero raw HTTP usage in user code
+- Helper methods for common responses</p>
+<hr />
+<h3 id="73-router-srcrouter">7.3 Router (<code>src/router/</code>)<a class="headerlink" href="#73-router-srcrouter" title="Permanent link">&para;</a></h3>
+<p><strong>Features</strong>:
+- Compile-time route registration
+- Typed URL parameters
+- Deterministic matching order</p>
+<p><strong>Example API</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">Router</span><span class="p">.</span><span class="n">route</span><span class="p">(.</span><span class="n">get</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;/users/:id&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">userView</span><span class="p">);</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kr">const</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">req</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">getAs</span><span class="p">(</span><span class="kt">u64</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;id&quot;</span><span class="p">);</span>
+</code></pre></div></p>
+<p>Invalid route definitions <strong>must fail at compile time</strong>.</p>
+<hr />
+<h3 id="74-middleware-srcmiddleware">7.4 Middleware (<code>src/middleware/</code>)<a class="headerlink" href="#74-middleware-srcmiddleware" title="Permanent link">&para;</a></h3>
+<p><strong>Middleware Signature</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">fn</span><span class="w"> </span><span class="n">middleware</span><span class="p">(</span><span class="n">req</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Request</span><span class="p">,</span><span class="w"> </span><span class="n">res</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Response</span><span class="p">,</span><span class="w"> </span><span class="n">next</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">Request</span><span class="p">,</span><span class="w"> </span><span class="o">*</span><span class="n">Response</span><span class="p">)</span><span class="w"> </span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="kt">void</span>
+</code></pre></div></p>
+<p><strong>Use Cases</strong>:
+- Logging
+- Authentication
+- CSRF protection
+- Panic recovery
+- Static file serving
+- Gzip compression</p>
+<hr />
+<h3 id="75-views-controllers-srcview">7.5 Views &amp; Controllers (<code>src/view/</code>)<a class="headerlink" href="#75-views-controllers-srcview" title="Permanent link">&para;</a></h3>
+<p>Controllers contain business logic only.</p>
+<p><strong>Example</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">dashboard</span><span class="p">(</span><span class="n">req</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Request</span><span class="p">,</span><span class="w"> </span><span class="n">res</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Response</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="k">try</span><span class="w"> </span><span class="n">res</span><span class="p">.</span><span class="n">render</span><span class="p">(</span><span class="s">&quot;dashboard.html&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">user</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">req</span><span class="p">.</span><span class="n">user</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="76-template-engine-srctemplate">7.6 Template Engine (<code>src/template/</code>)<a class="headerlink" href="#76-template-engine-srctemplate" title="Permanent link">&para;</a></h3>
+<p><strong>Supported Syntax (v1)</strong>:
+- <code>{{ variable }}</code>
+- <code>{% if %}</code>
+- <code>{% for %}</code></p>
+<p><strong>Rules</strong>:
+- Auto-escape HTML by default
+- Templates parsed once, cached</p>
+<hr />
+<h3 id="77-orm-srcorm">7.7 ORM (<code>src/orm/</code>)<a class="headerlink" href="#77-orm-srcorm" title="Permanent link">&para;</a></h3>
+<p><strong>Scope</strong>:
+- SQLite only (v1)
+- Struct-based models
+- Compile-time SQL generation</p>
+<p><strong>Example</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kr">const</span><span class="w"> </span><span class="n">User</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">orm</span><span class="p">.</span><span class="n">Model</span><span class="p">(</span><span class="s">&quot;users&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span><span class="n">id</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="n">username</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">email</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="p">});</span>
+</code></pre></div></p>
+<hr />
+<h3 id="78-migrations-srcormmigrations">7.8 Migrations (<code>src/orm/migrations</code>)<a class="headerlink" href="#78-migrations-srcormmigrations" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Versioned schema changes</li>
+<li>Forward-only migrations</li>
+<li>CLI-driven execution</li>
+</ul>
+<hr />
+<h3 id="79-forms-validation-srcforms">7.9 Forms &amp; Validation (<code>src/forms/</code>)<a class="headerlink" href="#79-forms-validation-srcforms" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Struct-based form definitions</li>
+<li>Field-level validation rules</li>
+<li>Automatic error aggregation</li>
+<li>CSRF protection</li>
+</ul>
+<hr />
+<h3 id="710-authentication-sessions-srcauth">7.10 Authentication &amp; Sessions (<code>src/auth/</code>)<a class="headerlink" href="#710-authentication-sessions-srcauth" title="Permanent link">&para;</a></h3>
+<p><strong>Features</strong>:
+- Signed cookie sessions
+- Password hashing (PBKDF2-HMAC-SHA256)
+- Login / logout
+- Permissions system</p>
+<hr />
+<h3 id="711-admin-panel-srcadmin">7.11 Admin Panel (<code>src/admin/</code>)<a class="headerlink" href="#711-admin-panel-srcadmin" title="Permanent link">&para;</a></h3>
+<p><strong>Features</strong>:
+- Auto-generated CRUD UI
+- Model-based configuration
+- Permission-aware access</p>
+<hr />
+<h3 id="712-cli-srccli">7.12 CLI (<code>src/cli/</code>)<a class="headerlink" href="#712-cli-srccli" title="Permanent link">&para;</a></h3>
+<p>The CLI is the user-facing entrypoint for creating projects, running apps, administering local state, and serving documentation. Build it once from the repository root with <code>zig build</code>, then run <code>zypher</code> from <code>zig-out/bin</code> or your <code>PATH</code>.</p>
+<p><strong>Commands</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>zypher<span class="w"> </span>new<span class="w"> </span>&lt;path&gt;<span class="w"> </span><span class="o">[</span>--template<span class="w"> </span>single-file<span class="p">|</span>clean-arch<span class="p">|</span>mvc<span class="p">|</span>mvp<span class="o">]</span><span class="w"> </span><span class="o">[</span>--api<span class="o">]</span><span class="w"> </span><span class="o">[</span>--template-dir<span class="w"> </span>&lt;dir&gt;<span class="o">]</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>zypher<span class="w"> </span>templates<span class="w"> </span><span class="o">[</span>--template-dir<span class="w"> </span>&lt;dir&gt;<span class="o">]</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>zypher<span class="w"> </span>run<span class="w"> </span><span class="o">[</span>path<span class="o">]</span><span class="w"> </span><span class="o">[</span>--zypher-root<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--port<span class="w"> </span>&lt;port&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--<span class="w"> </span>&lt;app<span class="w"> </span>args...&gt;<span class="o">]</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>zypher<span class="w"> </span>doc<span class="w"> </span><span class="o">[</span>--zypher-root<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>&lt;host&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--port<span class="w"> </span>&lt;port&gt;<span class="o">]</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>zypher<span class="w"> </span>doc-user<span class="w"> </span><span class="o">[</span>path<span class="o">]</span><span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>&lt;host&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--port<span class="w"> </span>&lt;port&gt;<span class="o">]</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>zypher<span class="w"> </span>migrate<span class="w"> </span><span class="o">[</span>--db<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dir<span class="w"> </span>&lt;dir&gt;<span class="o">]</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>zypher<span class="w"> </span>makemigrations<span class="w"> </span><span class="o">[</span>--schema<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--state<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dir<span class="w"> </span>&lt;dir&gt;<span class="o">]</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>zypher<span class="w"> </span>createsuperuser<span class="w"> </span><span class="o">[</span>--username<span class="w"> </span>&lt;name&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--email<span class="w"> </span>&lt;email&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--password<span class="w"> </span>&lt;password&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--db<span class="w"> </span>&lt;path&gt;<span class="o">]</span>
+</code></pre></div></p>
+<p>Scaffold templates live in the repository root <code>templates/</code> directory. Third-party templates can be used by pointing <code>--template-dir</code> at another directory. Built-in styles have paired template and API variants, such as <code>mvc</code> and <code>mvc-api</code>; <code>--api</code> selects the API sibling. Built-in templates generate a runnable <code>build.zig</code>, a sample managed ORM model, and an admin dashboard protected by <code>/admin/login</code>. <code>zypher createsuperuser</code> defaults to an interactive prompt for username, email, hidden password, and hidden password confirmation; noninteractive callers must pass username, email, and password together. Scaffolded admin login also includes <code>/admin/forgot-password</code> and <code>/admin/reset-password</code> for 6-digit password recovery codes. Users should start scaffolded apps through <code>zypher run</code>, which infers the Zypher source root, delegates to the generated build script, and forwards runtime options such as <code>--port</code>.</p>
+<p><code>zypher doc</code> builds and serves Zypher library documentation. <code>zypher doc-user</code> builds and serves documentation for a user project by running <code>zig build doc</code> in that project.</p>
+<hr />
+<h2 id="8-development-rules">8. Development Rules<a class="headerlink" href="#8-development-rules" title="Permanent link">&para;</a></h2>
+<ol>
+<li>All public APIs must be documented</li>
+<li>Prefer compile-time errors</li>
+<li>Avoid global state</li>
+<li>Write tests per module</li>
+<li>Keep dependencies minimal</li>
+</ol>
+<hr />
+<h2 id="9-versioning-strategy">9. Versioning Strategy<a class="headerlink" href="#9-versioning-strategy" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>v0.x</code>: Experimental</li>
+<li><code>v1.0</code>: Stable core framework</li>
+</ul>
+<hr />
+<h2 id="10-success-criteria">10. Success Criteria<a class="headerlink" href="#10-success-criteria" title="Permanent link">&para;</a></h2>
+<p>zypher is considered successful if:
+- A complete CRUD app can be built
+- The framework is readable end-to-end
+- Developers can learn web internals by reading the source</p>
+<hr />
+<h2 id="11-license">11. License<a class="headerlink" href="#11-license" title="Permanent link">&para;</a></h2>
+<p>Apache License, Version 2.0.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

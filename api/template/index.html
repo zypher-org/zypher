@@ -1,0 +1,2117 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A batteries-included web framework, built the Zig way.">
+      
+      
+      
+        <link rel="canonical" href="https://zypher-org.github.io/zypher/api/template/">
+      
+      
+        <link rel="prev" href="../router/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Template API - Zypher Framework</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#template-api" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Zypher Framework" class="md-header__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Zypher Framework
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Template API
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Zypher Documentation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../CONTRIBUTING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing to zypher
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../HANDLER_AND_MIDDLEWARE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Handler &amp; Middleware API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../INITIAL_BACKLOG/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  ISSUE BREAKDOWN (INITIAL BACKLOG)
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../MILESTONES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  DEVELOPMENT MILESTONES
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../RELEASE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Release Process
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../REQUEST_RESPONSE/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — Request &amp; Response API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../ROUTER_AND_PATH_MATCHING/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Router &amp; Path Matching
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../TEST_SPEC/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Framework – Core Conformance Test Specifications
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../VISION/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  VISION
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../ZYPHER_PROJECT_SPEC/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher — GitHub Project Specification
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../ZYPHER_v0.1.0_CHECKLIST/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher v0.1.0 – Release Checklist
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  zypher Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Api
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Zypher Framework" class="md-nav__button md-logo" aria-label="Zypher Framework" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Zypher Framework
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zypher-org/zypher" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zypher-org/zypher
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONTRIBUTING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing to zypher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../HANDLER_AND_MIDDLEWARE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Handler &amp; Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../INITIAL_BACKLOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ISSUE BREAKDOWN (INITIAL BACKLOG)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../MILESTONES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DEVELOPMENT MILESTONES
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../RELEASE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../REQUEST_RESPONSE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — Request &amp; Response API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ROUTER_AND_PATH_MATCHING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Router &amp; Path Matching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../TEST_SPEC/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Framework – Core Conformance Test Specifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../VISION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VISION
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ZYPHER_PROJECT_SPEC/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher — GitHub Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ZYPHER_v0.1.0_CHECKLIST/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher v0.1.0 – Release Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    zypher Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_14" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_14" id="__nav_14_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Api
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_14_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_14">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Api
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zypher API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../admin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../middleware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Middleware API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../orm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ORM API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../router/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Router API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template API
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Value">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#variants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variants
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Template">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rendering-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#templateengine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TemplateEngine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TemplateEngine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lexer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lexer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Lexer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lexerinitallocator-source-lexer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lexer.init(allocator, source) Lexer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lexertokenize-void" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lexer.tokenize() !void
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lexerdeinit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lexer.deinit()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parser
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Parser">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parserinitallocator-tokens-parser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parser.init(allocator, tokens) Parser
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parserparse-void" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parser.parse() !void
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parserdeinit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parser.deinit()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Filters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#filterresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FilterResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application Functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Filters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Value">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#variants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variants
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Template">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rendering-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#templateengine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TemplateEngine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TemplateEngine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lexer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lexer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Lexer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lexerinitallocator-source-lexer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lexer.init(allocator, source) Lexer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lexertokenize-void" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lexer.tokenize() !void
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lexerdeinit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lexer.deinit()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parser
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Parser">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parserinitallocator-tokens-parser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parser.init(allocator, tokens) Parser
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parserparse-void" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parser.parse() !void
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parserdeinit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parser.deinit()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Filters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#filterresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FilterResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application Functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Filters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="template-api">Template API<a class="headerlink" href="#template-api" title="Permanent link">&para;</a></h1>
+<p>Zypher's template engine is a custom implementation with:
+- Auto-escaping of HTML (use <code>|safe</code> filter to bypass)
+- Dot notation for field access (<code>{{ user.name }}</code>)
+- List index access (<code>{{ items.0 }}</code>)
+- <code>{% include %}</code> directive
+- <code>{% extends %}</code> / <code>{% block %}</code> inheritance
+- <code>{% if %}</code> / <code>{% elif %}</code> / <code>{% else %}</code> conditionals
+- <code>{% for %}</code> loops with <code>forloop</code> context
+- Pipe filters (<code>{{ name|upper|truncate(10) }}</code>)</p>
+<h2 id="value">Value<a class="headerlink" href="#value" title="Permanent link">&para;</a></h2>
+<p>Union type representing template values.</p>
+<h3 id="variants">Variants<a class="headerlink" href="#variants" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>string: []const u8</code></li>
+<li><code>int: i64</code></li>
+<li><code>float: f64</code></li>
+<li><code>bool: bool</code></li>
+<li><code>list: []const Value</code></li>
+<li><code>map: *Context</code></li>
+<li><code>null_val: void</code></li>
+</ul>
+<h3 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>value.format(writer)</code> — format value to writer (formats lists as comma-separated, maps as key: value pairs)</li>
+<li><code>value.isTruthy() bool</code> — string: non-empty, int/float: non-zero, bool: true, list: non-empty, map: always true, null: false</li>
+</ul>
+<h2 id="context">Context<a class="headerlink" href="#context" title="Permanent link">&para;</a></h2>
+<p>Template variable context — a string-keyed map of <code>Value</code>s.</p>
+<h3 id="methods_1">Methods<a class="headerlink" href="#methods_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>Context.init(allocator) Context</code> — create a new context</li>
+<li><code>context.deinit()</code> — free resources</li>
+<li><code>context.put(key, value) !void</code> — set a variable</li>
+<li><code>context.get(key) ?Value</code> — get a variable</li>
+</ul>
+<h2 id="template">Template<a class="headerlink" href="#template" title="Permanent link">&para;</a></h2>
+<p>A parsed template with cached AST.</p>
+<h3 id="methods_2">Methods<a class="headerlink" href="#methods_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>Template.fromSource(allocator, source) !Template</code> — parse template source into an AST (tokenizes, parses, takes ownership of nodes)</li>
+<li><code>template.deinit()</code> — free all nodes and source</li>
+<li><code>template.render(ctx, writer) !void</code> — render the template with the given context; handles <code>{% extends %}</code>, <code>{% include %}</code>, variables, filters, conditionals, and loops</li>
+</ul>
+<h3 id="rendering-features">Rendering Features<a class="headerlink" href="#rendering-features" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>{% extends "base.html" %}</code> — must be the first node; loads the base template and fills <code>{% block %}</code> slots</li>
+<li><code>{% include "partial.html" %}</code> — includes another template (requires engine reference)</li>
+<li><code>{{ var.field }}</code> — dot notation for nested field access on maps</li>
+<li><code>{{ list.0 }}</code> — numeric index access on lists</li>
+<li><code>{{ var|upper|truncate(10) }}</code> — filter pipeline</li>
+<li><code>{% if condition %}...{% elif other %}...{% else %}...{% endif %}</code> — conditionals (checks truthiness)</li>
+<li><code>{% for item in list %}...{% endfor %}</code> — loops with <code>forloop</code> context: <code>counter0</code>, <code>counter</code>, <code>first</code>, <code>last</code></li>
+</ul>
+<h2 id="templateengine">TemplateEngine<a class="headerlink" href="#templateengine" title="Permanent link">&para;</a></h2>
+<p>Template cache with load and render operations.</p>
+<h3 id="methods_3">Methods<a class="headerlink" href="#methods_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>TemplateEngine.init(allocator) TemplateEngine</code> — create a new engine</li>
+<li><code>engine.deinit()</code> — free all cached templates</li>
+<li><code>engine.load(name, source) !*Template</code> — parse and cache a template; returns pointer to cached template</li>
+<li><code>engine.render(name, ctx, writer) !void</code> — render a cached template by name</li>
+<li><code>engine.getTemplate(name) ?*Template</code> — get a cached template by name</li>
+</ul>
+<h2 id="lexer">Lexer<a class="headerlink" href="#lexer" title="Permanent link">&para;</a></h2>
+<p>Template source tokenizer.</p>
+<h3 id="lexerinitallocator-source-lexer">Lexer.init(allocator, source) Lexer<a class="headerlink" href="#lexerinitallocator-source-lexer" title="Permanent link">&para;</a></h3>
+<p>Create a new lexer.</p>
+<h3 id="lexertokenize-void">lexer.tokenize() !void<a class="headerlink" href="#lexertokenize-void" title="Permanent link">&para;</a></h3>
+<p>Tokenize the source into internal token list.</p>
+<h3 id="lexerdeinit">lexer.deinit()<a class="headerlink" href="#lexerdeinit" title="Permanent link">&para;</a></h3>
+<p>Free tokens.</p>
+<h2 id="parser">Parser<a class="headerlink" href="#parser" title="Permanent link">&para;</a></h2>
+<p>Template AST builder.</p>
+<h3 id="parserinitallocator-tokens-parser">Parser.init(allocator, tokens) Parser<a class="headerlink" href="#parserinitallocator-tokens-parser" title="Permanent link">&para;</a></h3>
+<p>Create a parser from a token list.</p>
+<h3 id="parserparse-void">parser.parse() !void<a class="headerlink" href="#parserparse-void" title="Permanent link">&para;</a></h3>
+<p>Parse tokens into AST nodes.</p>
+<h3 id="parserdeinit">parser.deinit()<a class="headerlink" href="#parserdeinit" title="Permanent link">&para;</a></h3>
+<p>Free AST nodes.</p>
+<h2 id="filters">Filters<a class="headerlink" href="#filters" title="Permanent link">&para;</a></h2>
+<p>Template filter functions for transforming values in expressions.</p>
+<h3 id="filterresult">FilterResult<a class="headerlink" href="#filterresult" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>value: Value</code> — the filtered value</li>
+<li><code>owned: bool</code> — whether the result owns allocated memory (must be freed)</li>
+<li><code>filterResult.deinit(gpa)</code> — free owned memory</li>
+</ul>
+<h3 id="application-functions">Application Functions<a class="headerlink" href="#application-functions" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>apply(gpa, name, value) !FilterResult</code> — apply a filter by name (no argument)</li>
+<li><code>applyWithArg(gpa, name, value, arg) !FilterResult</code> — apply a filter with a string argument</li>
+</ul>
+<h3 id="built-in-filters">Built-in Filters<a class="headerlink" href="#built-in-filters" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Filter</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>upper</code></td>
+<td>Convert to uppercase</td>
+<td><code>{{ name|upper }}</code></td>
+</tr>
+<tr>
+<td><code>lower</code></td>
+<td>Convert to lowercase</td>
+<td><code>{{ name|lower }}</code></td>
+</tr>
+<tr>
+<td><code>capitalize</code></td>
+<td>Capitalize first letter</td>
+<td><code>{{ name|capitalize }}</code></td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>Title case (capitalize each word)</td>
+<td><code>{{ name|title }}</code></td>
+</tr>
+<tr>
+<td><code>trim</code></td>
+<td>Strip whitespace (spaces, tabs, newlines, carriage returns)</td>
+<td><code>{{ name|trim }}</code></td>
+</tr>
+<tr>
+<td><code>length</code></td>
+<td>Get string length or list count</td>
+<td><code>{{ name|length }}</code></td>
+</tr>
+<tr>
+<td><code>reverse</code></td>
+<td>Reverse string</td>
+<td><code>{{ name|reverse }}</code></td>
+</tr>
+<tr>
+<td><code>escape</code></td>
+<td>HTML-escape a string explicitly (<code>&lt;&gt;&amp;"'</code>)</td>
+<td><code>{{ raw|escape }}</code></td>
+</tr>
+<tr>
+<td><code>safe</code></td>
+<td>Mark value as safe (bypass auto-escaping)</td>
+<td><code>{{ html_content|safe }}</code></td>
+</tr>
+<tr>
+<td><code>join(sep)</code></td>
+<td>Join list items with separator</td>
+<td><code>{{ list|join(", ") }}</code></td>
+</tr>
+<tr>
+<td><code>truncate(n)</code></td>
+<td>Truncate to n characters with <code>...</code></td>
+<td><code>{{ text|truncate(50) }}</code></td>
+</tr>
+<tr>
+<td><code>default(val)</code></td>
+<td>Default value if empty/null</td>
+<td><code>{{ name|default("Guest") }}</code></td>
+</tr>
+<tr>
+<td><code>date(format)</code></td>
+<td>Format Unix timestamp as <code>YYYY-MM-DD</code></td>
+<td><code>{{ timestamp|date }}</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="full-example">Full Example<a class="headerlink" href="#full-example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kr">const</span><span class="w"> </span><span class="n">zypher</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">@import</span><span class="p">(</span><span class="s">&quot;zypher&quot;</span><span class="p">);</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kr">var</span><span class="w"> </span><span class="n">engine</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">zypher</span><span class="p">.</span><span class="n">TemplateEngine</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">gpa</span><span class="p">);</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">defer</span><span class="w"> </span><span class="n">engine</span><span class="p">.</span><span class="n">deinit</span><span class="p">();</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">engine</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="s">&quot;hello.html&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;&lt;h1&gt;Hello, {{ name|upper }}!&lt;/h1&gt;&quot;</span><span class="p">);</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="kr">var</span><span class="w"> </span><span class="n">ctx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">zypher</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">gpa</span><span class="p">);</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="k">defer</span><span class="w"> </span><span class="n">ctx</span><span class="p">.</span><span class="n">deinit</span><span class="p">();</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">try</span><span class="w"> </span><span class="n">ctx</span><span class="p">.</span><span class="n">put</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="w"> </span><span class="p">.</span><span class="n">string</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;world&quot;</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="kr">var</span><span class="w"> </span><span class="n">buf</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="kt">u8</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">empty</span><span class="p">;</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="k">defer</span><span class="w"> </span><span class="n">buf</span><span class="p">.</span><span class="n">deinit</span><span class="p">(</span><span class="n">gpa</span><span class="p">);</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="k">try</span><span class="w"> </span><span class="n">engine</span><span class="p">.</span><span class="n">render</span><span class="p">(</span><span class="s">&quot;hello.html&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">std</span><span class="p">.</span><span class="n">Io</span><span class="p">.</span><span class="n">Writer</span><span class="p">.</span><span class="n">fixed</span><span class="p">(</span><span class="o">&amp;</span><span class="n">buf</span><span class="p">).</span><span class="n">interface</span><span class="p">);</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="c1">// buf.items == &quot;&lt;h1&gt;Hello, WORLD!&lt;/h1&gt;&quot;</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
