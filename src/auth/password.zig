@@ -13,7 +13,8 @@ const HASH_LEN = 32;
 /// Salt length in bytes.
 const SALT_LEN = 16;
 /// PBKDF2 iteration count.
-const ITERATIONS: u32 = 100_000;
+/// Uses a lower count during tests to keep the test suite fast (~3s vs ~3min).
+const ITERATIONS: u32 = if (builtin.is_test) 100 else 100_000;
 
 /// Error set for password operations.
 pub const PasswordError = error{

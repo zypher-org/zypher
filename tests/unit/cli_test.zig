@@ -365,7 +365,7 @@ test "cli: runserver default handler responds to health check" {
 }
 
 test "cli: runserver SIGINT handler requests app shutdown" {
-    var app = App.init(std.testing.allocator, .{ .host = "127.0.0.1", .port = 19088 });
+    var app = App.init(std.testing.allocator, .{ .host = "127.0.0.1", .port = 19188 });
     defer app.deinit();
 
     cli.bindRunserverSignalTarget(&app, std.testing.io);
@@ -378,14 +378,14 @@ test "cli: runserver SIGINT handler requests app shutdown" {
 }
 
 test "cli: runserver serves health check and returns after max requests" {
-    const port: u16 = 19089;
+    const port: u16 = 19189;
     const args = [_][:0]const u8{
         "zypher",
         "runserver",
         "--host",
         "127.0.0.1",
         "--port",
-        "19089",
+        "19189",
         "--max-requests",
         "1",
     };
@@ -429,14 +429,14 @@ test "cli: runserver serves health check and returns after max requests" {
 }
 
 test "cli: runserver responds to health check and stops on SIGINT" {
-    const port: u16 = 19090;
+    const port: u16 = 19190;
     const args = [_][:0]const u8{
         "zypher",
         "runserver",
         "--host",
         "127.0.0.1",
         "--port",
-        "19090",
+        "19190",
     };
 
     var out = std.Io.Writer.Allocating.init(std.testing.allocator);
