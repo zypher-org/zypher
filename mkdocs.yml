@@ -1,0 +1,20 @@
+site_name: Zypher Framework
+site_description: A batteries-included web framework, built the Zig way.
+site_url: https://zypher-org.github.io/zypher/
+repo_url: https://github.com/zypher-org/zypher
+repo_name: zypher-org/zypher
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - admonition
+  - toc:
+      permalink: true
