@@ -211,6 +211,50 @@ test "Response.send emits Content-Length zero for empty redirect body" {
     try std.testing.expect(std.mem.endsWith(u8, buf.items, "\r\n\r\n"));
 }
 
+// ── 206 Partial Content ──────────────────────────────────────────
+
+test "Response.status 206 has Partial Content reason phrase" {
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+    _ = res.status(206);
+    try std.testing.expectEqual(@as(u16, 206), res.status_code);
+    try std.testing.expectEqualStrings("Partial Content", res.reason_phrase.?);
+}
+
+// ── Streaming file body ─────────────────────────────────────────
+
+test "Response.send with file_body streams file content" {
+    const gpa = std.testing.allocator;
+
+    // Create a temp file with known content
+    const tmp_path = ".zig-cache/tmp/resp-stream-test.txt";
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDirPath(std.testing.io, ".zig-cache/tmp") catch {};
+    try cwd.writeFile(std.testing.io, .{ .sub_path = tmp_path, .data = "streamed content here" });
+
+    const fd = try std.posix.openat(
+        std.posix.AT.FDCWD,
+        tmp_path,
+        .{ .ACCMODE = .RDONLY, .CLOEXEC = true },
+        0,
+    );
+    defer _ = std.posix.system.close(fd);
+
+    var res = Response.init(gpa);
+    defer res.deinit();
+    _ = res.status(200);
+    _ = res.header("Content-Type", "text/plain");
+    try res.setFileBody(fd, 21);
+
+    var buf: std.ArrayList(u8) = .empty;
+    defer buf.deinit(gpa);
+    try res.send(gpa, &buf);
+
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "200 OK") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Content-Length: 21") != null);
+    try std.testing.expect(std.mem.endsWith(u8, buf.items, "streamed content here"));
+}
+
 // ── Deinit ───────────────────────────────────────────────────────
 
 test "Response.deinit frees all owned memory" {

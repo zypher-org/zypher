@@ -26,17 +26,20 @@ fn reasonPhrase(code: u16) ?[]const u8 {
         200 => "OK",
         201 => "Created",
         204 => "No Content",
+        206 => "Partial Content",
         301 => "Moved Permanently",
         302 => "Found",
         303 => "See Other",
         307 => "Temporary Redirect",
         308 => "Permanent Redirect",
+        304 => "Not Modified",
         400 => "Bad Request",
         401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
+        416 => "Range Not Satisfiable",
         422 => "Unprocessable Entity",
         429 => "Too Many Requests",
         500 => "Internal Server Error",
@@ -70,6 +73,13 @@ fn rawJsonSlice(content: anytype) ?[]const u8 {
     };
 }
 
+/// Descriptor and size of a file whose contents will be streamed directly
+/// to the socket without buffering the entire payload in memory.
+pub const FileBody = struct {
+    fd: std.posix.fd_t,
+    size: usize,
+};
+
 pub const Response = struct {
     status_code: u16 = 200,
     reason_phrase: ?[]const u8 = "OK",
@@ -78,6 +88,10 @@ pub const Response = struct {
     body: ?[]const u8 = null,
     use_chunked: bool = false,
     allocator: std.mem.Allocator,
+    /// When set, the response body is streamed directly from this file
+    /// descriptor instead of from `body`. The caller is responsible for
+    /// closing the fd after the response has been sent.
+    file_body: ?FileBody = null,
 
     // ───────────── Lifecycle ─────────────
 
@@ -87,6 +101,15 @@ pub const Response = struct {
             .headers = std.StringHashMap([]const u8).init(gpa),
             .allocator = gpa,
         };
+    }
+
+    /// Use a file descriptor as the response body, streaming its contents
+    /// directly to the socket. The caller retains ownership of `fd` and
+    /// must close it after the response has been sent.
+    pub fn setFileBody(self: *Response, fd: std.posix.fd_t, size: usize) !void {
+        if (self.body) |b| self.allocator.free(b);
+        self.body = null;
+        self.file_body = .{ .fd = fd, .size = size };
     }
 
     /// Free all owned memory.
@@ -254,8 +277,9 @@ pub const Response = struct {
 
     // ───────────── Serialisation ─────────────
 
-    /// Serialise the full HTTP response into the provided ArrayList.
-    pub fn send(self: *Response, gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+    /// Serialise the response status line and headers into the provided ArrayList.
+    /// Useful when you want to send headers first and stream the body separately.
+    pub fn sendHeaders(self: *Response, gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         const phrase = self.reason_phrase orelse "";
         try out.appendSlice(gpa, "HTTP/1.1 ");
         var int_buf: [8]u8 = undefined;
@@ -268,7 +292,12 @@ pub const Response = struct {
         if (!self.use_chunked) {
             try out.appendSlice(gpa, "Content-Length: ");
             var len_buf: [16]u8 = undefined;
-            const len = if (self.body) |b| b.len else 0;
+            const len = if (self.file_body) |fb|
+                fb.size
+            else if (self.body) |b|
+                b.len
+            else
+                0;
             const len_str = try std.fmt.bufPrint(&len_buf, "{d}", .{len});
             try out.appendSlice(gpa, len_str);
             try out.appendSlice(gpa, "\r\n");
@@ -289,12 +318,31 @@ pub const Response = struct {
         }
 
         try out.appendSlice(gpa, "\r\n");
+    }
+
+    /// Serialise the full HTTP response into the provided ArrayList.
+    /// If `file_body` is set, the file content is read in chunks into the buffer.
+    pub fn send(self: *Response, gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+        try self.sendHeaders(gpa, out);
+
+        const phrase = self.reason_phrase orelse "";
 
         // Write body
         if (self.body) |b| {
             try out.appendSlice(gpa, b);
+        } else if (self.file_body) |fb| {
+            // Stream file content in chunks
+            var buf: [8192]u8 = undefined;
+            var remaining: usize = fb.size;
+            while (remaining > 0) {
+                const to_read = @min(buf.len, remaining);
+                const n = try std.posix.read(fb.fd, buf[0..to_read]);
+                if (n == 0) break;
+                try out.appendSlice(gpa, buf[0..n]);
+                remaining -= n;
+            }
         }
 
-        log.info("response sent: {d} {s}, body_len={d}", .{ self.status_code, phrase, if (self.body) |b| b.len else 0 });
+        log.info("response sent: {d} {s}, body_len={d}", .{ self.status_code, phrase, if (self.file_body) |fb| fb.size else if (self.body) |b| b.len else 0 });
     }
 };
