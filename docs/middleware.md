@@ -29,17 +29,18 @@ Logs: HTTP method, path, response status code, and elapsed time in microseconds.
 Cross-Origin Resource Sharing middleware.
 
 ### Config
-- `allowed_origins: ?[]const []const u8 = null` — allowed origins; `null` allows all (reflects request `Origin`), empty slice blocks all
+- `allowed_origins: ?[]const []const u8 = null` — allowed origins; `null` allows all (reflects request `Origin`), empty slice blocks all, non-empty list restricts to listed origins
 - `allowed_methods: []const u8 = "GET, POST, PUT, DELETE, PATCH, OPTIONS"` — methods for preflight
 - `allowed_headers: []const u8 = "Content-Type, Authorization, X-CSRF-Token"` — headers for preflight
 - `max_age: []const u8 = "86400"` — preflight cache duration
 - `allow_credentials: bool = false` — allow credentials (cookies, auth headers)
 
 ### middleware(io, req, res, next)
-Default CORS middleware — allows all origins.
+Default CORS middleware — uses default config (block all origins by default; pass `null` origins to allow all).
 
 ### middlewareWith(config)
-Create a CORS middleware with custom `Config`. Returns a comptime-generated function pointer with signature `(std.Io, *Request, *Response, *const fn (std.Io, *Request, *Response) void) void`.
+Create a CORS middleware with custom `Config`. Returns a comptime-generated function pointer with signature `(std.Io, *Request, *Response, *const fn (std.Io, *Request, *Response) void) void`. Config:
+- `allowed_origins: ?[]const []const u8 = &.{}` — `null` allows all (reflects request `Origin`), empty slice blocks all, non-empty list restricts to those origins
 
 ### Behavior
 - Requests without `Origin` header pass through (not a CORS request)
@@ -56,10 +57,11 @@ Cross-Site Request Forgery protection middleware. Stores a 256-bit random token 
 
 ### Functions
 - `middleware(io, req, res, next)` — CSRF middleware function
-- `ensureToken(req) ![]const u8` — return the CSRF token from the session, creating and storing a random one if absent; requires `req.user` to be a `*Session`
+- `ensureToken(io, req) ![]const u8` — return the CSRF token from the session, creating and storing a random one if absent; requires `req.user` to be a `*Session`
+- `ensureTokenForRequest(req) ![]const u8` — same as `ensureToken` using thread-local io
 - `validateTokenForRequest(req, token) bool` — validate a token against the session token (constant-time comparison)
-- `formFieldForRequest(gpa, req) ![]u8` — return an owned HTML hidden input `<input type="hidden" name="_csrf" value="...">` using the request session token
-- `formField() []const u8` — no-session fallback (returns empty string)
+- `formFieldForRequest(io, gpa, req) ![]u8` — return an owned HTML hidden input `<input type="hidden" name="_csrf" value="...">` using the request session token
+- `formField(io, req) ![]u8` — convenience wrapper for `formFieldForRequest`
 
 ## Rate Limit
 Fixed window rate limiter per client IP.
@@ -77,10 +79,16 @@ Fixed window rate limiter per client IP.
 Default rate limit middleware (100 req/min). Uses `X-Forwarded-For` header or `"default"` as the key.
 
 ### middlewareWith(config)
-Create a rate limit middleware type with custom configuration. Returns a struct type with:
+Create a rate limit middleware type with custom configuration. Returns a comptime struct type with:
 - `handle(io, req, res, next)` — the middleware function
 - `deinit()` — free internal state
 - `middleware()` — get the function pointer for use in Chain
+
+Example:
+```zig
+const MyRL = zypher.middleware.rate_limit.middlewareWith(.{ .max_requests = 50, .window_seconds = 30 });
+// Use: MyRL.handle as the middleware function
+```
 
 ## Static
 Static file serving middleware.
@@ -100,7 +108,7 @@ Create a static middleware with custom config. Returns a comptime-generated func
 - MIME type detection by extension (70+ types including web, images, fonts, video, audio, documents, archives, executables, scripts)
 - Path traversal protection (rejects `..` segments)
 - ETag/304 support via `If-None-Match` (XxHash32 of content)
-- `Last-Modified` / `If-Modified-Since` support (uses `statx` on Linux, falls back to POSIX `stat` on other platforms)
+- `Last-Modified` / `If-Modified-Since` support (uses `std.Io.File.stat`)
 - Passes through to next handler if file not found
 
 ## Compress

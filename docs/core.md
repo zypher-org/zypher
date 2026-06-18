@@ -32,17 +32,19 @@ Low-level HTTP server. Binds to a host:port, accepts connections, parses HTTP, a
 - `max_inline_body_size: usize = 1_048_576` — max body buffered before streaming (1 MiB); bodies larger than this are read via `Request.body_stream`
 - `max_requests: ?usize = null` — optional request limit (for tests)
 
-### Constants & Types
-- `HandlerFn = *const fn (*Request, *Response) void` — handler function signature
-- `ParsedTarget` — result of parsing a request target:
-  - `path: []const u8` — path portion
-  - `query: std.StringHashMap([]const u8)` — parsed query parameters
+### Server.HandlerFn
+- `= *const fn (*Request, *Response) void` — handler function signature (terminal handler does NOT receive `io`)
+
+### ParsedTarget
+Result of parsing a request target:
+- `path: []const u8` — path portion
+- `query: std.StringHashMap([]const u8)` — parsed query parameters
 
 ### Methods
 - `Server.init(config: Config) Server` — create a new server with the given config
-- `server.listenAddress(host, port) IpAddress` — parse host + port into an address
+- `server.listenAddress(host, port) !std.Io.net.IpAddress` — parse host + port into an address
 - `server.parseRequestTarget(gpa, target) ParsedTarget` — parse a request target into path and query
-- `server.buildRequest(gpa, head_buffer, max_body_size) Request` — build a `Request` from raw HTTP head bytes; parses method, target, headers, validates content-length
+- `server.buildRequest(gpa, head_buffer, max_body_size) !Request` — build a `Request` from raw HTTP head bytes; parses method, target, headers, validates content-length
 - `server.listenAndServe(io, gpa, handler)` — start listening and dispatching; accepts io and allocator; blocks until shutdown or `max_requests` reached
 - `server.shutdown(io)` — set shutdown flag and close listener
 
@@ -101,6 +103,12 @@ Represents an incoming HTTP request.
 - `user: ?*anyopaque = null` — optional authenticated user (set by session/auth middleware)
 - `body_stream: ?BodyStream = null` — streaming body reader for bodies exceeding `max_inline_body_size`
 
+### BodyStream
+- `reader: *std.Io.Reader` — the underlying reader
+- `total_read: usize = 0` — total bytes read so far
+- `stream.read(buf) !usize` — read the next chunk
+- `stream.skip() !void` — discard remaining body
+
 ### FileUpload
 - `filename: []const u8` — client-provided filename
 - `content_type: []const u8` — part content type (empty string when omitted)
@@ -154,7 +162,7 @@ Represents an outgoing HTTP response.
 ### Types
 - `SameSite` enum: `Strict`, `Lax`, `None`
 - `Cookie` struct: name, value, path, domain, max_age, secure, http_only, same_site
-- `FileBody` struct: `fd: std.posix.fd_t`, `size: usize` — file descriptor for streaming file responses
+- `FileBody` struct: `handle: std.Io.File.Handle`, `size: usize` — file handle for streaming file responses
 
 ### Lifecycle
 - `Response.init(gpa) Response` — create a new response
@@ -179,7 +187,7 @@ All mutators return `*Response` for chaining unless they return an error union.
 - `res.deleteCookie(name) *Response` — delete a cookie by setting `Max-Age=0`
 
 ### File Body
-- `res.setFileBody(fd, size) !void` — set a file descriptor as the response body for streaming; bypasses buffering the entire payload in memory
+- `res.setFileBody(handle, size) !void` — set a file handle as the response body for streaming; bypasses buffering the entire payload in memory
 
 ### Serialization
 - `res.send(io, w: *std.Io.Writer) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided writer; if `file_body` is set, streams file content directly to the writer

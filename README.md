@@ -281,15 +281,23 @@ const DemoRL = zypher.middleware.rate_limit.middlewareWith(
     .{ .max_requests = 100, .window_seconds = 60 },
 );
 
+threadlocal var tl_io: ?std.Io = null;
+
 fn mwHandler(req: *zypher.core.Request, res: *zypher.core.Response) void {
+    const io = tl_io orelse return;
     const MwChain = Chain(.{
         zypher.middleware.logger.middleware,
         DemoRL.handle,
     });
-    MwChain.run(req, res, router.dispatch);
+    MwChain.run(io, req, res, router.dispatch);
 }
 
-app.middlewareHandler(mwHandler);
+pub fn main(init: std.process.Init) !void {
+    tl_io = init.io;
+    // ... setup app, routes ...
+    app.middlewareHandler(mwHandler);
+    try app.listenAndServe(init.io);
+}
 ```
 
 ### Full Demo

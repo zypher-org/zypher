@@ -47,7 +47,7 @@ zypher doc-user examples/blog
 - `parser.Parser` — template AST builder
 - `renderer.Template` — parsed template with render, extends, include, if, for
 - `renderer.TemplateEngine` — template cache with load/render
-- `core.Context` — template variable context (string-keyed Value map)
+- `renderer.Context` — template variable context (string-keyed Value map)
 - `renderer.Value` — template value union (string, int, float, bool, list, map, null)
 - `filters` — built-in filters (upper, lower, capitalize, title, trim, length, reverse, escape, safe, join, truncate, default, date)
 
@@ -65,7 +65,7 @@ zypher doc-user examples/blog
 - `form.FieldDef` — field definition with name, kind, required, validator
 - `form.Form(name, Fields)` — comptime form generation with bind, bindRequest, BoundForm
 - `form.BoundForm` — bound form with getValue, validate, cleanedData, csrfField, csrfFieldForRequest
-- `validators` — built-in validators (email, minLength, maxLength, matches, integer, url)
+- `validators` — built-in validators (email, minLength, maxLength, regex, url, required, min, max, choices, custom)
 
 ### Auth (`zypher.auth.*`)
 - `session.SessionStore` — in-memory session store (create, save, getByHexId, destroyByHexId)

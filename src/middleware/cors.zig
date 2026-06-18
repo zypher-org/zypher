@@ -8,7 +8,7 @@ const log = std.log.scoped(.cors);
 pub const Config = struct {
     /// Origins allowed. null = allow all (reflect request Origin).
     /// Empty slice = block all (no CORS headers).
-    allowed_origins: ?[]const []const u8 = &.{},
+    allowed_origins: ?[]const []const u8 = null,
     /// Methods allowed for preflight responses.
     allowed_methods: []const u8 = "GET, POST, PUT, DELETE, PATCH, OPTIONS",
     /// Headers allowed for preflight responses.
