@@ -7,6 +7,7 @@ test {
     _ = @import("core/response_test.zig");
     _ = @import("core/server_test.zig");
     _ = @import("core/app_test.zig");
+    _ = @import("core/io_audit_test.zig");
     _ = @import("router/route_test.zig");
     _ = @import("router/params_test.zig");
     _ = @import("router/router_test.zig");

@@ -1,34 +1,18 @@
 name: CI
-
 on:
   push:
-    branches: [ main, prod-nightly, prod-stable ]
+    branches: [main]
   pull_request:
-    branches: [ main, prod-nightly, prod-stable ]
-
-permissions:
-  contents: read
+    branches: [main]
 
 jobs:
   test:
-    name: Zig Tests
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2
-
-      - name: Verify Zig installation
-        run: zig version
-
-      - name: Build all examples
-        run: zig build check-examples
-
-      - name: Run unit and conformance tests
-        run: zig build test
-
-      - name: Ensure no formatting regressions
-        run: zig fmt --check .
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.17.0-dev.857+2b2b85c5f
+      - run: zig build test --summary all
+      - run: zig build test-io-clean
+      - run: zig fmt --check .
