@@ -309,19 +309,18 @@ See `examples/demo/` for a complete application with:
 ```
 zypher/
 ├── src/
-│   ├── core/          # Request / Response primitives
-│   ├── router/        # Compile-time router
-│   ├── middleware/    # Middleware system
-│   ├── view/          # Controllers and helpers
-│   ├── template/      # Template engine
-│   ├── orm/           # ORM and migrations
-│   ├── forms/         # Forms and validation
-│   ├── auth/          # Authentication and sessions
-│   ├── admin/         # Admin panel
-│   └── cli/           # CLI tooling
+│   ├── core/          # HTTP primitives: Request, Response, Server, App
+│   ├── router/        # Compile-time router, URL parameter extraction
+│   ├── middleware/    # Middleware pipeline, built-in middleware
+│   ├── template/      # Template parser, renderer, auto-escape
+│   ├── orm/           # Schema definition, query builder, SQLite driver
+│   ├── forms/         # Form structs, field validators, error maps
+│   ├── auth/          # Sessions, password hashing, permission guards
+│   ├── admin/         # Auto-generated admin UI
+│   └── cli/           # zypher CLI: new, migrate, createsuperuser, runserver
 ├── examples/
 ├── templates/        # CLI scaffold templates
-├── docs/
+├── docs/             # API reference (flat markdown files)
 └── build.zig
 ```
 
@@ -342,8 +341,7 @@ That said, the project is designed to be:
 
 ##  Documentation
 
-- Architecture & design decisions: see `docs/`
-- Full project specification: see `zypher_PROJECT_SPEC.md`
+- API reference: see `docs/`
 - Examples: see `examples/`
 
 ---

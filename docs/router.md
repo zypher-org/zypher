@@ -65,9 +65,9 @@ Comptime route table with runtime dispatch. Routes are defined at comptime; disp
 ### Route Groups
 ```zig
 const routes = .{
-    Router.group("/api", .{
-        Router.route(.get, "/users", listHandler),
-        Router.route(.post, "/users", createHandler),
+    zypher.router.Router.group("/api", .{
+        zypher.router.Router.route(.get, "/users", listHandler),
+        zypher.router.Router.route(.post, "/users", createHandler),
     }),
 };
 // Creates: GET  /api/users → listHandler
@@ -78,25 +78,25 @@ const routes = .{
 ```zig
 const zypher = @import("zypher");
 
-fn listHandler(req: *zypher.Request, res: *zypher.Response) void {
+fn listHandler(req: *zypher.core.Request, res: *zypher.core.Response) void {
     res.json(.{ .users = &.{} }) catch {};
 }
 
-fn getUserHandler(req: *zypher.Request, res: *zypher.Response) void {
+fn getUserHandler(req: *zypher.core.Request, res: *zypher.core.Response) void {
     const id = req.params.get("id") orelse "";
     res.json(.{ .id = id }) catch {};
 }
 
-fn notFound(req: *zypher.Request, res: *zypher.Response) void {
+fn notFound(req: *zypher.core.Request, res: *zypher.core.Response) void {
     _ = res.status(404);
     res.text("Not Found") catch {};
 }
 
 const routes = .{
-    Router.route(.get, "/api/users", listHandler),
-    Router.route(.get, "/api/users/:id", getUserHandler),
+    zypher.router.Router.route(.get, "/api/users", listHandler),
+    zypher.router.Router.route(.get, "/api/users/:id", getUserHandler),
 };
 
-var router = Router.init(routes, notFound);
+var router = zypher.router.Router.init(routes, notFound);
 app.routerHandler(router.dispatch);
 ```

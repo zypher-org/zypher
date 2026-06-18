@@ -28,7 +28,8 @@ Low-level HTTP server. Binds to a host:port, accepts connections, parses HTTP, a
 - `port: u16 = 8080` — listen port
 - `read_buffer_size: usize = 8192` — read buffer size
 - `write_buffer_size: usize = 8192` — write buffer size
-- `max_body_size: usize = 1_048_576` — max request body (1 MiB)
+- `max_body_size: usize = 10_485_760` — max request body (10 MiB)
+- `max_inline_body_size: usize = 1_048_576` — max body buffered before streaming (1 MiB); bodies larger than this are read via `Request.body_stream`
 - `max_requests: ?usize = null` — optional request limit (for tests)
 
 ### Constants & Types
@@ -42,7 +43,7 @@ Low-level HTTP server. Binds to a host:port, accepts connections, parses HTTP, a
 - `server.listenAddress(host, port) IpAddress` — parse host + port into an address
 - `server.parseRequestTarget(gpa, target) ParsedTarget` — parse a request target into path and query
 - `server.buildRequest(gpa, head_buffer, max_body_size) Request` — build a `Request` from raw HTTP head bytes; parses method, target, headers, validates content-length
-- `server.listenAndServe(io, gpa, handler)` — start listening and dispatching; blocks until shutdown or `max_requests` reached
+- `server.listenAndServe(io, gpa, handler)` — start listening and dispatching; accepts io and allocator; blocks until shutdown or `max_requests` reached
 - `server.shutdown(io)` — set shutdown flag and close listener
 
 ### Request Flow
@@ -98,6 +99,7 @@ Represents an incoming HTTP request.
 - `params: RouteParams` — route-extracted URL parameters (populated by Router.dispatch)
 - `allocator: std.mem.Allocator` — allocator scoped to this request
 - `user: ?*anyopaque = null` — optional authenticated user (set by session/auth middleware)
+- `body_stream: ?BodyStream = null` — streaming body reader for bodies exceeding `max_inline_body_size`
 
 ### FileUpload
 - `filename: []const u8` — client-provided filename
@@ -116,6 +118,7 @@ Represents an incoming HTTP request.
 - `req.queryParam(name) ?[]const u8` — query parameter lookup
 - `req.formValue(name) ?[]const u8` — form value lookup (same storage as query for URL-encoded bodies)
 - `req.file(name) ?FileUpload` — multipart uploaded file lookup by field name
+- `req.range() ?Range` — parse HTTP Range header
 - `req.cookie(name) ?[]const u8` — cookie lookup (parses `Cookie` header)
 - `req.deinit()` — free all owned memory (headers, body, query, files)
 
@@ -145,7 +148,13 @@ Represents an outgoing HTTP response.
 - `set_cookie_headers: std.ArrayList([]const u8)` — raw `Set-Cookie` header values
 - `body: ?[]const u8 = null` — response body (owned)
 - `use_chunked: bool = false` — use `Transfer-Encoding: chunked`
+- `file_body: ?FileBody = null` — streaming file descriptor (fd + size) for large payloads
 - `allocator: std.mem.Allocator` — memory allocator
+
+### Types
+- `SameSite` enum: `Strict`, `Lax`, `None`
+- `Cookie` struct: name, value, path, domain, max_age, secure, http_only, same_site
+- `FileBody` struct: `fd: std.posix.fd_t`, `size: usize` — file descriptor for streaming file responses
 
 ### Lifecycle
 - `Response.init(gpa) Response` — create a new response
@@ -161,7 +170,7 @@ All mutators return `*Response` for chaining unless they return an error union.
 ### Body Writers
 - `res.text(content) !void` — set plain text body (`Content-Type: text/plain; charset=utf-8`)
 - `res.html(content) !void` — set HTML body (`Content-Type: text/html; charset=utf-8`)
-- `res.json(content) !void` — set JSON body; byte slices are treated as pre-serialized JSON; other types are serialized via `std.json.Stringify` (`Content-Type: application/json`)
+- `res.json(content: anytype) !void` — set JSON body; byte slices are treated as pre-serialized JSON; other types are serialized via `std.json.Stringify` (`Content-Type: application/json`)
 - `res.stream(content) !void` — set chunked streaming response (`Transfer-Encoding: chunked`, `Content-Type: text/plain; charset=utf-8`)
 - `res.redirect(url, code) !void` — set redirect with `Location` header and status code
 
@@ -169,11 +178,14 @@ All mutators return `*Response` for chaining unless they return an error union.
 - `res.setCookie(cookie: Cookie) *Response` — add a `Set-Cookie` header from a `Cookie` struct; builds the full cookie string with `Path`, `Domain`, `Max-Age`, `Secure`, `HttpOnly`, `SameSite` attributes
 - `res.deleteCookie(name) *Response` — delete a cookie by setting `Max-Age=0`
 
+### File Body
+- `res.setFileBody(fd, size) !void` — set a file descriptor as the response body for streaming; bypasses buffering the entire payload in memory
+
 ### Serialization
-- `res.send(gpa, out: *ArrayList(u8)) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided ArrayList
+- `res.send(gpa, out: *ArrayList(u8)) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided ArrayList; if `file_body` is set, sends headers only (the caller is responsible for sending file contents)
 
 ### Known Status Codes
-200 OK, 201 Created, 204 No Content, 301 Moved Permanently, 302 Found, 303 See Other, 307 Temporary Redirect, 308 Permanent Redirect, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 405 Method Not Allowed, 413 Payload Too Large, 422 Unprocessable Entity, 429 Too Many Requests, 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable
+200 OK, 201 Created, 204 No Content, 206 Partial Content, 301 Moved Permanently, 302 Found, 303 See Other, 304 Not Modified, 307 Temporary Redirect, 308 Permanent Redirect, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 405 Method Not Allowed, 413 Payload Too Large, 416 Range Not Satisfiable, 422 Unprocessable Entity, 429 Too Many Requests, 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable
 
 ## Full Example
 
@@ -182,16 +194,16 @@ const std = @import("std");
 const zypher = @import("zypher");
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-    var app = zypher.App.init(gpa.allocator(), .{ .port = 8080 });
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var app = zypher.core.App.init(gpa.allocator(), .{ .port = 8080 });
 
     app.handler(struct {
-        fn handle(req: *zypher.Request, res: *zypher.Response) void {
+        fn handle(req: *zypher.core.Request, res: *zypher.core.Response) void {
             _ = req;
             res.text("Hello, World!") catch {};
         }
     }.handle);
 
-    try app.listenAndServe(std.Io.default());
+    try app.listenAndServe(std.Io.default(gpa.allocator()));
 }
 ```

@@ -99,14 +99,14 @@ Create a static middleware with custom config. Returns a comptime-generated func
 - MIME type detection by extension (html, css, js, json, png, jpg, gif, svg, ico, webp, woff, woff2, ttf, txt, xml, pdf, zip)
 - Path traversal protection (rejects `..` segments)
 - ETag/304 support via `If-None-Match` (XxHash32 of content)
-- `Last-Modified` / `If-Modified-Since` support (Linux only, uses `statx`)
+- `Last-Modified` / `If-Modified-Since` support (uses `statx` on Linux, falls back to POSIX `stat` on other platforms)
 - Passes through to next handler if file not found
 
 ## Compress
 Response compression middleware (gzip).
 
 ### middleware(req, res, next)
-Compresses response body with gzip if client sends `Accept-Encoding: gzip`. Skips encoding if:
+Compresses buffered response body (`res.body`) with gzip if client sends `Accept-Encoding: gzip. Does not compress `res.file_body` (streaming file descriptor) or chunked streaming bodies. Skips encoding if:
 - Client doesn't accept gzip
 - Response already has a `Content-Encoding` header
 - Response has no body or empty body

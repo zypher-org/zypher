@@ -87,32 +87,37 @@ User model with hashed password, role, and active status.
 
 ## Full Example
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
-// Create a session store
-var store = zypher.SessionStore.init(gpa);
-defer store.deinit();
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-// Create a session
-var session = try store.create();
-defer session.deinit(gpa);
+    // Create a session store
+    var store = zypher.auth.session.SessionStore.init(gpa.allocator());
+    defer store.deinit();
 
-// Store data
-try session.put(gpa, "username", "alice");
-try session.put(gpa, "role", "admin");
+    // Create a session
+    var session = try store.create();
+    defer session.deinit(gpa.allocator());
 
-// Save to store
-try store.save(&session);
+    // Store data
+    try session.put(gpa.allocator(), "username", "alice");
+    try session.put(gpa.allocator(), "role", "admin");
 
-// Hash a password
-const hash_str = try zypher.hash(gpa, "my_secret_password");
-defer gpa.free(hash_str);
+    // Save to store
+    try store.save(&session);
 
-// Verify
-const valid = try zypher.verify(hash_str, "my_secret_password");
+    // Hash a password
+    const hash_str = try zypher.auth.password.hash(gpa.allocator(), "my_secret_password");
+    defer gpa.allocator().free(hash_str);
 
-// Create a User
-var user = try zypher.User.init(gpa, "alice", "password123");
-defer user.deinit();
-try user.setRole("admin");
+    // Verify
+    const valid = try zypher.auth.password.verify(hash_str, "my_secret_password");
+
+    // Create a User
+    var user = try zypher.auth.user.User.init(gpa.allocator(), "alice", "password123");
+    defer user.deinit();
+    try user.setRole("admin");
+}
 ```

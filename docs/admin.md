@@ -87,16 +87,17 @@ Every built-in CLI template registers a sample `managed_items` ORM model so `/ad
 
 ## Full Example
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
-const MyModel = zypher.Model("items", .{
-    zypher.Field("id", .integer, .{ .primary = true }),
-    zypher.Field("name", .text, .{ .required = true }),
-    zypher.Field("price", .float, .{}),
+const MyModel = zypher.orm.schema.Model("items", .{
+    zypher.orm.schema.Field("id", .integer, .{ .primary = true }),
+    zypher.orm.schema.Field("name", .text, .{ .required = true }),
+    zypher.orm.schema.Field("price", .float, .{}),
 });
 
-const my_admin = zypher.AdminSite(.{
-    .items = zypher.Registration(MyModel, .{
+const my_admin = zypher.admin.AdminSite(.{
+    .items = zypher.admin.Registration(MyModel, .{
         .verbose_name_plural = "Items",
     }),
 });
@@ -107,11 +108,11 @@ const routes = comptime blk: {
     break :blk site_routes;
 };
 
-var router = zypher.Router.init(routes, notFound);
+var router = zypher.router.Router.init(routes, notFound);
 app.routerHandler(router.dispatch);
 
 // Bind thread-local resources
-zypher.setDb(&db);
-zypher.setEngine(&engine);
+zypher.admin.setDb(&db);
+zypher.admin.setEngine(&engine);
 my_admin.loadTemplates(&engine);
 ```

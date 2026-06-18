@@ -117,19 +117,24 @@ Template filter functions for transforming values in expressions.
 
 ## Full Example
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
-var engine = zypher.TemplateEngine.init(gpa);
-defer engine.deinit();
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-_ = try engine.load("hello.html", "<h1>Hello, {{ name|upper }}!</h1>");
+    var engine = zypher.template.renderer.TemplateEngine.init(gpa.allocator());
+    defer engine.deinit();
 
-var ctx = zypher.Context.init(gpa);
-defer ctx.deinit();
-try ctx.put("name", .{ .string = "world" });
+    _ = try engine.load("hello.html", "<h1>Hello, {{ name|upper }}!</h1>");
 
-var buf: std.ArrayList(u8) = .empty;
-defer buf.deinit(gpa);
-try engine.render("hello.html", &ctx, &std.Io.Writer.fixed(&buf).interface);
-// buf.items == "<h1>Hello, WORLD!</h1>"
+    var ctx = zypher.core.Context.init(gpa.allocator());
+    defer ctx.deinit();
+    try ctx.put("name", .{ .string = "world" });
+
+    var buf = std.ArrayList(u8).init(gpa.allocator());
+    defer buf.deinit();
+    try engine.render("hello.html", &ctx, buf.writer());
+    // buf.items == "<h1>Hello, WORLD!</h1>"
+}
 ```

@@ -72,15 +72,16 @@ Built-in validation functions.
 
 ## Full Example
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
-const ContactForm = zypher.Form("contact", .{
-    zypher.FormField("name", .text, .{ .required = true }),
-    zypher.FormField("email", .text, .{ .required = true }),
-    zypher.FormField("message", .text, .{ .required = true, .validator = zypher.minLength(10) }),
+const ContactForm = zypher.forms.form.Form("contact", .{
+    zypher.forms.form.Field("name", .text, .{ .required = true }),
+    zypher.forms.form.Field("email", .text, .{ .required = true }),
+    zypher.forms.form.Field("message", .text, .{ .required = true, .validator = zypher.forms.validators.minLength(10) }),
 });
 
-pub fn handleForm(req: *zypher.Request, res: *zypher.Response) void {
+pub fn handleForm(req: *zypher.core.Request, res: *zypher.core.Response) void {
     var bound = ContactForm.bindRequest(res.allocator, req) catch return;
     defer bound.deinit();
 

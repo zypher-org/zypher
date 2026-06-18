@@ -84,7 +84,10 @@ fn upload(req: *Request, res: *Response) void {
     defer res.allocator.free(path);
 
     const fd = std.posix.openat(std.posix.AT.FDCWD, path, .{
-        .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true,
+        .ACCMODE = .WRONLY,
+        .CREAT = true,
+        .TRUNC = true,
+        .CLOEXEC = true,
     }, 0o644) catch |err| {
         _ = res.status(500);
         res.text(std.fmt.allocPrint(res.allocator, "open error: {}", .{err}) catch "open error") catch {};

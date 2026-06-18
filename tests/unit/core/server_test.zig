@@ -318,8 +318,11 @@ fn connectWithRetry(addr: *const std.Io.net.IpAddress) !std.Io.net.Stream {
 test "small body within max_inline_body_size is buffered inline" {
     const port: u16 = 19091;
     var server = Server.init(.{
-        .host = "127.0.0.1", .port = port, .max_requests = 2,
-        .max_body_size = 1_000_000, .max_inline_body_size = 500,
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 500,
     });
 
     const server_ctx = struct {
@@ -359,8 +362,11 @@ test "small body within max_inline_body_size is buffered inline" {
 test "large body exceeding max_inline_body_size is streamed via body_stream" {
     const port: u16 = 19092;
     var server = Server.init(.{
-        .host = "127.0.0.1", .port = port, .max_requests = 2,
-        .max_body_size = 1_000_000, .max_inline_body_size = 10,
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 10,
     });
 
     const server_ctx = struct {
@@ -419,8 +425,11 @@ test "large body exceeding max_inline_body_size is streamed via body_stream" {
 test "streaming body can be read with small buffer chunks" {
     const port: u16 = 19093;
     var server = Server.init(.{
-        .host = "127.0.0.1", .port = port, .max_requests = 2,
-        .max_body_size = 1_000_000, .max_inline_body_size = 10,
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 10,
     });
 
     const server_ctx = struct {
@@ -475,8 +484,11 @@ test "streaming body can be read with small buffer chunks" {
 test "unconsumed streaming body is drained without hanging" {
     const port: u16 = 19094;
     var server = Server.init(.{
-        .host = "127.0.0.1", .port = port, .max_requests = 2,
-        .max_body_size = 1_000_000, .max_inline_body_size = 10,
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 10,
     });
 
     const server_ctx = struct {
