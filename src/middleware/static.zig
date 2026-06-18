@@ -222,8 +222,8 @@ fn relativeStaticPath(comptime config: Config, path: []const u8) ?[]const u8 {
 }
 
 /// Default static file middleware.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response, std.Io) void, io: std.Io) void {
-    middlewareWith(.{})(req, res, next, io);
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    middlewareWith(.{})(io, req, res, next);
 }
 
 /// Create a static file middleware with custom configuration.

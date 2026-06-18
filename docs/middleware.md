@@ -4,7 +4,8 @@
 Comptime middleware pipeline. Since Zig has no closures, the `next` callback is solved by generating the entire dispatch chain at comptime — each Chain type has its `run` method fully unrolled.
 
 ### Types
-- `MiddlewareFn = *const fn (*Request, *Response, *const fn (*Request, *Response) void) void` — middleware function signature
+- `NextFn = *const fn (std.Io, *Request, *Response) void` — next callback type
+- `MiddlewareFn = *const fn (std.Io, *Request, *Response, NextFn) void` — middleware function signature
 - `HandlerFn = *const fn (*Request, *Response) void` — terminal handler function signature
 
 ### Chain type
@@ -13,7 +14,7 @@ const MyChain = comptime Chain(.{ mwLogger, mwCors });
 ```
 
 - `Chain(middlewares)` — create a chain type; validates all items are functions at compile time
-- `Chain.run(req, res, handler)` — execute the middleware chain, ending with `handler`
+- `Chain.run(io, req, res, handler)` — execute the middleware chain, ending with `handler`
 
 ### Thread-local Terminal Handler
 The terminal handler is passed through a `threadlocal` variable because Zig inner functions cannot capture outer parameters.
@@ -21,8 +22,8 @@ The terminal handler is passed through a `threadlocal` variable because Zig inne
 ## Logger
 Request logging middleware using `std.log.scoped(.http)`.
 
-### middleware(req, res, next)
-Logs: HTTP method, path, response status code, and elapsed time in microseconds. Uses `CLOCK_MONOTONIC` for timing.
+### middleware(io, req, res, next)
+Logs: HTTP method, path, response status code, and elapsed time in microseconds. Uses `std.Io.Timestamp` for timing.
 
 ## CORS
 Cross-Origin Resource Sharing middleware.
@@ -34,11 +35,11 @@ Cross-Origin Resource Sharing middleware.
 - `max_age: []const u8 = "86400"` — preflight cache duration
 - `allow_credentials: bool = false` — allow credentials (cookies, auth headers)
 
-### middleware(req, res, next)
+### middleware(io, req, res, next)
 Default CORS middleware — allows all origins.
 
-### middlewareWith(config)(req, res, next)
-Create a CORS middleware with custom `Config`. Returns a comptime-generated function pointer.
+### middlewareWith(config)
+Create a CORS middleware with custom `Config`. Returns a comptime-generated function pointer with signature `(std.Io, *Request, *Response, *const fn (std.Io, *Request, *Response) void) void`.
 
 ### Behavior
 - Requests without `Origin` header pass through (not a CORS request)
@@ -54,7 +55,7 @@ Cross-Site Request Forgery protection middleware. Stores a 256-bit random token 
 - Unsafe methods (POST, PUT, DELETE, PATCH): validate `X-CSRF-Token` header or `_csrf` form value against session
 
 ### Functions
-- `middleware(req, res, next)` — CSRF middleware function
+- `middleware(io, req, res, next)` — CSRF middleware function
 - `ensureToken(req) ![]const u8` — return the CSRF token from the session, creating and storing a random one if absent; requires `req.user` to be a `*Session`
 - `validateTokenForRequest(req, token) bool` — validate a token against the session token (constant-time comparison)
 - `formFieldForRequest(gpa, req) ![]u8` — return an owned HTML hidden input `<input type="hidden" name="_csrf" value="...">` using the request session token
@@ -72,12 +73,12 @@ Fixed window rate limiter per client IP.
 - `limiter.deinit()` — free internal state
 - `limiter.allow(key) !bool` — check if a request from the given key is allowed
 
-### middleware(req, res, next)
+### middleware(io, req, res, next)
 Default rate limit middleware (100 req/min). Uses `X-Forwarded-For` header or `"default"` as the key.
 
 ### middlewareWith(config)
 Create a rate limit middleware type with custom configuration. Returns a struct type with:
-- `handle(req, res, next)` — the middleware function
+- `handle(io, req, res, next)` — the middleware function
 - `deinit()` — free internal state
 - `middleware()` — get the function pointer for use in Chain
 
@@ -89,14 +90,14 @@ Static file serving middleware.
 - `prefix: []const u8 = "/"` — URL prefix to strip
 - `serve_index: bool = true` — whether to serve index.html for directory paths
 
-### middleware(req, res, next)
+### middleware(io, req, res, next)
 Default static middleware (root: `./public`).
 
 ### middlewareWith(config)
 Create a static middleware with custom config. Returns a comptime-generated function pointer.
 
 ### Features
-- MIME type detection by extension (html, css, js, json, png, jpg, gif, svg, ico, webp, woff, woff2, ttf, txt, xml, pdf, zip)
+- MIME type detection by extension (70+ types including web, images, fonts, video, audio, documents, archives, executables, scripts)
 - Path traversal protection (rejects `..` segments)
 - ETag/304 support via `If-None-Match` (XxHash32 of content)
 - `Last-Modified` / `If-Modified-Since` support (uses `statx` on Linux, falls back to POSIX `stat` on other platforms)
@@ -105,8 +106,8 @@ Create a static middleware with custom config. Returns a comptime-generated func
 ## Compress
 Response compression middleware (gzip).
 
-### middleware(req, res, next)
-Compresses buffered response body (`res.body`) with gzip if client sends `Accept-Encoding: gzip. Does not compress `res.file_body` (streaming file descriptor) or chunked streaming bodies. Skips encoding if:
+### middleware(io, req, res, next)
+Compresses buffered response body (`res.body`) with gzip if client sends `Accept-Encoding: gzip`. Does not compress `res.file_body` (streaming file descriptor) or chunked streaming bodies. Skips encoding if:
 - Client doesn't accept gzip
 - Response already has a `Content-Encoding` header
 - Response has no body or empty body
@@ -121,7 +122,7 @@ Session management middleware. Loads/saves session on every request.
 - `setCookieConfig(config: CookieConfig)` — set cookie attributes (HttpOnly, Secure, SameSite, Path, Max-Age)
 - `resetCookieConfig()` — restore default secure cookie config
 
-### middleware(req, res, next)
+### middleware(io, req, res, next)
 1. Reads `zypher_session` cookie
 2. Loads session from store via cookie hex ID
 3. Attaches session pointer to `req.user` (cast to `*anyopaque`)
@@ -143,10 +144,10 @@ Security header injection middleware. Sets standard security-related HTTP header
 
 ### Functions
 - `configure(opts: Options) void` — configure security headers (thread-local)
-- `middleware(req, res, next)` — add configured security headers
+- `middleware(io, req, res, next)` — add configured security headers
 
 ## Recovery
-Recovery middleware placeholder. Zig panics are not recoverable through a middleware function signature; this middleware simply calls `next(req, res)`. Use process supervision for panic isolation.
+Recovery middleware placeholder. Zig panics are not recoverable through a middleware function signature; this middleware simply calls `next(io, req, res)`. Use process supervision for panic isolation.
 
-### middleware(req, res, next)
+### middleware(io, req, res, next)
 Calls the next handler. Does not catch panics.

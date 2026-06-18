@@ -1,7 +1,7 @@
 # Core API
 
 ## Method
-HTTP method enum with 7 variants: `get`, `post`, `put`, `patch`, `delete`, `options`, `head`.
+HTTP method enum with 7 variants: `.get`, `.post`, `.put`, `.patch`, `.delete`, `.options`, `.head`.
 
 ## SameSite
 Cookie `SameSite` attribute enum:
@@ -182,7 +182,8 @@ All mutators return `*Response` for chaining unless they return an error union.
 - `res.setFileBody(fd, size) !void` — set a file descriptor as the response body for streaming; bypasses buffering the entire payload in memory
 
 ### Serialization
-- `res.send(gpa, out: *ArrayList(u8)) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided ArrayList; if `file_body` is set, sends headers only (the caller is responsible for sending file contents)
+- `res.send(io, w: *std.Io.Writer) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided writer; if `file_body` is set, streams file content directly to the writer
+- `res.sendHeaders(w: *std.Io.Writer) !void` — serialize only the status line and headers (used when streaming file bodies manually)
 
 ### Known Status Codes
 200 OK, 201 Created, 204 No Content, 206 Partial Content, 301 Moved Permanently, 302 Found, 303 See Other, 304 Not Modified, 307 Temporary Redirect, 308 Permanent Redirect, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 405 Method Not Allowed, 413 Payload Too Large, 416 Range Not Satisfiable, 422 Unprocessable Entity, 429 Too Many Requests, 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable
