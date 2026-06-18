@@ -5,7 +5,6 @@ const builtin = @import("builtin");
 const log = std.log.scoped(.password);
 const pbkdf2 = std.crypto.pwhash.pbkdf2;
 const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
-const posix = std.posix;
 const util = @import("../util.zig");
 
 /// Hash output length in bytes.

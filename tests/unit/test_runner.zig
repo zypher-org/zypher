@@ -1,5 +1,6 @@
 // Unit test runner — imports all unit test files.
 test {
+    _ = @import("test_io");
     _ = @import("log_test.zig");
     _ = @import("errors_test.zig");
     _ = @import("core/request_test.zig");

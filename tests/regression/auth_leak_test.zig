@@ -56,13 +56,13 @@ test "regression: session store deep-copy prevents double-free" {
     s.deinit(std.testing.allocator); // This should NOT double-free
 
     // Verify data is still accessible from the store
-    const retrieved = try store.get(s.id);
+    const retrieved = try store.get(s.id, std.testing.io);
     try std.testing.expect(retrieved != null);
     try std.testing.expectEqualStrings("val1", retrieved.?.get("key1") orelse "");
     try std.testing.expectEqualStrings("val2", retrieved.?.get("key2") orelse "");
 
     // Destroy and verify cleanup
     try store.destroy(s.id);
-    const after = try store.get(s.id);
+    const after = try store.get(s.id, std.testing.io);
     try std.testing.expect(after == null);
 }

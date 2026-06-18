@@ -26,7 +26,7 @@ test "auth: full auth flow — register, login, protected, logout, denied" {
     session.deinit(std.testing.allocator);
 
     // 3. Verify session has user data
-    const loaded = try store.get(session.id);
+    const loaded = try store.get(session.id, std.testing.io);
     try std.testing.expect(loaded != null);
     try std.testing.expectEqualStrings("alice", loaded.?.get("user_id") orelse "");
 
@@ -55,7 +55,7 @@ test "auth: full auth flow — register, login, protected, logout, denied" {
 
     // 5. Destroy session (logout)
     try store.destroy(session.id);
-    const after_logout = try store.get(session.id);
+    const after_logout = try store.get(session.id, std.testing.io);
     try std.testing.expect(after_logout == null);
 
     // 6. Simulate unauthenticated request → loginRequired would redirect

@@ -38,7 +38,7 @@ test "session: session stored and retrieved from store" {
     try store.save(&s);
     s.deinit(std.testing.allocator); // save deep-copies, so local s can be freed
 
-    const retrieved = try store.get(s.id);
+    const retrieved = try store.get(s.id, std.testing.io);
     try std.testing.expect(retrieved != null);
     try std.testing.expectEqualStrings("42", retrieved.?.get("user_id") orelse "");
 }
@@ -53,11 +53,11 @@ test "session: saving retrieved store-owned session keeps lookup valid" {
     const session_id = s.id;
     s.deinit(std.testing.allocator);
 
-    const retrieved = (try store.get(session_id)).?;
+    const retrieved = (try store.get(session_id, std.testing.io)).?;
     try retrieved.put(std.testing.allocator, "role", "user");
     try store.save(retrieved);
 
-    const again = (try store.get(session_id)).?;
+    const again = (try store.get(session_id, std.testing.io)).?;
     try std.testing.expectEqualStrings("42", again.get("user_id") orelse "");
     try std.testing.expectEqualStrings("user", again.get("role") orelse "");
 }
@@ -66,7 +66,7 @@ test "session: non-existent session returns null" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    const result = try store.getByHexId("nonexistent");
+    const result = try store.getByHexId("nonexistent", std.testing.io);
     try std.testing.expect(result == null);
 }
 
@@ -98,7 +98,7 @@ test "session: expired sessions return null" {
     s.deinit(std.testing.allocator); // save deep-copies, so local s can be freed
 
     // Retrieving should return null because it's expired
-    const retrieved = try store.get(s.id);
+    const retrieved = try store.get(s.id, std.testing.io);
     try std.testing.expect(retrieved == null);
 }
 
@@ -115,7 +115,7 @@ test "session: session destroyed on logout" {
 
     try store.destroy(s.id);
 
-    const retrieved = try store.get(s.id);
+    const retrieved = try store.get(s.id, std.testing.io);
     try std.testing.expect(retrieved == null);
 }
 

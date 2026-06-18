@@ -52,7 +52,7 @@ pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (st
     var loaded_session: ?*Session = null;
 
     if (cookie_val) |hex_id| {
-        loaded_session = store.getByHexId(hex_id) catch null;
+        loaded_session = store.getByHexId(hex_id, io) catch null;
     }
 
     // Attach session to request (cast to *anyopaque for the user field)
@@ -71,7 +71,7 @@ pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (st
         new_session.deinit(store.gpa); // save deep-copies
 
         // Re-fetch the stored session as a pointer
-        const retrieved = store.get(new_session.id) catch null;
+        const retrieved = store.get(new_session.id, io) catch null;
         if (retrieved) |s| {
             req.user = @ptrCast(s);
         }

@@ -163,10 +163,10 @@ test "logout: session destruction works via session store" {
     try session.put(std.testing.allocator, "username", "testuser");
     try store.save(&session);
 
-    const retrieved = try store.get(session.id);
+    const retrieved = try store.get(session.id, std.testing.io);
     try std.testing.expect(retrieved != null);
 
     try store.destroy(session.id);
-    const after_destroy = try store.get(session.id);
+    const after_destroy = try store.get(session.id, std.testing.io);
     try std.testing.expect(after_destroy == null);
 }
