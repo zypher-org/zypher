@@ -198,10 +198,7 @@ pub const Server = struct {
                 defer err_res.deinit();
                 _ = err_res.status(400);
                 try err_res.text("Bad Request");
-                var res_buf: std.ArrayList(u8) = .empty;
-                defer res_buf.deinit(gpa);
-                try err_res.send(gpa, &res_buf);
-                try stream_writer.interface.writeAll(res_buf.items);
+                try err_res.send(io, &stream_writer.interface);
                 try stream_writer.interface.flush();
                 return;
             };
@@ -284,10 +281,7 @@ pub const Server = struct {
                 }
             }
 
-            var res_buf: std.ArrayList(u8) = .empty;
-            defer res_buf.deinit(gpa);
-            try res.send(gpa, &res_buf);
-            try stream_writer.interface.writeAll(res_buf.items);
+            try res.send(io, &stream_writer.interface);
             try stream_writer.interface.flush();
         }
     }

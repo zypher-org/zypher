@@ -73,10 +73,9 @@ fn rawJsonSlice(content: anytype) ?[]const u8 {
     };
 }
 
-/// Descriptor and size of a file whose contents will be streamed directly
-/// to the socket without buffering the entire payload in memory.
+/// File body to be read and written via std.Io.File.
 pub const FileBody = struct {
-    fd: std.posix.fd_t,
+    handle: std.Io.File.Handle,
     size: usize,
 };
 
@@ -103,13 +102,13 @@ pub const Response = struct {
         };
     }
 
-    /// Use a file descriptor as the response body, streaming its contents
-    /// directly to the socket. The caller retains ownership of `fd` and
+    /// Use a file handle as the response body, streaming its contents
+    /// to the socket. The caller retains ownership of `handle` and
     /// must close it after the response has been sent.
-    pub fn setFileBody(self: *Response, fd: std.posix.fd_t, size: usize) !void {
+    pub fn setFileBody(self: *Response, handle: std.Io.File.Handle, size: usize) !void {
         if (self.body) |b| self.allocator.free(b);
         self.body = null;
-        self.file_body = .{ .fd = fd, .size = size };
+        self.file_body = .{ .handle = handle, .size = size };
     }
 
     /// Free all owned memory.
@@ -277,20 +276,19 @@ pub const Response = struct {
 
     // ───────────── Serialisation ─────────────
 
-    /// Serialise the response status line and headers into the provided ArrayList.
-    /// Useful when you want to send headers first and stream the body separately.
-    pub fn sendHeaders(self: *Response, gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+    /// Serialise the response status line and headers into the provided writer.
+    pub fn sendHeaders(self: *Response, w: *std.Io.Writer) !void {
         const phrase = self.reason_phrase orelse "";
-        try out.appendSlice(gpa, "HTTP/1.1 ");
+        try w.writeAll("HTTP/1.1 ");
         var int_buf: [8]u8 = undefined;
         const status_str = try std.fmt.bufPrint(&int_buf, "{d}", .{self.status_code});
-        try out.appendSlice(gpa, status_str);
-        try out.appendSlice(gpa, " ");
-        try out.appendSlice(gpa, phrase);
-        try out.appendSlice(gpa, "\r\n");
+        try w.writeAll(status_str);
+        try w.writeAll(" ");
+        try w.writeAll(phrase);
+        try w.writeAll("\r\n");
 
         if (!self.use_chunked) {
-            try out.appendSlice(gpa, "Content-Length: ");
+            try w.writeAll("Content-Length: ");
             var len_buf: [16]u8 = undefined;
             const len = if (self.file_body) |fb|
                 fb.size
@@ -299,46 +297,48 @@ pub const Response = struct {
             else
                 0;
             const len_str = try std.fmt.bufPrint(&len_buf, "{d}", .{len});
-            try out.appendSlice(gpa, len_str);
-            try out.appendSlice(gpa, "\r\n");
+            try w.writeAll(len_str);
+            try w.writeAll("\r\n");
         }
 
         // Write all headers
         var it = self.headers.iterator();
         while (it.next()) |entry| {
-            try out.appendSlice(gpa, entry.key_ptr.*);
-            try out.appendSlice(gpa, ": ");
-            try out.appendSlice(gpa, entry.value_ptr.*);
-            try out.appendSlice(gpa, "\r\n");
+            try w.writeAll(entry.key_ptr.*);
+            try w.writeAll(": ");
+            try w.writeAll(entry.value_ptr.*);
+            try w.writeAll("\r\n");
         }
         for (self.set_cookie_headers.items) |cookie| {
-            try out.appendSlice(gpa, "Set-Cookie: ");
-            try out.appendSlice(gpa, cookie);
-            try out.appendSlice(gpa, "\r\n");
+            try w.writeAll("Set-Cookie: ");
+            try w.writeAll(cookie);
+            try w.writeAll("\r\n");
         }
 
-        try out.appendSlice(gpa, "\r\n");
+        try w.writeAll("\r\n");
     }
 
-    /// Serialise the full HTTP response into the provided ArrayList.
-    /// If `file_body` is set, the file content is read in chunks into the buffer.
-    pub fn send(self: *Response, gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
-        try self.sendHeaders(gpa, out);
+    /// Serialise the full HTTP response into the provided writer.
+    /// If `file_body` is set, the file content is read in chunks and written.
+    pub fn send(self: *Response, io: std.Io, w: *std.Io.Writer) !void {
+        try self.sendHeaders(w);
 
         const phrase = self.reason_phrase orelse "";
 
         // Write body
         if (self.body) |b| {
-            try out.appendSlice(gpa, b);
+            try w.writeAll(b);
         } else if (self.file_body) |fb| {
             // Stream file content in chunks
             var buf: [8192]u8 = undefined;
             var remaining: usize = fb.size;
+            const file = std.Io.File{ .handle = fb.handle, .flags = .{ .nonblocking = false } };
             while (remaining > 0) {
                 const to_read = @min(buf.len, remaining);
-                const n = try std.posix.read(fb.fd, buf[0..to_read]);
+                var data: [1][]u8 = .{buf[0..to_read]};
+                const n = try std.Io.File.readStreaming(file, io, &data);
                 if (n == 0) break;
-                try out.appendSlice(gpa, buf[0..n]);
+                try w.writeAll(buf[0..n]);
                 remaining -= n;
             }
         }
