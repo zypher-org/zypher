@@ -44,7 +44,7 @@ fn migrateProductTable(db: *sqlite.Db) !void {
     const migrations = [_]migration.Migration{
         .{ .id = 1, .name = "create_products", .up_sql = Product.create_table_sql, .down_sql = Product.drop_table_sql },
     };
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 }
 
 /// Create a session with admin role, set it on the request, and return the
@@ -237,7 +237,7 @@ test "admin views: create handler inserts record" {
         admin_session.deinit(std.testing.allocator);
         std.testing.allocator.destroy(admin_session);
     }
-    try req.query.put("_csrf", try csrf.ensureToken(&req));
+    try req.query.put("_csrf", try csrf.ensureTokenForRequest(&req));
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -379,7 +379,7 @@ test "admin views: delete handler removes record" {
         admin_session.deinit(std.testing.allocator);
         std.testing.allocator.destroy(admin_session);
     }
-    try req.query.put("_csrf", try csrf.ensureToken(&req));
+    try req.query.put("_csrf", try csrf.ensureTokenForRequest(&req));
 
     var res = Response.init(std.testing.allocator);
     defer res.deinit();
@@ -417,7 +417,7 @@ fn migratePageItems(db: *sqlite.Db) !void {
     var runner = migration.MigrationRunner.init(db);
     try runner.migrate(&[_]migration.Migration{
         .{ .id = 1, .name = "create_page_items", .up_sql = PageItem.create_table_sql, .down_sql = PageItem.drop_table_sql },
-    });
+    }, std.testing.io);
 }
 
 test "admin views: pagination — page 1 shows first items" {

@@ -32,7 +32,7 @@ test "Static: path traversal is rejected with 403" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 403), res.status_code);
 }
@@ -47,7 +47,7 @@ test "Static: non-prefix path passes through to handler" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     // /api/data doesn't start with /static prefix, so passes through
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
@@ -67,7 +67,7 @@ test "Static: serves file from configured directory" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expectEqualStrings("body{color:red}", res.body.?);
@@ -88,7 +88,7 @@ test "Static: If-Modified-Since returns 304 for matching Last-Modified" {
     defer first_req.deinit();
     var first_res = Response.init(gpa);
     defer first_res.deinit();
-    MyChain.run(&first_req, &first_res, ok_handler);
+    MyChain.run(std.testing.io, &first_req, &first_res, ok_handler);
     const last_modified = first_res.headers.get("Last-Modified").?;
 
     var cached_req = makeRequest(gpa, .get, "/static/app.js");
@@ -97,7 +97,7 @@ test "Static: If-Modified-Since returns 304 for matching Last-Modified" {
     var cached_res = Response.init(gpa);
     defer cached_res.deinit();
 
-    MyChain.run(&cached_req, &cached_res, ok_handler);
+    MyChain.run(std.testing.io, &cached_req, &cached_res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 304), cached_res.status_code);
     try std.testing.expect(cached_res.body == null);
@@ -117,7 +117,7 @@ test "Static: missing file passes through to handler" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expectEqualStrings("ok", res.body.?);
@@ -137,7 +137,7 @@ test "Static: HEAD request returns headers without body" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expect(res.body == null);
@@ -161,7 +161,7 @@ test "Static: Accept-Ranges header present on normal response" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expectEqualStrings("bytes", res.headers.get("Accept-Ranges").?);
@@ -182,7 +182,7 @@ test "Static: Range request returns 206 Partial Content" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 206), res.status_code);
     try std.testing.expectEqual(@as(usize, 11), res.body.?.len);
@@ -206,7 +206,7 @@ test "Static: Range request returns 206 with mid-file range" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 206), res.status_code);
     try std.testing.expectEqualStrings("World", res.body.?);
@@ -228,7 +228,7 @@ test "Static: Range request with open-ended range" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 206), res.status_code);
     try std.testing.expectEqualStrings("World, this is a test", res.body.?);
@@ -249,7 +249,7 @@ test "Static: Range request with suffix range (last N bytes)" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 206), res.status_code);
     try std.testing.expectEqualStrings("test", res.body.?);
@@ -270,7 +270,7 @@ test "Static: Invalid Range returns 416 Range Not Satisfiable" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 416), res.status_code);
 }
@@ -289,7 +289,7 @@ test "Static: If-None-Match with valid ETag returns 304 even for range request" 
     defer first_req.deinit();
     var first_res = Response.init(gpa);
     defer first_res.deinit();
-    MyChain.run(&first_req, &first_res, ok_handler);
+    MyChain.run(std.testing.io, &first_req, &first_res, ok_handler);
     const etag = first_res.headers.get("ETag").?;
 
     // Cached request with Range + If-None-Match
@@ -300,7 +300,7 @@ test "Static: If-None-Match with valid ETag returns 304 even for range request" 
     var cached_res = Response.init(gpa);
     defer cached_res.deinit();
 
-    MyChain.run(&cached_req, &cached_res, ok_handler);
+    MyChain.run(std.testing.io, &cached_req, &cached_res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 304), cached_res.status_code);
     try std.testing.expect(cached_res.body == null);

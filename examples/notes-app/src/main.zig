@@ -515,12 +515,14 @@ fn notFoundHandler(_: *Request, res: *Response) void {
     renderLayout(res, "Not Found", "<section class=\"empty\"><h1>Not Found</h1><p>The requested page does not exist.</p></section>");
 }
 
+threadlocal var tl_io: std.Io = undefined;
+
 fn routerDispatch(req: *Request, res: *Response) void {
     app_context.get().router.dispatch(req, res);
 }
 
 fn middlewareDispatch(req: *Request, res: *Response) void {
-    MiddlewareChain.run(req, res, routerDispatch);
+    MiddlewareChain.run(tl_io, req, res, routerDispatch);
 }
 
 fn parsePort(init: std.process.Init) u16 {
@@ -591,6 +593,8 @@ pub fn main(init: std.process.Init) !void {
     app_context.set(&ctx);
     zypher.admin.setDb(&db);
     zypher.admin.setEngine(&engine);
+
+    tl_io = init.io;
 
     var app = zypher.core.App.init(allocator, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();

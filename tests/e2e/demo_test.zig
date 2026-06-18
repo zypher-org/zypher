@@ -67,7 +67,7 @@ test "register user via ORM: create user, hash password, authenticate" {
         \\)
     );
 
-    const hash = try password.hash(std.testing.allocator, "secure_password");
+    const hash = try password.hash(std.testing.io, std.testing.allocator, "secure_password");
     defer std.testing.allocator.free(hash);
 
     const insert_sql = "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, 'user', 1)";
@@ -158,7 +158,7 @@ test "logout: session destruction works via session store" {
     var store = zypher.auth.session.SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var session = try store.create();
+    var session = store.create(std.testing.io);
     defer session.deinit(std.testing.allocator);
     try session.put(std.testing.allocator, "username", "testuser");
     try store.save(&session);

@@ -19,10 +19,9 @@ pub const RunserverConfig = struct {
     max_requests: ?usize = null,
 };
 
-var runserver_signal_app: ?*App = null;
-var runserver_signal_io: ?std.Io = null;
-const supports_posix_signals = builtin.os.tag != .windows and builtin.os.tag != .wasi;
-const RunserverSigintState = if (supports_posix_signals) std.posix.Sigaction else void;
+/// Set by runserver/docs-server; read by cli/main.zig's SIGINT handler.
+pub var sigint_app: ?*App = null;
+
 var docs_server_root: []const u8 = "zig-out/docs";
 var docs_server_io: ?std.Io = null;
 
@@ -613,14 +612,14 @@ fn cmdCreatesuperuser(
     if (username == null or email == null or plain_password == null) {
         var stdin_buffer: [4096]u8 = undefined;
         var stdin_reader = std.Io.File.stdin().reader(init.io, &stdin_buffer);
-        runCreatesuperuserInteractive(gpa, db_path, &stdin_reader.interface, out_writer, err_writer) catch |err| {
+        runCreatesuperuserInteractive(init.io, gpa, db_path, &stdin_reader.interface, out_writer, err_writer) catch |err| {
             try printSuperuserError(err_writer, err);
             std.process.exit(1);
         };
         return;
     }
 
-    const row_id = createSuperuser(gpa, db_path, .{
+    const row_id = createSuperuser(init.io, gpa, db_path, .{
         .username = username.?,
         .email = email.?,
         .password = plain_password.?,
@@ -654,6 +653,7 @@ pub fn validateSuperuserCredentials(input: SuperuserInput) !void {
 
 /// Prompt for superuser credentials and create the admin account.
 pub fn runCreatesuperuserPrompt(
+    io: std.Io,
     gpa: std.mem.Allocator,
     db_path: [:0]const u8,
     reader: *std.Io.Reader,
@@ -679,7 +679,7 @@ pub fn runCreatesuperuserPrompt(
     defer gpa.free(confirm_password);
     if (!std.mem.eql(u8, plain_password, confirm_password)) return error.PasswordMismatch;
 
-    const row_id = try createSuperuser(gpa, db_path, .{
+    const row_id = try createSuperuser(io, gpa, db_path, .{
         .username = username,
         .email = email,
         .password = plain_password,
@@ -688,6 +688,7 @@ pub fn runCreatesuperuserPrompt(
 }
 
 fn runCreatesuperuserInteractive(
+    io: std.Io,
     gpa: std.mem.Allocator,
     db_path: [:0]const u8,
     reader: *std.Io.Reader,
@@ -713,7 +714,7 @@ fn runCreatesuperuserInteractive(
     defer gpa.free(confirm_password);
     if (!std.mem.eql(u8, plain_password, confirm_password)) return error.PasswordMismatch;
 
-    const row_id = try createSuperuser(gpa, db_path, .{
+    const row_id = try createSuperuser(io, gpa, db_path, .{
         .username = username,
         .email = email,
         .password = plain_password,
@@ -776,7 +777,7 @@ fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
     return false;
 }
 
-fn createSuperuser(gpa: std.mem.Allocator, db_path: [:0]const u8, input: SuperuserInput) !i64 {
+fn createSuperuser(io: std.Io, gpa: std.mem.Allocator, db_path: [:0]const u8, input: SuperuserInput) !i64 {
     try validateSuperuserCredentials(input);
 
     var db = sqlite.Db.open(gpa, db_path) catch {
@@ -786,7 +787,7 @@ fn createSuperuser(gpa: std.mem.Allocator, db_path: [:0]const u8, input: Superus
 
     try ensureUserSchema(&db);
 
-    const hash_str = password.hash(gpa, input.password) catch return error.HashPasswordFailed;
+    const hash_str = password.hash(io, gpa, input.password) catch return error.HashPasswordFailed;
     defer gpa.free(hash_str);
 
     var stmt = db.prepare("INSERT INTO users (username, email, password_hash, role, is_active) VALUES (?, ?, ?, 'admin', 1)") catch {
@@ -1590,10 +1591,8 @@ fn buildAndServeDocs(
     defer app.deinit();
     app.handler_fn = docsHandler;
 
-    bindRunserverSignalTarget(&app, init.io);
-    defer clearRunserverSignalTarget();
-    const old_sigint = installRunserverSigintHandler();
-    defer restoreRunserverSigintHandler(old_sigint);
+    sigint_app = &app;
+    defer sigint_app = null;
 
     try app.listenAndServe(init.io);
 }
@@ -1706,54 +1705,6 @@ pub fn runserverDefaultHandler(req: *Request, res: *Response) void {
     res.text("zypher server is running") catch {};
 }
 
-pub fn bindRunserverSignalTarget(app: *App, io: std.Io) void {
-    runserver_signal_app = app;
-    runserver_signal_io = io;
-}
-
-pub fn clearRunserverSignalTarget() void {
-    runserver_signal_app = null;
-    runserver_signal_io = null;
-}
-
-pub const runserverSigintHandler = if (supports_posix_signals)
-    struct {
-        fn handle(sig: std.posix.SIG, info: *const std.posix.siginfo_t, context: ?*anyopaque) callconv(.c) void {
-            _ = sig;
-            _ = info;
-            _ = context;
-            if (runserver_signal_app) |app| {
-                if (runserver_signal_io) |io| {
-                    app.shutdown(io);
-                }
-            }
-        }
-    }.handle
-else
-    struct {
-        fn handle() void {}
-    }.handle;
-
-fn installRunserverSigintHandler() RunserverSigintState {
-    if (!supports_posix_signals) return {};
-
-    const act: std.posix.Sigaction = .{
-        .handler = .{ .sigaction = runserverSigintHandler },
-        .mask = std.posix.sigemptyset(),
-        .flags = std.posix.SA.SIGINFO,
-    };
-    var old: std.posix.Sigaction = undefined;
-    std.posix.sigaction(.INT, &act, &old);
-    return old;
-}
-
-fn restoreRunserverSigintHandler(old: RunserverSigintState) void {
-    if (!supports_posix_signals) return;
-
-    var previous: std.posix.Sigaction = undefined;
-    std.posix.sigaction(.INT, &old, &previous);
-}
-
 fn cmdRunserver(
     out_writer: *std.Io.Writer,
     err_writer: *std.Io.Writer,
@@ -1781,10 +1732,8 @@ fn cmdRunserver(
 
     app.handler_fn = runserverDefaultHandler;
 
-    bindRunserverSignalTarget(&app, init.io);
-    defer clearRunserverSignalTarget();
-    const old_sigint = installRunserverSigintHandler();
-    defer restoreRunserverSigintHandler(old_sigint);
+    sigint_app = &app;
+    defer sigint_app = null;
 
     try app.listenAndServe(init.io);
 }

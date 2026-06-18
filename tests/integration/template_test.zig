@@ -21,7 +21,7 @@ test "integration: template engine renders page with context data" {
     defer engine.deinit();
 
     const tmpl_src = "<h1>{{ title }}</h1><p>{{ body }}</p>";
-    const tmpl = try engine.load("page", tmpl_src);
+    const tmpl = try engine.loadFromSource("page", tmpl_src);
 
     var ctx = Context.init(gpa);
     defer ctx.deinit();
@@ -72,10 +72,10 @@ test "integration: template engine caches and re-renders" {
     defer engine.deinit();
 
     const tmpl_src = "Hello {{ name }}!";
-    _ = try engine.load("greeting", tmpl_src);
+    _ = try engine.loadFromSource("greeting", tmpl_src);
 
     // Second load should hit cache
-    const tmpl2 = try engine.load("greeting", tmpl_src);
+    const tmpl2 = try engine.loadFromSource("greeting", tmpl_src);
 
     var ctx = Context.init(gpa);
     defer ctx.deinit();

@@ -683,9 +683,11 @@ fn notFoundHandler(req: *Request, res: *Response) void {
 
 // ── Middleware ─────────────────────────────────────────────────────────────
 
-fn loggerMw(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+threadlocal var tl_io: std.Io = undefined;
+
+fn loggerMw(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     std.log.info("→ {s} {s}", .{ @tagName(req.method), req.path });
-    next(req, res);
+    next(io, req, res);
     std.log.info("← {d}", .{res.status_code});
 }
 
@@ -698,7 +700,7 @@ fn dispatchWrapper(req: *Request, res: *Response) void {
 }
 
 fn mwHandler(req: *Request, res: *Response) void {
-    MwChain.run(req, res, dispatchWrapper);
+    MwChain.run(tl_io, req, res, dispatchWrapper);
 }
 
 fn parsePort(init: std.process.Init) u16 {
@@ -720,6 +722,8 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
+    tl_io = io;
+
     // ── Database ───────────────────────────────────────────────────────
     var db = try sqlite.Db.open(allocator, "zypher_demo.db");
     errdefer db.close();
@@ -739,7 +743,7 @@ pub fn main(init: std.process.Init) !void {
     // ── Template Engine ────────────────────────────────────────────────
     var engine = TemplateEngine.init(allocator);
     defer engine.deinit();
-    _ = try engine.load("base.html",
+    _ = try engine.loadFromSource("base.html",
         \\<!DOCTYPE html>
         \\<html>
         \\<head>

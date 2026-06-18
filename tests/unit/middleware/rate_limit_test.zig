@@ -34,7 +34,7 @@ test "Rate limit: under limit passes through" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
 }
@@ -52,7 +52,7 @@ test "Rate limit: over limit returns 429" {
         defer req.deinit();
         var res = Response.init(gpa);
         defer res.deinit();
-        MyChain.run(&req, &res, ok_handler);
+        MyChain.run(std.testing.io, &req, &res, ok_handler);
         try std.testing.expectEqual(@as(u16, 200), res.status_code);
     }
     {
@@ -60,7 +60,7 @@ test "Rate limit: over limit returns 429" {
         defer req.deinit();
         var res = Response.init(gpa);
         defer res.deinit();
-        MyChain.run(&req, &res, ok_handler);
+        MyChain.run(std.testing.io, &req, &res, ok_handler);
         try std.testing.expectEqual(@as(u16, 200), res.status_code);
     }
     // Third request should be rate limited
@@ -69,7 +69,7 @@ test "Rate limit: over limit returns 429" {
         defer req.deinit();
         var res = Response.init(gpa);
         defer res.deinit();
-        MyChain.run(&req, &res, ok_handler);
+        MyChain.run(std.testing.io, &req, &res, ok_handler);
         try std.testing.expectEqual(@as(u16, 429), res.status_code);
         const retry = res.headers.get("Retry-After");
         try std.testing.expect(retry != null);

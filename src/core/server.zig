@@ -131,9 +131,19 @@ pub const Server = struct {
 
         var served_requests: usize = 0;
         while (!self.shutdown_requested.load(.acquire)) {
+            io.checkCancel() catch |check_err| switch (check_err) {
+                error.Canceled => {
+                    log.info("server io cancelled, shutting down", .{});
+                    break;
+                },
+            };
             const stream = net_server.accept(io) catch |err| {
                 if (err == error.SocketNotListening and self.shutdown_requested.load(.acquire)) {
                     log.info("server shutdown requested", .{});
+                    break;
+                }
+                if (err == error.Canceled) {
+                    log.info("server accept cancelled", .{});
                     break;
                 }
                 log.warn("accept failed: {t}", .{err});

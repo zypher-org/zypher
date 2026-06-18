@@ -44,7 +44,7 @@ test "Logger: logs method, path, status code, and duration" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
 }
@@ -59,7 +59,7 @@ test "Logger: logs 404 status from handler" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, not_found_handler);
+    MyChain.run(std.testing.io, &req, &res, not_found_handler);
 
     try std.testing.expectEqual(@as(u16, 404), res.status_code);
 }
@@ -74,7 +74,7 @@ test "Logger: works with POST method" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, created_handler);
+    MyChain.run(std.testing.io, &req, &res, created_handler);
 
     try std.testing.expectEqual(@as(u16, 201), res.status_code);
 }

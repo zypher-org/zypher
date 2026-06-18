@@ -54,7 +54,7 @@ fn benchNoop() u64 {
 fn benchTemplateRenderSimple(allocator: std.mem.Allocator) !u64 {
     var engine = zypher.template.renderer.TemplateEngine.init(allocator);
     defer engine.deinit();
-    _ = try engine.load("hello.html",
+    _ = try engine.loadFromSource("hello.html",
         \\<html><body><h1>{{ title }}</h1><p>{{ body }}</p></body></html>
     );
 
@@ -77,7 +77,7 @@ fn benchTemplateRenderSimple(allocator: std.mem.Allocator) !u64 {
 fn benchTemplateRenderAggressive(allocator: std.mem.Allocator) !u64 {
     var engine = zypher.template.renderer.TemplateEngine.init(allocator);
     defer engine.deinit();
-    _ = try engine.load("base.html",
+    _ = try engine.loadFromSource("base.html",
         \\<html>
         \\<head><title>{{ title }}</title></head>
         \\<body>
@@ -86,16 +86,16 @@ fn benchTemplateRenderAggressive(allocator: std.mem.Allocator) !u64 {
         \\</body>
         \\</html>
     );
-    _ = try engine.load("row.html",
+    _ = try engine.loadFromSource("row.html",
         \\<article data-index="{{ forloop.counter0 }}">
         \\  <h2>{{ item }}</h2>
         \\  <p>{{ body }}</p>
         \\</article>
     );
-    _ = try engine.load("footer.html",
+    _ = try engine.loadFromSource("footer.html",
         \\<footer>{{ footer }}</footer>
     );
-    _ = try engine.load("page.html",
+    _ = try engine.loadFromSource("page.html",
         \\{% extends "base.html" %}
         \\{% block content %}
         \\{% if title %}
@@ -205,18 +205,20 @@ fn benchRouterDispatchAggressive(allocator: std.mem.Allocator) !u64 {
     return elapsedNs(start);
 }
 
-fn mwPass(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-    next(req, res);
+fn mwPass(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    next(io, req, res);
 }
 
-fn mwHeader(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+fn mwHeader(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    _ = io;
     _ = res.header("X-Bench", "1");
-    next(req, res);
+    next(io, req, res);
 }
 
-fn mwCookie(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+fn mwCookie(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    _ = io;
     _ = req.cookie("sid");
-    next(req, res);
+    next(io, req, res);
 }
 
 fn terminalHandler(_: *Request, res: *Response) void {
@@ -248,7 +250,7 @@ fn benchMiddlewareAggressive(allocator: std.mem.Allocator) !u64 {
     const start = nowNs();
     var i: u64 = 0;
     while (i < middleware_runs) : (i += 1) {
-        Chain.run(&req, &res, terminalHandler);
+        Chain.run(std.testing.io, &req, &res, terminalHandler);
     }
     return elapsedNs(start);
 }

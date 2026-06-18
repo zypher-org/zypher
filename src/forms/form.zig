@@ -152,8 +152,8 @@ pub fn Form(comptime name: [:0]const u8, comptime Fields: type) type {
             }
 
             /// Return an HTML hidden input field with CSRF token for use in forms.
-            pub fn csrfField(_: *BoundForm, req: *Request) ![]u8 {
-                return csrf.formFieldForRequest(req.allocator, req);
+            pub fn csrfField(_: *BoundForm, io: std.Io, req: *Request) ![]u8 {
+                return csrf.formFieldForRequest(io, req.allocator, req);
             }
 
             /// Return typed cleaned data after validation.

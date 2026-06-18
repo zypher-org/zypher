@@ -10,7 +10,7 @@ test "session: new session created with random ID" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var s = try store.create();
+    var s = store.create(std.testing.io);
     defer s.deinit(std.testing.allocator);
     try std.testing.expect(s.id.len > 0);
 }
@@ -19,9 +19,9 @@ test "session: session ID is not guessable (entropy check)" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var s1 = try store.create();
+    var s1 = store.create(std.testing.io);
     defer s1.deinit(std.testing.allocator);
-    var s2 = try store.create();
+    var s2 = store.create(std.testing.io);
     defer s2.deinit(std.testing.allocator);
     // Two different sessions must have different IDs
     try std.testing.expect(!std.mem.eql(u8, &s1.id, &s2.id));
@@ -33,7 +33,7 @@ test "session: session stored and retrieved from store" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var s = try store.create();
+    var s = store.create(std.testing.io);
     try s.put(std.testing.allocator, "user_id", "42");
     try store.save(&s);
     s.deinit(std.testing.allocator); // save deep-copies, so local s can be freed
@@ -47,7 +47,7 @@ test "session: saving retrieved store-owned session keeps lookup valid" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var s = try store.create();
+    var s = store.create(std.testing.io);
     try s.put(std.testing.allocator, "user_id", "42");
     try store.save(&s);
     const session_id = s.id;
@@ -76,7 +76,7 @@ test "session: get and set data" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var s = try store.create();
+    var s = store.create(std.testing.io);
     defer s.deinit(std.testing.allocator);
     try s.put(std.testing.allocator, "key1", "value1");
     try s.put(std.testing.allocator, "key2", "value2");
@@ -92,7 +92,7 @@ test "session: expired sessions return null" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var s = try store.createWithExpiry(1); // epoch 1 = Jan 1 1970, already expired
+    var s = store.createWithExpiry(std.testing.io, 1); // epoch 1 = Jan 1 1970, already expired
     try s.put(std.testing.allocator, "user", "alice");
     try store.save(&s);
     s.deinit(std.testing.allocator); // save deep-copies, so local s can be freed
@@ -108,7 +108,7 @@ test "session: session destroyed on logout" {
     var store = SessionStore.init(std.testing.allocator);
     defer store.deinit();
 
-    var s = try store.create();
+    var s = store.create(std.testing.io);
     try s.put(std.testing.allocator, "user", "bob");
     try store.save(&s);
     s.deinit(std.testing.allocator); // save deep-copies, so local s can be freed

@@ -12,9 +12,13 @@ const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const log = std.log.scoped(.middleware);
 
+/// Type for the `next` callback passed to each middleware.
+/// The std.Io instance is the first parameter.
+pub const NextFn = *const fn (std.Io, *Request, *Response) void;
+
 /// Type for a middleware function.
-/// Receives the request, response, and a `next` callback to continue the chain.
-pub const MiddlewareFn = *const fn (*Request, *Response, *const fn (*Request, *Response) void) void;
+/// The std.Io instance is the first parameter, followed by request, response, and next callback.
+pub const MiddlewareFn = *const fn (std.Io, *Request, *Response, NextFn) void;
 
 /// Handler function type (terminal handler at the end of the chain).
 pub const HandlerFn = *const fn (*Request, *Response) void;
@@ -24,7 +28,7 @@ pub const HandlerFn = *const fn (*Request, *Response) void;
 ///
 /// Usage:
 ///   const MyChain = comptime Chain(.{ mw_logger, mw_cors });
-///   MyChain.run(&req, &res, handler);
+///   MyChain.run(&req, &res, handler, io);
 pub fn Chain(comptime mws: anytype) type {
     comptime {
         // Validate all items are functions or function pointers
@@ -48,26 +52,26 @@ pub fn Chain(comptime mws: anytype) type {
         threadlocal var terminal_handler: HandlerFn = undefined;
 
         /// Run the middleware chain, ending with `handler`.
+        /// `io` is passed through to every middleware function.
         /// Fully unrolled at comptime — no runtime dispatch table.
-        pub fn run(req: *Request, res: *Response, handler: HandlerFn) void {
+        pub fn run(io: std.Io, req: *Request, res: *Response, handler: HandlerFn) void {
             terminal_handler = handler;
-            dispatch(0, req, res);
+            dispatch(0, io, req, res);
         }
 
         /// Recursive comptime dispatch: at index i, call middleware[i]
         /// with a comptime-known `next` that dispatches to i+1.
-        fn dispatch(comptime i: comptime_int, req: *Request, res: *Response) void {
-            if (i >= mws.len) {
+        fn dispatch(comptime idx: comptime_int, io: std.Io, req: *Request, res: *Response) void {
+            if (idx >= mws.len) {
                 terminal_handler(req, res);
                 return;
             }
-            // Generate the next callback for this index
             const next = struct {
-                fn invoke(r: *Request, s: *Response) void {
-                    dispatch(i + 1, r, s);
+                fn invoke(i: std.Io, r: *Request, s: *Response) void {
+                    dispatch(idx + 1, i, r, s);
                 }
             }.invoke;
-            mws[i](req, res, next);
+            mws[idx](io, req, res, next);
         }
     };
 }

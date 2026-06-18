@@ -33,7 +33,7 @@ test "CORS: adds Allow-Origin header on normal request" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     const origin = res.headers.get("Access-Control-Allow-Origin");
@@ -52,7 +52,7 @@ test "CORS: accepts lowercase origin request header" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     try std.testing.expectEqualStrings("http://example.com", res.headers.get("Access-Control-Allow-Origin").?);
@@ -70,7 +70,7 @@ test "CORS: handles preflight OPTIONS request" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     // Preflight should short-circuit with 204
     try std.testing.expectEqual(@as(u16, 204), res.status_code);
@@ -94,7 +94,7 @@ test "CORS: blocked origin gets 403" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 403), res.status_code);
 }
@@ -110,7 +110,7 @@ test "CORS: allowed origin passes through" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     const origin = res.headers.get("Access-Control-Allow-Origin");

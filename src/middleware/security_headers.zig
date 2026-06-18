@@ -28,7 +28,7 @@ pub fn configure(opts: Options) void {
     config = opts;
 }
 
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     if (config.x_content_type_options) {
         _ = res.header("X-Content-Type-Options", "nosniff");
     }
@@ -56,7 +56,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
     }
 
     log.debug("security headers set for {s} {s}", .{ @tagName(req.method), req.path });
-    next(req, res);
+    next(io, req, res);
 }
 
 test {

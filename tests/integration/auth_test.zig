@@ -16,11 +16,11 @@ test "auth: full auth flow — register, login, protected, logout, denied" {
     defer store.deinit();
 
     // 1. Register a user
-    var user = try User.init(std.testing.allocator, "alice", "secret123");
+    var user = try User.init(std.testing.io, std.testing.allocator, "alice", "secret123");
     defer user.deinit();
 
     // 2. Create session and store user_id
-    var session = try store.create();
+    var session = store.create(std.testing.io);
     try session.put(std.testing.allocator, "user_id", "alice");
     try store.save(&session);
     session.deinit(std.testing.allocator);
@@ -76,7 +76,7 @@ test "auth: full auth flow — register, login, protected, logout, denied" {
 test "auth: password verify round-trip through user model" {
     // Verify that hashing via User.init and verifying via User.authenticate
     // work together end-to-end
-    var user = try User.init(std.testing.allocator, "bob", "hunter2");
+    var user = try User.init(std.testing.io, std.testing.allocator, "bob", "hunter2");
     defer user.deinit();
 
     try std.testing.expect(try user.authenticate("hunter2"));
@@ -88,11 +88,11 @@ test "auth: password verify round-trip through user model" {
 }
 
 test "auth: admin role check via superuserRequired logic" {
-    var admin = try User.init(std.testing.allocator, "root", "adminpass");
+    var admin = try User.init(std.testing.io, std.testing.allocator, "root", "adminpass");
     defer admin.deinit();
     admin.setRole("admin");
 
-    var regular = try User.init(std.testing.allocator, "joe", "userpass");
+    var regular = try User.init(std.testing.io, std.testing.allocator, "joe", "userpass");
     defer regular.deinit();
 
     // Admin should pass superuser check

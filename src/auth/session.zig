@@ -102,14 +102,14 @@ pub const SessionStore = struct {
     }
 
     /// Create a new session with random ID and default expiry.
-    pub fn create(self: *Self) !Session {
-        return self.createWithExpiry(unixTimestamp() + default_cookie_config.max_age);
+    pub fn create(self: *Self, io: std.Io) Session {
+        return self.createWithExpiry(io, unixTimestamp() + default_cookie_config.max_age);
     }
 
     /// Create a new session with a specific expiry timestamp.
-    pub fn createWithExpiry(self: *Self, expires_at: i64) !Session {
+    pub fn createWithExpiry(self: *Self, io: std.Io, expires_at: i64) Session {
         var id: [SESSION_ID_LEN]u8 = undefined;
-        try util.randomBytes(&id);
+        util.randomBytes(io, &id);
 
         const s = Session{
             .id = id,

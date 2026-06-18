@@ -13,17 +13,32 @@ const log = std.log.scoped(.csrf);
 
 const session_key = "_csrf_token";
 
+threadlocal var tl_io: ?std.Io = null;
+
+pub fn setIo(io: std.Io) void {
+    tl_io = io;
+}
+
+pub fn getIo() std.Io {
+    return tl_io orelse @panic("csrf: no io set — call csrf.setIo(io) before using handler functions");
+}
+
 /// Return the request CSRF token, creating and storing one in the session.
-pub fn ensureToken(req: *Request) ![]const u8 {
+pub fn ensureToken(io: std.Io, req: *Request) ![]const u8 {
     const user_ptr = req.user orelse return error.CsrfSessionUnavailable;
     const session: *Session = @ptrCast(@alignCast(user_ptr));
     if (session.get(session_key)) |token| return token;
 
     var random: [32]u8 = undefined;
-    try util.randomBytes(&random);
+    util.randomBytes(io, &random);
     const hex = std.fmt.bytesToHex(random, .lower);
     try session.put(req.allocator, session_key, &hex);
     return session.get(session_key) orelse error.CsrfTokenUnavailable;
+}
+
+/// Return the request CSRF token using thread-local io (for handler contexts).
+pub fn ensureTokenForRequest(req: *Request) ![]const u8 {
+    return ensureToken(getIo(), req);
 }
 
 /// Validate a token against the request session.
@@ -40,16 +55,17 @@ pub fn validateTokenForRequest(req: *Request, token: []const u8) bool {
 /// CSRF middleware function.
 /// Safe methods (GET, HEAD, OPTIONS) pass through and receive a token.
 /// Unsafe methods (POST, PUT, DELETE, PATCH) require a valid token.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    tl_io = io;
     switch (req.method) {
         .get, .head, .options => {
-            if (ensureToken(req)) |token| {
+            if (ensureToken(io, req)) |token| {
                 _ = res.header("X-CSRF-Token", token);
                 log.debug("CSRF token set for {s} {s}", .{ @tagName(req.method), req.path });
             } else |_| {
                 log.debug("CSRF token not available (no session) for {s} {s}", .{ @tagName(req.method), req.path });
             }
-            next(req, res);
+            next(io, req, res);
         },
         .post, .put, .delete, .patch => {
             const token = req.header("X-CSRF-Token") orelse req.formValue("_csrf");
@@ -60,19 +76,19 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
                 return;
             }
             log.debug("CSRF validated for {s} {s}", .{ @tagName(req.method), req.path });
-            next(req, res);
+            next(io, req, res);
         },
     }
 }
 
 /// Returns an HTML hidden input field with the CSRF token from the request session.
-pub fn formField(req: *Request) ![]u8 {
-    return formFieldForRequest(req.allocator, req);
+pub fn formField(io: std.Io, req: *Request) ![]u8 {
+    return formFieldForRequest(io, req.allocator, req);
 }
 
 /// Return an owned hidden input field using the request/session token.
-pub fn formFieldForRequest(gpa: std.mem.Allocator, req: *Request) ![]u8 {
-    const token = try ensureToken(req);
+pub fn formFieldForRequest(io: std.Io, gpa: std.mem.Allocator, req: *Request) ![]u8 {
+    const token = try ensureToken(io, req);
     return std.fmt.allocPrint(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"{s}\">\n", .{token});
 }
 

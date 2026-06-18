@@ -50,7 +50,7 @@ test "orm integration: full lifecycle — migrate, create, read, update, delete"
     const migrations = [_]Migration{
         .{ .id = 1, .name = "create_users", .up_sql = User.create_table_sql, .down_sql = User.drop_table_sql },
     };
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 
     // 2. Create a user
     const row_id = try query.create(User, &db, &.{
@@ -104,7 +104,7 @@ test "orm integration: multiple records, filter, and pagination" {
     const migrations = [_]Migration{
         .{ .id = 1, .name = "create_users", .up_sql = User.create_table_sql, .down_sql = User.drop_table_sql },
     };
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 
     // Create 5 users
     const names = [_][]const u8{ "Alice", "Bob", "Charlie", "Diana", "Eve" };
@@ -150,7 +150,7 @@ test "orm integration: migration rollback and re-apply" {
     };
 
     // Apply
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
     try std.testing.expectEqual(@as(u64, 1), try runner.countApplied());
 
     // Rollback
@@ -158,7 +158,7 @@ test "orm integration: migration rollback and re-apply" {
     try std.testing.expectEqual(@as(u64, 0), try runner.countApplied());
 
     // Re-apply
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
     try std.testing.expectEqual(@as(u64, 1), try runner.countApplied());
 
     // Table should work again after re-apply

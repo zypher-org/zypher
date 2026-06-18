@@ -4,24 +4,16 @@ const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const log = std.log.scoped(.http);
 
-/// Get a monotonic timestamp in nanoseconds.
-fn nanoNow() i128 {
-    var ts: std.posix.timespec = undefined;
-    _ = std.posix.system.clock_gettime(std.posix.CLOCK.MONOTONIC, &ts);
-    return @as(i128, ts.sec) * std.time.ns_per_s + @as(i128, ts.nsec);
-}
-
 /// The logger middleware function.
 /// Logs: method, path, status code, and elapsed time in microseconds.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-    const start = nanoNow();
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    const start = std.Io.Timestamp.now(io, .awake);
 
-    // Call next middleware/handler
-    next(req, res);
+    next(io, req, res);
 
-    const end = nanoNow();
-    const elapsed_ns = end - start;
-    const elapsed_us: i64 = @intCast(@divTrunc(elapsed_ns, std.time.ns_per_us));
+    const end = std.Io.Timestamp.now(io, .awake);
+    const elapsed = std.Io.Timestamp.durationTo(start, end);
+    const elapsed_us: i64 = @intCast(@divTrunc(elapsed.nanoseconds, std.time.ns_per_us));
 
     log.info("{s} {s} → {d} ({d}µs)", .{
         @tagName(req.method),
