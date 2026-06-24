@@ -224,7 +224,7 @@ fn resetPassword(req: *Request, res: *Response) void {
         res.text("Invalid recovery code") catch {};
         return;
     }
-    const hash = password.hash(req.allocator, plain) catch return;
+    const hash = password.hash(tl_io, req.allocator, plain) catch return;
     defer req.allocator.free(hash);
     var update = db.prepare("UPDATE users SET password_hash = ?, reset_code = NULL, reset_code_expires_at = NULL WHERE email = ?") catch return;
     defer update.finalize();

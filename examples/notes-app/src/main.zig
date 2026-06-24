@@ -65,7 +65,7 @@ fn renderLayout(res: *Response, title: []const u8, content: []const u8) void {
 }
 
 fn csrfField(req: *Request) ![]u8 {
-    return zypher.middleware.csrf.formFieldForRequest(req.allocator, req);
+    return zypher.middleware.csrf.formFieldForRequest(tl_io, req.allocator, req);
 }
 
 fn listHandler(req: *Request, res: *Response) void {
@@ -491,7 +491,7 @@ fn resetPasswordHandler(req: *Request, res: *Response) void {
         renderLayout(res, "Reset Password", "<p>Invalid recovery code.</p>");
         return;
     }
-    const hash = password.hash(req.allocator, plain) catch return;
+    const hash = password.hash(tl_io, req.allocator, plain) catch return;
     defer req.allocator.free(hash);
     var update = db.prepare("UPDATE users SET password_hash = ?, reset_code = NULL, reset_code_expires_at = NULL WHERE email = ?") catch return;
     defer update.finalize();
