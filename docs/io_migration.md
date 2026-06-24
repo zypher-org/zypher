@@ -116,3 +116,57 @@ pub fn main(init: std.process.Init) !void {
     try app.listenAndServe(io);
 }
 ```
+
+## IO Configuration API
+
+zypher provides a unified API for IO configuration through `zypher.core.IoConfig`:
+
+### Available IO Models
+
+- **`.default`** - Uses the IO backend provided by `std.process.Init` (recommended for most cases)
+- **`.custom`** - Use a custom user-provided `std.Io` instance
+
+### Usage Examples
+
+#### Using Default IO (recommended)
+
+```zig
+const std = @import("std");
+const zypher = @import("zypher");
+
+pub fn main(init: std.process.Init) !void {
+    const io_config = zypher.core.IoConfig.default();
+    const io = try io_config.createIo(init);
+    
+    var app = zypher.core.App.init(init.gpa, .{ .port = 8080 });
+    defer app.deinit();
+    
+    app.handler(myHandler);
+    try app.listenAndServe(io);
+}
+```
+
+#### Using Custom IO
+
+For advanced use cases, you can provide your own `std.Io` instance:
+
+```zig
+const std = @import("std");
+const zypher = @import("zypher");
+
+pub fn main(init: std.process.Init) !void {
+    var my_custom_io = createCustomIoBackend(); // Your custom implementation
+    const io_config = zypher.core.IoConfig.custom(my_custom_io);
+    const io = try io_config.createIo(init);
+    
+    var app = zypher.core.App.init(init.gpa, .{ .port = 8080 });
+    defer app.deinit();
+    
+    app.handler(myHandler);
+    try app.listenAndServe(io);
+}
+```
+
+### Note on Advanced IO Backends
+
+For advanced IO backends like `std.Io.Threaded`, `std.Io.Uring`, or `std.Io.Dispatch`, these require manual initialization with an `Evented` instance. Users who need these backends should initialize them manually and pass the resulting `std.Io` instance via `IoConfig.custom()`. This maintains the framework's invariant that `std.Io` is always caller-supplied while allowing full flexibility for advanced use cases.

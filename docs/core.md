@@ -202,9 +202,8 @@ All mutators return `*Response` for chaining unless they return an error union.
 const std = @import("std");
 const zypher = @import("zypher");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var app = zypher.core.App.init(gpa.allocator(), .{ .port = 8080 });
+pub fn main(init: std.process.Init) !void {
+    var app = zypher.core.App.init(init.gpa, .{ .port = 8080 });
 
     app.handler(struct {
         fn handle(req: *zypher.core.Request, res: *zypher.core.Response) void {
@@ -213,6 +212,29 @@ pub fn main() !void {
         }
     }.handle);
 
-    try app.listenAndServe(std.Io.default(gpa.allocator()));
+    try app.listenAndServe(init.io);
+}
+```
+
+## IO Configuration
+
+zypher provides a unified API for IO configuration through `zypher.core.IoConfig`. See [io_migration.md](io_migration.md) for detailed documentation.
+
+### Quick Start with IO Config
+
+```zig
+const std = @import("std");
+const zypher = @import("zypher");
+
+pub fn main(init: std.process.Init) !void {
+    // Use default IO configuration (recommended)
+    const io_config = zypher.core.IoConfig.default();
+    const io = try io_config.createIo(init);
+    
+    var app = zypher.core.App.init(init.gpa, .{ .port = 8080 });
+    defer app.deinit();
+
+    app.handler(myHandler);
+    try app.listenAndServe(io);
 }
 ```
