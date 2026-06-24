@@ -24,6 +24,8 @@ zypher doc-user examples/blog
 - `Request` — incoming HTTP request with method, path, query, headers, body, files, params, user, cookies, file streaming
 - `Response` — outgoing HTTP response with status, headers, body, file_body, cookies, chunked streaming, serialization
 - `Context` — request-scoped context struct
+- `IoConfig` — unified API for IO configuration with `.default()` and `.custom(io)` factory methods
+- `IoModel` — enum for IO model selection (`.default`, `.custom`)
 
 ### Router (`zypher.router.*`)
 - `Route` — route definition with method, pattern, handler; supports named params, typed params, wildcards
