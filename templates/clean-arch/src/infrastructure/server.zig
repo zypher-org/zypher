@@ -243,12 +243,14 @@ fn notFound(_: *Request, res: *Response) void {
     res.text("Not Found") catch {};
 }
 
+threadlocal var tl_io: std.Io = undefined;
+
 fn dispatch(req: *Request, res: *Response) void {
     (tl_router orelse return).dispatch(req, res);
 }
 
 fn runChain(req: *Request, res: *Response) void {
-    Chain.run(req, res, dispatch);
+    Chain.run(tl_io, req, res, dispatch);
 }
 
 fn parsePort(init: std.process.Init) u16 {
@@ -296,6 +298,7 @@ pub fn serve(init: std.process.Init) !void {
     tl_db = &db;
     tl_router = &router;
 
+    tl_io = init.io;
     var app = zypher.core.App.init(init.gpa, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();
     app.middlewareHandler(runChain);

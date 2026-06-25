@@ -106,11 +106,11 @@ pub fn AdminSite(comptime config: anytype) type {
         }
 
         pub fn loadTemplates(engine: *TemplateEngine) void {
-            _ = engine.load("admin/base.html", @embedFile("templates/base.html")) catch {};
-            _ = engine.load("admin/index.html", @embedFile("templates/index.html")) catch {};
-            _ = engine.load("admin/list.html", @embedFile("templates/list.html")) catch {};
-            _ = engine.load("admin/form.html", @embedFile("templates/form.html")) catch {};
-            _ = engine.load("admin/confirm_delete.html", @embedFile("templates/confirm_delete.html")) catch {};
+            _ = engine.loadFromSource("admin/base.html", @embedFile("templates/base.html")) catch {};
+            _ = engine.loadFromSource("admin/index.html", @embedFile("templates/index.html")) catch {};
+            _ = engine.loadFromSource("admin/list.html", @embedFile("templates/list.html")) catch {};
+            _ = engine.loadFromSource("admin/form.html", @embedFile("templates/form.html")) catch {};
+            _ = engine.loadFromSource("admin/confirm_delete.html", @embedFile("templates/confirm_delete.html")) catch {};
         }
 
         pub fn hasDuplicates() bool {
@@ -491,7 +491,7 @@ fn addHandler(comptime M: type) *const fn (*Request, *Response) void {
                     }
                 }
                 form_buf.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
-                form_buf.appendSlice(gpa, csrf.ensureToken(req) catch return) catch return;
+                form_buf.appendSlice(gpa, csrf.ensureTokenForRequest(req) catch return) catch return;
                 form_buf.appendSlice(gpa, "\">") catch return;
 
                 var ctx = Context.init(gpa);
@@ -523,7 +523,7 @@ fn addHandler(comptime M: type) *const fn (*Request, *Response) void {
             }
 
             html.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
-            html.appendSlice(gpa, csrf.ensureToken(req) catch return) catch return;
+            html.appendSlice(gpa, csrf.ensureTokenForRequest(req) catch return) catch return;
             html.appendSlice(gpa, "\">") catch return;
             html.appendSlice(gpa, "<button type=\"submit\" style=\"margin-top:1em;padding:.5em 1em\">Save</button></form></body></html>") catch return;
             const owned = html.toOwnedSlice(gpa) catch return;
@@ -634,7 +634,7 @@ fn changeHandler(comptime M: type) *const fn (*Request, *Response) void {
                     }
                 }
                 form_buf.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
-                form_buf.appendSlice(gpa, csrf.ensureToken(req) catch return) catch return;
+                form_buf.appendSlice(gpa, csrf.ensureTokenForRequest(req) catch return) catch return;
                 form_buf.appendSlice(gpa, "\">") catch return;
 
                 var ctx = Context.init(gpa);
@@ -679,7 +679,7 @@ fn changeHandler(comptime M: type) *const fn (*Request, *Response) void {
             }
 
             html.appendSlice(gpa, "<input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
-            html.appendSlice(gpa, csrf.ensureToken(req) catch return) catch return;
+            html.appendSlice(gpa, csrf.ensureTokenForRequest(req) catch return) catch return;
             html.appendSlice(gpa, "\">") catch return;
             html.appendSlice(gpa, "<button type=\"submit\" style=\"margin-top:1em;padding:.5em 1em\">Save</button></form></body></html>") catch return;
             const owned = html.toOwnedSlice(gpa) catch return;
@@ -776,7 +776,7 @@ fn confirmDeleteHandler(comptime M: type) *const fn (*Request, *Response) void {
             if (admin_engine) |engine| {
                 var ctx = Context.init(gpa);
                 defer ctx.deinit();
-                ctx.put("_csrf", .{ .string = csrf.ensureToken(req) catch return }) catch {};
+                ctx.put("_csrf", .{ .string = csrf.ensureTokenForRequest(req) catch return }) catch {};
                 ctx.put("table_name", .{ .string = M.table_name }) catch {};
                 if (renderTmpl(engine, res, "admin/confirm_delete.html", &ctx)) return;
             }
@@ -787,7 +787,7 @@ fn confirmDeleteHandler(comptime M: type) *const fn (*Request, *Response) void {
             html.appendSlice(gpa, "<!DOCTYPE html><html><head><title>Delete ") catch return;
             html.appendSlice(gpa, M.table_name) catch return;
             html.appendSlice(gpa, "</title><meta name=\"viewport\" content=\"width=device-width\"><style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:640px;margin:2em auto;padding:0 1em}button{padding:.5em 1em;cursor:pointer}</style></head><body><h1>Confirm Delete</h1><p>Are you sure?</p><form method=\"post\" style=\"display:inline\"><input type=\"hidden\" name=\"_csrf\" value=\"") catch return;
-            html.appendSlice(gpa, csrf.ensureToken(req) catch return) catch return;
+            html.appendSlice(gpa, csrf.ensureTokenForRequest(req) catch return) catch return;
             html.appendSlice(gpa, "\"><button type=\"submit\" style=\"background:#d73a49;color:white;border:none\">Delete</button></form> <a href=\"/admin/") catch return;
             html.appendSlice(gpa, M.table_name) catch return;
             html.appendSlice(gpa, "/\">Cancel</a></body></html>") catch return;

@@ -31,25 +31,26 @@ fn makeRequest(gpa: std.mem.Allocator, method: @import("zypher").core.Method, pa
 
 // ── Middleware that logs execution and calls next ────────────────────
 
-fn mw_a(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+fn mw_a(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     logEntry(req.allocator, "A");
-    next(req, res);
+    next(io, req, res);
 }
 
-fn mw_b(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+fn mw_b(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     logEntry(req.allocator, "B");
-    next(req, res);
+    next(io, req, res);
 }
 
-fn mw_c(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+fn mw_c(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     logEntry(req.allocator, "C");
-    next(req, res);
+    next(io, req, res);
 }
 
 // ── Middleware that short-circuits (does NOT call next) ─────────────
 
-fn mw_short_circuit(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+fn mw_short_circuit(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     _ = next;
+    _ = io;
     logEntry(req.allocator, "SHORT");
     _ = res.status(403);
     res.text("blocked") catch {};
@@ -57,15 +58,15 @@ fn mw_short_circuit(req: *Request, res: *Response, next: *const fn (*Request, *R
 
 // ── Middleware that mutates request before handler ──────────────────
 
-fn mw_add_header(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+fn mw_add_header(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     req.headers.put("X-Middleware", "true") catch {};
-    next(req, res);
+    next(io, req, res);
 }
 
 // ── Middleware that mutates response after handler ──────────────────
 
-fn mw_add_response_header(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-    next(req, res);
+fn mw_add_response_header(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    next(io, req, res);
     _ = res.header("X-Post-Middleware", "true");
 }
 
@@ -90,7 +91,7 @@ test "Chain: middleware executes in registered order" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, final_handler);
+    MyChain.run(std.testing.io, &req, &res, final_handler);
 
     try std.testing.expectEqual(@as(usize, 3), exec_log.items.len);
     try std.testing.expectEqualStrings("A", exec_log.items[0]);
@@ -109,7 +110,7 @@ test "Chain: short-circuit prevents later middleware and handler from running" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, final_handler);
+    MyChain.run(std.testing.io, &req, &res, final_handler);
 
     try std.testing.expectEqual(@as(usize, 2), exec_log.items.len);
     try std.testing.expectEqualStrings("A", exec_log.items[0]);
@@ -127,7 +128,7 @@ test "Chain: middleware can mutate request before handler" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, final_handler);
+    MyChain.run(std.testing.io, &req, &res, final_handler);
 
     const val = req.headers.get("X-Middleware");
     try std.testing.expect(val != null);
@@ -144,7 +145,7 @@ test "Chain: middleware can mutate response after handler" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, final_handler);
+    MyChain.run(std.testing.io, &req, &res, final_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     const val = res.headers.get("X-Post-Middleware");
@@ -162,7 +163,7 @@ test "Chain: empty chain passes straight to handler" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, final_handler);
+    MyChain.run(std.testing.io, &req, &res, final_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
 }
@@ -178,7 +179,7 @@ test "Chain: single middleware runs then handler" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, final_handler);
+    MyChain.run(std.testing.io, &req, &res, final_handler);
 
     try std.testing.expectEqual(@as(usize, 1), exec_log.items.len);
     try std.testing.expectEqualStrings("A", exec_log.items[0]);

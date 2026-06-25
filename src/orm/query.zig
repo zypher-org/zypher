@@ -328,41 +328,47 @@ pub fn first(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:
     return row;
 }
 
-/// INSERT or UPDATE a record. If row[0] (id) is 0, inserts; otherwise updates.
-/// Returns the rowid. On insert, row[0] is updated with the new id.
+/// INSERT or UPDATE a record. If the primary key field is 0, inserts; otherwise updates.
+/// Returns the rowid. On insert, the primary key field is updated with the new id.
 pub fn save(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, row: *RowType(M)) QueryError!i64 {
     _ = gpa;
-    const id: i64 = row[0];
+    const pk_idx = comptime M.primary_key_index;
+    const id: i64 = row[pk_idx];
     if (id == 0) {
-        // INSERT — skip id field (auto-increment)
+        // INSERT — skip primary key field (auto-increment)
         var stmt = db.prepare(M.insert_sql) catch return error.PrepareFailed;
         defer stmt.finalize();
-        inline for (1..M.fields_len) |i| {
+        var bind_idx: c_int = 1;
+        inline for (0..M.fields_len) |i| {
+            if (i == pk_idx) continue;
             const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
             if (FieldType == i64) {
-                stmt.bind(.{ .int = row[i] }, @intCast(i)) catch return error.BindFailed;
+                stmt.bind(.{ .int = row[i] }, bind_idx) catch return error.BindFailed;
             } else if (FieldType == f64) {
-                stmt.bind(.{ .float = row[i] }, @intCast(i)) catch return error.BindFailed;
+                stmt.bind(.{ .float = row[i] }, bind_idx) catch return error.BindFailed;
             } else if (FieldType == []const u8) {
-                stmt.bind(.{ .text = row[i] }, @intCast(i)) catch return error.BindFailed;
+                stmt.bind(.{ .text = row[i] }, bind_idx) catch return error.BindFailed;
             } else if (FieldType == bool) {
-                stmt.bind(.{ .int = if (row[i]) @as(i64, 1) else 0 }, @intCast(i)) catch return error.BindFailed;
+                stmt.bind(.{ .int = if (row[i]) @as(i64, 1) else 0 }, bind_idx) catch return error.BindFailed;
             }
+            bind_idx += 1;
         }
         _ = stmt.step() catch return error.StepFailed;
         const new_id = db.lastInsertRowId();
-        row[0] = new_id;
+        row[pk_idx] = new_id;
         log.info("saved new record in {s}: rowid={d}", .{ M.table_name, new_id });
         return new_id;
     } else {
-        // UPDATE
+        // UPDATE — collect values for all non-PK fields
         var arr: [M.fields_len - 1]sqlite.Value = undefined;
-        const values: []const sqlite.Value = &arr;
-        inline for (1..M.fields_len) |i| {
+        var arr_idx: usize = 0;
+        inline for (0..M.fields_len) |i| {
+            if (i == pk_idx) continue;
             const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
-            arr[i - 1] = if (FieldType == i64) .{ .int = row[i] } else if (FieldType == f64) .{ .float = row[i] } else if (FieldType == []const u8) .{ .text = row[i] } else if (FieldType == bool) .{ .int = if (row[i]) 1 else 0 } else .{ .int = 0 };
+            arr[arr_idx] = if (FieldType == i64) .{ .int = row[i] } else if (FieldType == f64) .{ .float = row[i] } else if (FieldType == []const u8) .{ .text = row[i] } else if (FieldType == bool) .{ .int = if (row[i]) 1 else 0 } else .{ .int = 0 };
+            arr_idx += 1;
         }
-        try updateById(M, db, id, values);
+        try updateById(M, db, id, arr[0..]);
         return id;
     }
 }

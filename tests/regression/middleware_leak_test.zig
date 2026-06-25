@@ -52,7 +52,7 @@ fn router_dispatch(req: *Request, res: *Response) void {
 const LoggerChain = Chain(.{logger.middleware});
 
 fn chain_dispatch(req: *Request, res: *Response) void {
-    LoggerChain.run(req, res, router_dispatch);
+    LoggerChain.run(std.testing.io, req, res, router_dispatch);
 }
 
 test "Regression: router still dispatches correctly without middleware" {

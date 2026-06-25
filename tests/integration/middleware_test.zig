@@ -42,7 +42,7 @@ fn api_handler(req: *Request, res: *Response) void {
 const TestChain = Chain(.{ logger.middleware, csrf.middleware });
 
 fn middleware_dispatch(req: *Request, res: *Response) void {
-    TestChain.run(req, res, home_handler);
+    TestChain.run(std.testing.io, req, res, home_handler);
 }
 
 fn not_found_handler(req: *Request, res: *Response) void {
@@ -64,14 +64,14 @@ fn router_dispatch(req: *Request, res: *Response) void {
 }
 
 fn chain_dispatch(req: *Request, res: *Response) void {
-    LoggerChain.run(req, res, router_dispatch);
+    LoggerChain.run(std.testing.io, req, res, router_dispatch);
 }
 
 // CORS chain dispatch
-const CorsChain = Chain(.{cors.middleware});
+const CorsChain = Chain(.{cors.middlewareWith(.{ .allowed_origins = &.{"http://example.com"} })});
 
 fn cors_dispatch(req: *Request, res: *Response) void {
-    CorsChain.run(req, res, home_handler);
+    CorsChain.run(std.testing.io, req, res, home_handler);
 }
 
 test "Integration: middleware chain wired into App dispatch" {

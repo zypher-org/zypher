@@ -18,7 +18,10 @@ pub const Server = struct {
         port: u16 = 8080,
         read_buffer_size: usize = 8192,
         write_buffer_size: usize = 8192,
-        max_body_size: usize = 1_048_576, // 1 MiB
+        max_body_size: usize = 10_485_760, // 10 MiB
+        /// Bodies larger than this are not buffered — the handler reads them
+        /// via `Request.body_stream`. Set to `max_body_size` to inline all bodies.
+        max_inline_body_size: usize = 1_048_576, // 1 MiB
         /// Optional lifecycle bound used by tests and controlled shutdown flows.
         max_requests: ?usize = null,
     };
@@ -77,10 +80,14 @@ pub const Server = struct {
             return error.BadRequest;
         };
 
-        const parsed_target = parseRequestTarget(gpa, target);
+        var parsed_target = parseRequestTarget(gpa, target);
+        errdefer {
+            Request.deinitQueryString(&parsed_target.query, gpa);
+        }
 
         // Parse headers
         var headers = std.StringHashMap([]const u8).init(gpa);
+        errdefer headers.deinit();
         while (line_it.next()) |line| {
             if (line.len == 0) break;
             if (std.mem.indexOfScalar(u8, line, ':')) |i| {
@@ -124,9 +131,19 @@ pub const Server = struct {
 
         var served_requests: usize = 0;
         while (!self.shutdown_requested.load(.acquire)) {
+            io.checkCancel() catch |check_err| switch (check_err) {
+                error.Canceled => {
+                    log.info("server io cancelled, shutting down", .{});
+                    break;
+                },
+            };
             const stream = net_server.accept(io) catch |err| {
                 if (err == error.SocketNotListening and self.shutdown_requested.load(.acquire)) {
                     log.info("server shutdown requested", .{});
+                    break;
+                }
+                if (err == error.Canceled) {
+                    log.info("server accept cancelled", .{});
                     break;
                 }
                 log.warn("accept failed: {t}", .{err});
@@ -188,60 +205,73 @@ pub const Server = struct {
             var req = buildRequest(gpa, server_req.head_buffer, self.config.max_body_size) catch |err| {
                 log.warn("failed to build request: {t}", .{err});
                 var err_res = Response.init(gpa);
-                errdefer err_res.deinit();
+                defer err_res.deinit();
                 _ = err_res.status(400);
                 try err_res.text("Bad Request");
-                var res_buf: std.ArrayList(u8) = .empty;
-                defer res_buf.deinit(gpa);
-                try err_res.send(gpa, &res_buf);
-                try stream_writer.interface.writeAll(res_buf.items);
+                try err_res.send(io, &stream_writer.interface);
                 try stream_writer.interface.flush();
-                err_res.deinit();
-                continue;
+                return;
             };
             defer req.deinit();
             req.query_owned = true;
 
-            // ── Read request body and parse supported form encodings ────
+            // ── Read request body or leave as stream ────
+            var body_read_buf: [4096]u8 = undefined;
+            var body_reader: ?*std.Io.Reader = null;
+            var body_stream_active = false;
+
             if (server_req.head.method.requestHasBody()) {
-                var body_read_buf: [4096]u8 = undefined;
-                const body_reader = server_req.readerExpectNone(&body_read_buf);
-                const body = std.Io.Reader.allocRemaining(body_reader, gpa, std.Io.Limit.limited(self.config.max_body_size)) catch |read_err| {
-                    log.warn("body read failed: {t}", .{read_err});
-                    return;
+                body_reader = server_req.readerExpectNone(&body_read_buf);
+                const br = body_reader.?;
+
+                // If Content-Length exceeds inline threshold, stream instead of buffering
+                const is_streaming = stream: {
+                    const cl_str = Request.getHeaderCI(&req.headers, "content-length") orelse break :stream false;
+                    const cl = std.fmt.parseInt(usize, cl_str, 10) catch break :stream false;
+                    break :stream cl > self.config.max_inline_body_size;
                 };
-                req.body = body;
-                req.body_owned = true;
 
-                if (body.len > 0) {
-                    const content_type = Request.getHeaderCI(&req.headers, "content-type") orelse "";
-                    if (std.mem.indexOf(u8, content_type, "x-www-form-urlencoded") != null) {
-                        var form_params = Request.parseQueryString(gpa, body) catch {
-                            log.warn("failed to parse form data", .{});
-                            return;
-                        };
-                        defer form_params.deinit();
-                        var iter = form_params.iterator();
-                        while (iter.next()) |entry| {
-                            req.query.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
-                        }
-                    } else if (std.mem.indexOf(u8, content_type, "multipart/form-data") != null) {
-                        var multipart = Request.parseMultipartFormData(gpa, content_type, body) catch {
-                            log.warn("failed to parse multipart form data", .{});
-                            return;
-                        };
+                if (is_streaming) {
+                    req.body_stream = Request.BodyStream{ .reader = body_reader.? };
+                    body_stream_active = true;
+                } else {
+                    const body = br.allocRemaining(gpa, std.Io.Limit.limited(self.config.max_body_size)) catch |read_err| {
+                        log.warn("body read failed: {t}", .{read_err});
+                        return;
+                    };
+                    req.body = body;
+                    req.body_owned = true;
 
-                        var field_iter = multipart.fields.iterator();
-                        while (field_iter.next()) |entry| {
-                            if (try req.query.fetchPut(entry.key_ptr.*, entry.value_ptr.*)) |old| {
-                                req.allocator.free(old.key);
-                                if (old.value.len > 0) req.allocator.free(old.value);
+                    if (body.len > 0) {
+                        const content_type = Request.getHeaderCI(&req.headers, "content-type") orelse "";
+                        if (std.mem.indexOf(u8, content_type, "x-www-form-urlencoded") != null) {
+                            var form_params = Request.parseQueryString(gpa, body) catch {
+                                log.warn("failed to parse form data", .{});
+                                return;
+                            };
+                            defer form_params.deinit();
+                            var iter = form_params.iterator();
+                            while (iter.next()) |entry| {
+                                req.query.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
                             }
-                        }
-                        multipart.fields.deinit();
+                        } else if (std.mem.indexOf(u8, content_type, "multipart/form-data") != null) {
+                            var multipart = Request.parseMultipartFormData(gpa, content_type, body) catch {
+                                log.warn("failed to parse multipart form data", .{});
+                                return;
+                            };
 
-                        req.files = multipart.files;
-                        req.files_owned = true;
+                            var field_iter = multipart.fields.iterator();
+                            while (field_iter.next()) |entry| {
+                                if (try req.query.fetchPut(entry.key_ptr.*, entry.value_ptr.*)) |old| {
+                                    req.allocator.free(old.key);
+                                    if (old.value.len > 0) req.allocator.free(old.value);
+                                }
+                            }
+                            multipart.fields.deinit();
+
+                            req.files = multipart.files;
+                            req.files_owned = true;
+                        }
                     }
                 }
             }
@@ -252,10 +282,16 @@ pub const Server = struct {
             handler(&req, &res);
             defer res.deinit();
 
-            var res_buf: std.ArrayList(u8) = .empty;
-            defer res_buf.deinit(gpa);
-            try res.send(gpa, &res_buf);
-            try stream_writer.interface.writeAll(res_buf.items);
+            // Drain unconsumed streaming body before sending response
+            if (body_stream_active) {
+                if (req.body_stream) |*bs| {
+                    bs.skip() catch |err| {
+                        log.warn("failed to drain body: {t}", .{err});
+                    };
+                }
+            }
+
+            try res.send(io, &stream_writer.interface);
             try stream_writer.interface.flush();
         }
     }

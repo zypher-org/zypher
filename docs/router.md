@@ -11,10 +11,7 @@ Create a route entry.
 
 ### Route.validatePattern(pattern) !void
 Validate a path pattern at comptime. Called automatically by `Router.init`. Returns an error for invalid patterns:
-- `error.EmptyPattern` — pattern must not be empty
-- `error.InvalidStart` — pattern must start with `/`
-- `error.TrailingSlashNotAllowed` — pattern must not end with `/` (except `/` itself)
-- `error.DoubleSlash` — no empty segments allowed
+- `error.InvalidPattern` — empty pattern, not starting with `/`, multiple wildcards, wildcard not last, empty param names, duplicate params
 
 ### Route.matchPath(pattern, actual, params) bool
 Match a concrete path against a pattern at runtime, extracting named parameters into the provided `RouteParams`. Returns `true` on match.
@@ -29,7 +26,7 @@ Zero-allocation URL parameter storage (fixed-size array of 16 entries).
 - `RouteParams.init(gpa) RouteParams` — create empty params
 - `params.deinit()` — free resources
 - `params.get(name) ?[]const u8` — get param value by name
-- `params.getAs(T, name) ?T` — get param parsed as type `T` (e.g. `params.getAs(u64, "id")`)
+- `params.getAs(T, name) !T` — get param parsed as type `T` (e.g. `params.getAs(u64, "id")`); returns `error.MissingParam` if not found, or parse error if value is invalid
 
 ## Router
 Comptime route table with runtime dispatch. Routes are defined at comptime; dispatch uses a linear scan with specificity scoring at runtime.
@@ -65,9 +62,9 @@ Comptime route table with runtime dispatch. Routes are defined at comptime; disp
 ### Route Groups
 ```zig
 const routes = .{
-    Router.group("/api", .{
-        Router.route(.get, "/users", listHandler),
-        Router.route(.post, "/users", createHandler),
+    zypher.router.Router.group("/api", .{
+        zypher.router.Router.route(.get, "/users", listHandler),
+        zypher.router.Router.route(.post, "/users", createHandler),
     }),
 };
 // Creates: GET  /api/users → listHandler
@@ -78,25 +75,25 @@ const routes = .{
 ```zig
 const zypher = @import("zypher");
 
-fn listHandler(req: *zypher.Request, res: *zypher.Response) void {
+fn listHandler(req: *zypher.core.Request, res: *zypher.core.Response) void {
     res.json(.{ .users = &.{} }) catch {};
 }
 
-fn getUserHandler(req: *zypher.Request, res: *zypher.Response) void {
+fn getUserHandler(req: *zypher.core.Request, res: *zypher.core.Response) void {
     const id = req.params.get("id") orelse "";
     res.json(.{ .id = id }) catch {};
 }
 
-fn notFound(req: *zypher.Request, res: *zypher.Response) void {
+fn notFound(req: *zypher.core.Request, res: *zypher.core.Response) void {
     _ = res.status(404);
     res.text("Not Found") catch {};
 }
 
 const routes = .{
-    Router.route(.get, "/api/users", listHandler),
-    Router.route(.get, "/api/users/:id", getUserHandler),
+    zypher.router.Router.route(.get, "/api/users", listHandler),
+    zypher.router.Router.route(.get, "/api/users/:id", getUserHandler),
 };
 
-var router = Router.init(routes, notFound);
+var router = zypher.router.Router.init(routes, notFound);
 app.routerHandler(router.dispatch);
 ```

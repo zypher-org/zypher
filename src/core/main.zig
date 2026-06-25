@@ -8,6 +8,8 @@ pub const Response = @import("response.zig").Response;
 pub const Context = @import("context.zig").Context;
 pub const Server = @import("server.zig").Server;
 pub const App = @import("app.zig").App;
+pub const IoConfig = @import("io_config.zig").IoConfig;
+pub const IoModel = @import("io_config.zig").IoModel;
 
 test {
     std.testing.refAllDecls(@This());

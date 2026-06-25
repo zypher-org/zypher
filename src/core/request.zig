@@ -4,6 +4,65 @@ const RouteParams = @import("../router/params.zig").RouteParams;
 const log = std.log.scoped(.request);
 
 pub const Request = struct {
+    /// Parsed HTTP Range header value.
+    pub const Range = struct {
+        /// Start byte position. null for suffix ranges (e.g., bytes=-500).
+        start: ?u64,
+        /// End byte position. null for open-ended ranges (e.g., bytes=100-).
+        end: ?u64,
+
+        /// A satisfied (concrete) byte range computed against a file size.
+        pub const Satisfied = struct {
+            start: u64,
+            end: u64,
+            length: u64,
+        };
+
+        /// Resolve this range against the given file size, returning the
+        /// actual byte range to serve, or null if the range is unsatisfiable.
+        pub fn satisfy(self: Range, file_size: u64) ?Satisfied {
+            if (self.start) |s| {
+                const effective_end = self.end orelse (file_size - 1);
+                if (s >= file_size) return null;
+                const e = @min(effective_end, file_size - 1);
+                return .{ .start = s, .end = e, .length = e - s + 1 };
+            } else if (self.end) |suffix| {
+                const s = if (suffix >= file_size) 0 else file_size - suffix;
+                return .{ .start = s, .end = file_size - 1, .length = file_size - s };
+            }
+            return null;
+        }
+    };
+
+    /// Parse an HTTP Range header value (e.g., "bytes=0-999").
+    /// Only the first range is parsed; multi-range requests are not supported.
+    /// Returns null if the header is absent, malformed, or uses an unsupported unit.
+    pub fn parseRangeHeader(header_value: []const u8) ?Range {
+        if (header_value.len == 0) return null;
+        if (!std.mem.startsWith(u8, header_value, "bytes=")) return null;
+        const range_str = header_value["bytes=".len..];
+        if (range_str.len == 0) return null;
+
+        const dash = std.mem.indexOfScalar(u8, range_str, '-') orelse return null;
+
+        const start_str = range_str[0..dash];
+        const end_str = range_str[dash + 1 ..];
+
+        if (start_str.len > 0 and end_str.len > 0) {
+            const start = std.fmt.parseInt(u64, start_str, 10) catch return null;
+            const end = std.fmt.parseInt(u64, end_str, 10) catch return null;
+            if (end < start) return null;
+            return .{ .start = start, .end = end };
+        } else if (start_str.len > 0) {
+            const start = std.fmt.parseInt(u64, start_str, 10) catch return null;
+            return .{ .start = start, .end = null };
+        } else if (end_str.len > 0) {
+            const suffix = std.fmt.parseInt(u64, end_str, 10) catch return null;
+            if (suffix == 0) return null;
+            return .{ .start = null, .end = suffix };
+        }
+        return null;
+    }
     pub const FileUpload = struct {
         filename: []const u8,
         content_type: []const u8,
@@ -24,6 +83,31 @@ pub const Request = struct {
         pub fn deinit(self: *MultipartForm) void {
             deinitQueryString(&self.fields, self.allocator);
             deinitFiles(&self.files, self.allocator);
+        }
+    };
+
+    /// Streaming body reader. Present when the body exceeds
+    /// `Server.Config.max_inline_body_size`. The handler must call
+    /// `read()` until it returns 0.
+    pub const BodyStream = struct {
+        reader: *std.Io.Reader,
+        total_read: usize = 0,
+
+        /// Read the next chunk of the body into `buf`.
+        /// Returns the number of bytes written (0 means end of body).
+        pub fn read(self: *BodyStream, buf: []u8) !usize {
+            const n = try self.reader.readSliceShort(buf);
+            self.total_read += n;
+            return n;
+        }
+
+        /// Skip (read and discard) the remaining body.
+        pub fn skip(self: *BodyStream) !void {
+            var buf: [4096]u8 = undefined;
+            while (true) {
+                const n = try self.read(&buf);
+                if (n == 0) break;
+            }
         }
     };
 
@@ -63,6 +147,9 @@ pub const Request = struct {
     /// Optional authenticated user (set by auth middleware)
     user: ?*anyopaque = null,
 
+    /// Streaming body reader (set for large uploads instead of buffering in `body`).
+    body_stream: ?BodyStream = null,
+
     // ───────────── Helpers ─────────────
 
     /// Case-insensitive header lookup.
@@ -84,6 +171,12 @@ pub const Request = struct {
     pub fn file(self: *const Request, name: []const u8) ?FileUpload {
         if (!self.files_owned) return null;
         return self.files.get(name);
+    }
+
+    /// Parse the HTTP Range header.
+    pub fn range(self: *const Request) ?Range {
+        const hdr = self.header("Range") orelse return null;
+        return parseRangeHeader(hdr);
     }
 
     /// Cookie lookup.

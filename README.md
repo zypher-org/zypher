@@ -1,5 +1,10 @@
 # zypher
 
+[![CI](https://github.com/zypher-org/zypher/actions/workflows/ci.yml/badge.svg)](https://github.com/zypher-org/zypher/actions/workflows/ci.yml)
+[![Examples CI](https://github.com/zypher-org/zypher/actions/workflows/examples.yml/badge.svg)](https://github.com/zypher-org/zypher/actions/workflows/examples.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Zig](https://img.shields.io/badge/Zig-0.17.0--dev.857+2b2b85c5f-orange)](https://ziglang.org)
+
 > **A batteries-included web framework, built the Zig way.**
 
 zypher is a Django-inspired web framework written in **Zig**, designed for developers who want **clarity, control, and correctness** without sacrificing productivity.
@@ -281,15 +286,23 @@ const DemoRL = zypher.middleware.rate_limit.middlewareWith(
     .{ .max_requests = 100, .window_seconds = 60 },
 );
 
+threadlocal var tl_io: ?std.Io = null;
+
 fn mwHandler(req: *zypher.core.Request, res: *zypher.core.Response) void {
+    const io = tl_io orelse return;
     const MwChain = Chain(.{
         zypher.middleware.logger.middleware,
         DemoRL.handle,
     });
-    MwChain.run(req, res, router.dispatch);
+    MwChain.run(io, req, res, router.dispatch);
 }
 
-app.middlewareHandler(mwHandler);
+pub fn main(init: std.process.Init) !void {
+    tl_io = init.io;
+    // ... setup app, routes ...
+    app.middlewareHandler(mwHandler);
+    try app.listenAndServe(init.io);
+}
 ```
 
 ### Full Demo
@@ -309,19 +322,18 @@ See `examples/demo/` for a complete application with:
 ```
 zypher/
 ├── src/
-│   ├── core/          # Request / Response primitives
-│   ├── router/        # Compile-time router
-│   ├── middleware/    # Middleware system
-│   ├── view/          # Controllers and helpers
-│   ├── template/      # Template engine
-│   ├── orm/           # ORM and migrations
-│   ├── forms/         # Forms and validation
-│   ├── auth/          # Authentication and sessions
-│   ├── admin/         # Admin panel
-│   └── cli/           # CLI tooling
+│   ├── core/          # HTTP primitives: Request, Response, Server, App
+│   ├── router/        # Compile-time router, URL parameter extraction
+│   ├── middleware/    # Middleware pipeline, built-in middleware
+│   ├── template/      # Template parser, renderer, auto-escape
+│   ├── orm/           # Schema definition, query builder, SQLite driver
+│   ├── forms/         # Form structs, field validators, error maps
+│   ├── auth/          # Sessions, password hashing, permission guards
+│   ├── admin/         # Auto-generated admin UI
+│   └── cli/           # zypher CLI: new, migrate, createsuperuser, runserver
 ├── examples/
 ├── templates/        # CLI scaffold templates
-├── docs/
+├── docs/             # API reference (flat markdown files)
 └── build.zig
 ```
 
@@ -342,8 +354,7 @@ That said, the project is designed to be:
 
 ##  Documentation
 
-- Architecture & design decisions: see `docs/`
-- Full project specification: see `zypher_PROJECT_SPEC.md`
+- API reference: see `docs/`
 - Examples: see `examples/`
 
 ---

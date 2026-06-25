@@ -142,11 +142,17 @@ pub fn build(b: *std.Build) void {
         .root_module = exe.root_module,
     });
 
+    const test_helpers_mod = b.createModule(.{
+        .root_source_file = b.path("tests/helpers/io.zig"),
+        .target = target,
+    });
+
     const unit_test_mod = b.createModule(.{
         .root_source_file = b.path("tests/unit/test_runner.zig"),
         .target = target,
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
+            .{ .name = "test_io", .module = test_helpers_mod },
         },
     });
 
@@ -160,6 +166,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
+            .{ .name = "test_io", .module = test_helpers_mod },
         },
     });
 
@@ -174,6 +181,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
             .{ .name = "demo", .module = demo_mod },
+            .{ .name = "test_io", .module = test_helpers_mod },
         },
     });
 
@@ -187,6 +195,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
+            .{ .name = "test_io", .module = test_helpers_mod },
         },
     });
 
@@ -214,6 +223,27 @@ pub fn build(b: *std.Build) void {
 
     const test_e2e_step = b.step("test-e2e", "Run end-to-end tests only");
     test_e2e_step.dependOn(&b.addRunArtifact(e2e_tests).step);
+
+    // ── I/O Cleanliness Guard ──────────────────────────────────────
+    const io_clean_step = b.step("test-io-clean", "Assert no forbidden OS primitives in src/");
+    const io_clean_check = b.addSystemCommand(&.{
+        "sh", "-c",
+        \\grep -rn 'std\.posix\|std\.net\.\|std\.os\.linux\|std\.time\.Instant\|std\.io\.GenericReader\|AnyReader\|FixedBufferStream\|std\.Thread\.Pool\|std\.io\.getStd' src/ \
+        \\  --include='*.zig' \
+        \\  --exclude-dir='orm/' \
+        \\  --exclude='embedded_templates.zig' \
+        \\  --exclude='main.zig' \
+        \\  --exclude='runner.zig' \
+        \\  | grep -v '^\s*//' > /tmp/zypher_io_clean.txt; \
+        \\if [ -s /tmp/zypher_io_clean.txt ]; then \
+        \\  echo 'ERROR: Forbidden OS primitives found in src/'; \
+        \\  cat /tmp/zypher_io_clean.txt; \
+        \\  exit 1; \
+        \\else \
+        \\  echo 'OK: No forbidden OS primitives in src/'; \
+        \\fi
+    });
+    io_clean_step.dependOn(&io_clean_check.step);
 
     // ── Docs ────────────────────────────────────────────────────────
     const doc_mod = b.createModule(.{

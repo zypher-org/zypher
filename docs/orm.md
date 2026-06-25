@@ -132,7 +132,7 @@ Database schema migration runner.
 - `MigrationRunner.init(db) MigrationRunner` — create a runner
 - `runner.ensureHistoryTable() MigrationError!void` — create `zypher_migrations` tracking table
 - `runner.countApplied() MigrationError!u64` — count applied migrations
-- `runner.migrate(migrations) MigrationError!void` — apply all pending migrations in order
+- `runner.migrate(migrations, io) MigrationError!void` — apply all pending migrations in order
 - `runner.status(gpa, migrations) MigrationError![]MigrationStatus` — return migration application status
 - `runner.rollback(migrations, n) MigrationError!void` — roll back the most recent `n` applied migrations (in reverse order) that have `down_sql`
 
@@ -141,32 +141,33 @@ Error set: `PrepareFailed`, `StepFailed`, `ExecFailed`, `BindFailed`, `ColumnFai
 
 ## Full Example
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
-const UserModel = zypher.Model("users", .{
-    zypher.Field("id", .integer, .{ .primary = true }),
-    zypher.Field("name", .text, .{ .required = true }),
-    zypher.Field("age", .integer, .{}),
-    zypher.Field("active", .boolean, .{ .default = .{ .boolean = true } }),
+const UserModel = zypher.orm.schema.Model("users", .{
+    zypher.orm.schema.Field("id", .integer, .{ .primary = true }),
+    zypher.orm.schema.Field("name", .text, .{ .required = true }),
+    zypher.orm.schema.Field("age", .integer, .{}),
+    zypher.orm.schema.Field("active", .boolean, .{ .default = .{ .boolean = true } }),
 });
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-    var db = try zypher.Db.open(gpa.allocator(), "app.db");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var db = try zypher.orm.sqlite.Db.open(gpa.allocator(), "app.db");
     defer db.close();
 
     try db.exec(UserModel.create_table_sql);
 
     // Insert a record
-    const id = try zypher.create(UserModel, &db, &.{
+    const id = try zypher.orm.query.create(UserModel, &db, &.{
         .{ .text = "Alice" },
         .{ .int = 30 },
         .{ .int = 1 },
     });
 
     // Fetch by ID
-    const row = try zypher.getById(UserModel, &db, gpa.allocator(), id);
-    defer zypher.freeRow(UserModel, gpa.allocator(), &row);
+    const row = try zypher.orm.query.getById(UserModel, &db, gpa.allocator(), id);
+    defer zypher.orm.query.freeRow(UserModel, gpa.allocator(), &row);
     // row[0] == id, row[1] == "Alice", row[2] == 30, row[3] == true
 }
 ```

@@ -56,31 +56,36 @@ A bound form with values and validation errors.
   - Runs custom validators
   - Auto-validates email format for fields named "email"
 - `boundForm.cleanedData() Data` — return typed cleaned data after validation (parses integers, booleans)
-- `boundForm.csrfField() []const u8` — get CSRF hidden input HTML (returns empty string when no session)
-- `boundForm.csrfFieldForRequest(req) ![]u8` — get an owned CSRF hidden input backed by the request session
+- `boundForm.csrfField(io, req) ![]u8` — get an owned CSRF hidden input backed by the request session
 - `boundForm.deinit()` — free values and errors maps
 
 ## Validators
 Built-in validation functions.
 
 - `email(value) ?[]const u8` — validate email format; returns error message or null
+- `required(value) ?[]const u8` — validate non-empty
+- `requiredOptional(value) ?[]const u8` — validate non-empty if value is present; passes null through
 - `minLength(n) *const fn ([]const u8) ?[]const u8` — minimum length validator factory
 - `maxLength(n) *const fn ([]const u8) ?[]const u8` — maximum length validator factory
-- `matches(pattern) *const fn ([]const u8) ?[]const u8` — regex pattern validator factory
-- `integer() *const fn ([]const u8) ?[]const u8` — validate integer
+- `regex(pattern) *const fn ([]const u8) ?[]const u8` — glob-style pattern validator factory (`*` = any sequence, `?` = any char)
 - `url() *const fn ([]const u8) ?[]const u8` — validate URL format
+- `min(T, threshold) fn (T) ?[]const u8` — minimum value validator for numeric types
+- `max(T, threshold) fn (T) ?[]const u8` — maximum value validator for numeric types
+- `choices(valid_values) fn ([]const u8) ?[]const u8` — validate value is in a list
+- `custom(T, validate_fn) fn (T) ?[]const u8` — wrap an arbitrary validator function
 
 ## Full Example
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
-const ContactForm = zypher.Form("contact", .{
-    zypher.FormField("name", .text, .{ .required = true }),
-    zypher.FormField("email", .text, .{ .required = true }),
-    zypher.FormField("message", .text, .{ .required = true, .validator = zypher.minLength(10) }),
+const ContactForm = zypher.forms.form.Form("contact", .{
+    zypher.forms.form.Field("name", .text, .{ .required = true }),
+    zypher.forms.form.Field("email", .text, .{ .required = true }),
+    zypher.forms.form.Field("message", .text, .{ .required = true, .validator = zypher.forms.validators.minLength(10) }),
 });
 
-pub fn handleForm(req: *zypher.Request, res: *zypher.Response) void {
+pub fn handleForm(req: *zypher.core.Request, res: *zypher.core.Response) void {
     var bound = ContactForm.bindRequest(res.allocator, req) catch return;
     defer bound.deinit();
 

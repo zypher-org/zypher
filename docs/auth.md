@@ -24,17 +24,17 @@ In-memory session store with 256-bit random session IDs.
 #### Methods
 - `session.put(gpa, key, value) !void` — set session data (deep-copies key and value)
 - `session.get(key) ?[]const u8` — get session data
-- `session.isExpired() bool` — check if session has expired
+- `session.isExpired(io) bool` — check if session has expired
 - `session.deinit(gpa)` — free session data
 
 ### SessionStore
 - `SessionStore.init(gpa) SessionStore` — create an in-memory session store
 - `store.deinit()` — free all sessions and the store
-- `store.create() !Session` — create a new session with random ID and default expiry
-- `store.createWithExpiry(expires_at) !Session` — create a session with a specific expiry timestamp
+- `store.create(io) Session` — create a new session with random ID and default expiry
+- `store.createWithExpiry(io, expires_at) Session` — create a session with a specific expiry timestamp
 - `store.save(session) !void` — save a session into the store (deep-copies all data)
-- `store.getByHexId(hex_id) !?*Session` — load a session by hex-encoded cookie value; returns null if expired
-- `store.get(raw_id) !?*Session` — load a session by raw ID bytes
+- `store.getByHexId(hex_id, io) !?*Session` — load a session by hex-encoded cookie value; returns null if expired
+- `store.get(raw_id, io) !?*Session` — load a session by raw ID bytes
 - `store.destroyByHexId(hex_id) !void` — destroy a session by hex-encoded ID
 - `store.destroy(raw_id) !void` — destroy a session by raw ID bytes
 
@@ -52,7 +52,7 @@ Password hashing and verification using PBKDF2-HMAC-SHA256.
 - `ITERATIONS = 100_000` — PBKDF2 iteration count
 
 ### Methods
-- `hash(gpa, plaintext) ![]const u8` — hash a password; returns owned string in format `$pbkdf2-sha256$100000$<salt_hex>$<hash_hex>`
+- `hash(io, gpa, plaintext) ![]const u8` — hash a password; returns owned string in format `$pbkdf2-sha256$100000$<salt_hex>$<hash_hex>`
 - `verify(stored_hash, plaintext) !bool` — verify a password against a stored hash (constant-time comparison)
 
 ### PasswordError
@@ -70,15 +70,15 @@ User model with hashed password, role, and active status.
 - `gpa: std.mem.Allocator` — allocator for owned fields
 
 ### Methods
-- `User.init(gpa, username, plaintext) !User` — create a user with hashed password
+- `User.init(io, gpa, username, plaintext) !User` — create a user with hashed password
 - `user.deinit()` — free user resources
 - `user.authenticate(plaintext) !bool` — verify password; returns false if inactive
 - `user.setRole(role)` — set the user's role (deep-copies)
 - `user.deactivate()` — mark the user inactive
 
 ### Auth Middleware Functions
-- `loginRequired(req, res, next)` — middleware that requires an authenticated user; redirects to `/login` with 302 if `req.user` is null
-- `superuserRequired(req, res, next)` — middleware that requires a user with role `"admin"`; returns 403 if not admin
+- `loginRequired(req, res, next)` — guard that requires an authenticated user; redirects to `/login` with 302 if `req.user` is null. Uses `*const fn (*Request, *Response) void` next (not the middleware `NextFn` — does not receive `io`)
+- `superuserRequired(req, res, next)` — guard that requires a user with role `"admin"`; returns 403 if not admin
 
 ### Built-in Views
 - `loginView(req, res)` — GET renders a login form with CSRF token; POST processes login
@@ -87,32 +87,38 @@ User model with hashed password, role, and active status.
 
 ## Full Example
 ```zig
+const std = @import("std");
 const zypher = @import("zypher");
 
-// Create a session store
-var store = zypher.SessionStore.init(gpa);
-defer store.deinit();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-// Create a session
-var session = try store.create();
-defer session.deinit(gpa);
+    // Create a session store
+    var store = zypher.auth.session.SessionStore.init(gpa.allocator());
+    defer store.deinit();
 
-// Store data
-try session.put(gpa, "username", "alice");
-try session.put(gpa, "role", "admin");
+    // Create a session
+    var session = store.create(io);
+    defer session.deinit(gpa.allocator());
 
-// Save to store
-try store.save(&session);
+    // Store data
+    try session.put(gpa.allocator(), "username", "alice");
+    try session.put(gpa.allocator(), "role", "admin");
 
-// Hash a password
-const hash_str = try zypher.hash(gpa, "my_secret_password");
-defer gpa.free(hash_str);
+    // Save to store
+    try store.save(&session);
 
-// Verify
-const valid = try zypher.verify(hash_str, "my_secret_password");
+    // Hash a password
+    const hash_str = try zypher.auth.password.hash(io, gpa.allocator(), "my_secret_password");
+    defer gpa.allocator().free(hash_str);
 
-// Create a User
-var user = try zypher.User.init(gpa, "alice", "password123");
-defer user.deinit();
-try user.setRole("admin");
+    // Verify
+    const valid = try zypher.auth.password.verify(hash_str, "my_secret_password");
+
+    // Create a User
+    var user = try zypher.auth.user.User.init(io, gpa.allocator(), "alice", "password123");
+    defer user.deinit();
+    try user.setRole("admin");
+}
 ```

@@ -86,7 +86,8 @@ pub const MigrationRunner = struct {
     }
 
     /// Apply all pending migrations in order.
-    pub fn migrate(self: *MigrationRunner, migrations: []const Migration) MigrationError!void {
+    pub fn migrate(self: *MigrationRunner, migrations: []const Migration, io: std.Io) MigrationError!void {
+        _ = io;
         try self.ensureHistoryTable();
         for (migrations) |m| {
             if (try self.isApplied(m.id)) {

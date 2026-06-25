@@ -78,41 +78,17 @@ fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
     return false;
 }
 
-fn randomBytes(buf: []u8) !void {
-    if (buf.len == 0) return;
-    if (@import("builtin").os.tag == .linux) {
-        var filled: usize = 0;
-        while (filled < buf.len) {
-            const remaining = buf[filled..];
-            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
-            switch (std.posix.errno(rc)) {
-                .SUCCESS => {
-                    const n: usize = @intCast(rc);
-                    if (n == 0) return error.EntropyUnavailable;
-                    filled += n;
-                },
-                .INTR => continue,
-                else => return error.EntropyUnavailable,
-            }
-        }
-        return;
-    }
-    if (@import("builtin").link_libc and @hasDecl(std.posix.system, "arc4random_buf")) {
-        std.posix.system.arc4random_buf(buf.ptr, buf.len);
-        return;
-    }
-    return error.EntropyUnavailable;
+fn randomBytes(buf: []u8) void {
+    tl_io.random(buf);
 }
 
 fn unixTimestamp() i64 {
-    var ts: std.posix.timespec = undefined;
-    _ = std.posix.system.clock_gettime(std.posix.CLOCK.REALTIME, &ts);
-    return ts.sec;
+    return std.Io.Timestamp.now(tl_io, .real).toSeconds();
 }
 
 fn generateRecoveryCode(gpa: std.mem.Allocator) ![]u8 {
     var bytes: [4]u8 = undefined;
-    try randomBytes(&bytes);
+    randomBytes(&bytes);
     const raw = (@as(u32, bytes[0]) << 24) | (@as(u32, bytes[1]) << 16) | (@as(u32, bytes[2]) << 8) | @as(u32, bytes[3]);
     return std.fmt.allocPrint(gpa, "{d:0>6}", .{raw % 1_000_000});
 }
@@ -174,7 +150,7 @@ fn resetPassword(req: *Request, res: *Response) void {
     const stored = stmt.column(.text, 0) catch return invalidRecoveryCode(res);
     const expires = stmt.column(.integer, 1) catch return invalidRecoveryCode(res);
     if (expires.int < unixTimestamp() or !std.mem.eql(u8, stored.text, code)) return invalidRecoveryCode(res);
-    const hash = password.hash(req.allocator, plain) catch return;
+    const hash = password.hash(tl_io, req.allocator, plain) catch return;
     defer req.allocator.free(hash);
     var update = db.prepare("UPDATE users SET password_hash = ?, reset_code = NULL, reset_code_expires_at = NULL WHERE email = ?") catch return;
     defer update.finalize();
@@ -207,12 +183,14 @@ fn notFound(_: *Request, res: *Response) void {
     res.json(.{ .message = "not_found" }) catch {};
 }
 
+threadlocal var tl_io: std.Io = undefined;
+
 fn dispatch(req: *Request, res: *Response) void {
     context.router().dispatch(req, res);
 }
 
 fn runChain(req: *Request, res: *Response) void {
-    Chain.run(req, res, dispatch);
+    Chain.run(tl_io, req, res, dispatch);
 }
 
 fn parsePort(init: std.process.Init) u16 {
@@ -264,6 +242,7 @@ pub fn main(init: std.process.Init) !void {
     var router = Router.initFromSlice(&routes, notFound);
     context.set(&db_conn, &router);
 
+    tl_io = init.io;
     var app = zypher.core.App.init(init.gpa, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();
     app.middlewareHandler(runChain);

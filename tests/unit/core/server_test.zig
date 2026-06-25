@@ -13,7 +13,7 @@ test "ServerConfig has sensible defaults" {
     try std.testing.expectEqual(@as(u16, 8080), config.port);
     try std.testing.expectEqual(@as(usize, 8192), config.read_buffer_size);
     try std.testing.expectEqual(@as(usize, 8192), config.write_buffer_size);
-    try std.testing.expectEqual(@as(usize, 1_048_576), config.max_body_size);
+    try std.testing.expectEqual(@as(usize, 10_485_760), config.max_body_size);
 }
 
 // ── Handler type ──────────────────────────────────────────────────
@@ -160,6 +160,145 @@ test "Server starts, responds to health check, and stops after request limit" {
     try std.testing.expect(std.mem.indexOf(u8, response, "200") != null);
 }
 
+test "BodyTooLarge in buildRequest returns 400 and closes connection" {
+    const port: u16 = 19089;
+    var server = Server.init(.{ .host = "127.0.0.1", .port = port, .max_requests = 2, .max_body_size = 100 });
+
+    const server_ctx = struct {
+        fn handler(req: *Request, res: *Response) void {
+            _ = req;
+            res.text("OK") catch {};
+        }
+        fn run(s: *Server) !void {
+            try s.listenAndServe(std.testing.io, std.testing.allocator, handler);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, server_ctx.run, .{&server});
+    defer thread.join();
+
+    const addr = try Server.listenAddress("127.0.0.1", port);
+
+    // First connection: POST with oversized body → 400
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        const body_data = try std.testing.allocator.alloc(u8, 200);
+        @memset(body_data, 'A');
+        defer std.testing.allocator.free(body_data);
+
+        try writer.interface.writeAll("POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 200\r\nContent-Type: application/octet-stream\r\n\r\n");
+        try writer.interface.writeAll(body_data);
+        try writer.interface.flush();
+
+        const err_line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, err_line, "400") != null);
+    }
+
+    // Second connection on the same server: normal GET → 200
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        try writer.interface.writeAll("GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+        try writer.interface.flush();
+
+        const ok_line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, ok_line, "200") != null);
+    }
+
+    server.shutdown(std.testing.io);
+}
+
+test "large upload rejected with 400 does not affect subsequent request" {
+    const port: u16 = 19090;
+    var server = Server.init(.{ .host = "127.0.0.1", .port = port, .max_requests = 3, .max_body_size = 100 });
+
+    const server_ctx = struct {
+        fn handler(req: *Request, res: *Response) void {
+            _ = req;
+            res.text("OK") catch {};
+        }
+        fn run(s: *Server) !void {
+            try s.listenAndServe(std.testing.io, std.testing.allocator, handler);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, server_ctx.run, .{&server});
+    defer thread.join();
+
+    const addr = try Server.listenAddress("127.0.0.1", port);
+
+    // Connection 1: normal GET succeeds
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        try writer.interface.writeAll("GET /uploads/file1.txt HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+        try writer.interface.flush();
+
+        const first_line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, first_line, "200") != null);
+    }
+
+    // Connection 2: oversized POST → 400
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        const large_body = try std.testing.allocator.alloc(u8, 150);
+        @memset(large_body, 'B');
+        defer std.testing.allocator.free(large_body);
+
+        try writer.interface.writeAll("POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 150\r\nContent-Type: application/octet-stream\r\n\r\n");
+        try writer.interface.writeAll(large_body);
+        try writer.interface.flush();
+
+        const err_line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, err_line, "400") != null);
+    }
+
+    // Connection 3: normal GET still works
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        try writer.interface.writeAll("GET /uploads/file2.txt HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+        try writer.interface.flush();
+
+        const third_line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, third_line, "200") != null);
+    }
+
+    server.shutdown(std.testing.io);
+}
+
 fn connectWithRetry(addr: *const std.Io.net.IpAddress) !std.Io.net.Stream {
     var attempts: usize = 0;
     while (attempts < 50) : (attempts += 1) {
@@ -172,4 +311,222 @@ fn connectWithRetry(addr: *const std.Io.net.IpAddress) !std.Io.net.Stream {
         };
     }
     return error.ConnectionRefused;
+}
+
+// ── Streaming upload tests ────────────────────────────────────────
+
+test "small body within max_inline_body_size is buffered inline" {
+    const port: u16 = 19091;
+    var server = Server.init(.{
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 500,
+    });
+
+    const server_ctx = struct {
+        fn handler(req: *Request, res: *Response) void {
+            _ = res.status(200);
+            // Body should be in memory, not streamed
+            if (req.body_stream != null) std.debug.panic("expected no body_stream", .{});
+            if (req.body.len == 0) std.debug.panic("expected non-empty body", .{});
+            if (!std.mem.eql(u8, "hello", req.body)) std.debug.panic("body mismatch", .{});
+            res.text("OK") catch {};
+        }
+        fn run(s: *Server) !void {
+            try s.listenAndServe(std.testing.io, std.testing.allocator, handler);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, server_ctx.run, .{&server});
+    defer thread.join();
+
+    const addr = try Server.listenAddress("127.0.0.1", port);
+    var stream = try connectWithRetry(&addr);
+    defer stream.close(std.testing.io);
+
+    var read_buf: [1024]u8 = undefined;
+    var write_buf: [1024]u8 = undefined;
+    var reader = stream.reader(std.testing.io, &read_buf);
+    var writer = stream.writer(std.testing.io, &write_buf);
+
+    try writer.interface.writeAll("POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 5\r\n\r\nhello");
+    try writer.interface.flush();
+
+    const line = try reader.interface.takeDelimiterExclusive('\n');
+    try std.testing.expect(std.mem.indexOf(u8, line, "200") != null);
+    server.shutdown(std.testing.io);
+}
+
+test "large body exceeding max_inline_body_size is streamed via body_stream" {
+    const port: u16 = 19092;
+    var server = Server.init(.{
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 10,
+    });
+
+    const server_ctx = struct {
+        fn handler(req: *Request, res: *Response) void {
+            // Body should be streamed, not buffered
+            if (req.body_stream == null) std.debug.panic("expected body_stream", .{});
+            if (req.body.len != 0) std.debug.panic("expected empty body", .{});
+
+            // Read streamed body in chunks
+            var buf: [16]u8 = undefined;
+            var total: usize = 0;
+            while (true) {
+                const n = req.body_stream.?.read(&buf) catch |err| {
+                    std.debug.panic("body read failed: {}", .{err});
+                };
+                if (n == 0) break;
+                for (buf[0..n]) |byte| if (byte != 'A') std.debug.panic("unexpected byte", .{});
+                total += n;
+            }
+            if (total != 100) std.debug.panic("expected 100 bytes, got {d}", .{total});
+            res.text("OK") catch {};
+        }
+        fn run(s: *Server) !void {
+            try s.listenAndServe(std.testing.io, std.testing.allocator, handler);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, server_ctx.run, .{&server});
+    defer thread.join();
+
+    const addr = try Server.listenAddress("127.0.0.1", port);
+
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        const body = try std.testing.allocator.alloc(u8, 100);
+        @memset(body, 'A');
+        defer std.testing.allocator.free(body);
+
+        try writer.interface.writeAll("POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 100\r\n\r\n");
+        try writer.interface.writeAll(body);
+        try writer.interface.flush();
+
+        const line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, line, "200") != null);
+    }
+    server.shutdown(std.testing.io);
+}
+
+test "streaming body can be read with small buffer chunks" {
+    const port: u16 = 19093;
+    var server = Server.init(.{
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 10,
+    });
+
+    const server_ctx = struct {
+        fn handler(req: *Request, res: *Response) void {
+            var buf: [7]u8 = undefined; // deliberately small buffer
+            var total: usize = 0;
+            while (true) {
+                const n = req.body_stream.?.read(&buf) catch |err| {
+                    std.debug.panic("body read failed: {}", .{err});
+                };
+                if (n == 0) break;
+                // Each chunk should be ≤ buf.len
+                if (n > buf.len) std.debug.panic("chunk too large: {d}", .{n});
+                total += n;
+            }
+            if (total != 100) std.debug.panic("expected 100 bytes, got {d}", .{total});
+            res.text("OK") catch {};
+        }
+        fn run(s: *Server) !void {
+            try s.listenAndServe(std.testing.io, std.testing.allocator, handler);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, server_ctx.run, .{&server});
+    defer thread.join();
+
+    const addr = try Server.listenAddress("127.0.0.1", port);
+
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        const body = try std.testing.allocator.alloc(u8, 100);
+        @memset(body, 'B');
+        defer std.testing.allocator.free(body);
+
+        try writer.interface.writeAll("POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 100\r\n\r\n");
+        try writer.interface.writeAll(body);
+        try writer.interface.flush();
+
+        const line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, line, "200") != null);
+    }
+    server.shutdown(std.testing.io);
+}
+
+test "unconsumed streaming body is drained without hanging" {
+    const port: u16 = 19094;
+    var server = Server.init(.{
+        .host = "127.0.0.1",
+        .port = port,
+        .max_requests = 2,
+        .max_body_size = 1_000_000,
+        .max_inline_body_size = 10,
+    });
+
+    const server_ctx = struct {
+        fn handler(req: *Request, res: *Response) void {
+            // Body is streamed but we don't consume it — server should drain it
+            if (req.body_stream == null) std.debug.panic("expected body_stream", .{});
+            if (req.body.len != 0) std.debug.panic("expected empty body", .{});
+            res.text("OK") catch {};
+        }
+        fn run(s: *Server) !void {
+            try s.listenAndServe(std.testing.io, std.testing.allocator, handler);
+        }
+    };
+
+    var thread = try std.Thread.spawn(.{}, server_ctx.run, .{&server});
+    defer thread.join();
+
+    const addr = try Server.listenAddress("127.0.0.1", port);
+
+    {
+        var stream = try connectWithRetry(&addr);
+        defer stream.close(std.testing.io);
+
+        var read_buf: [1024]u8 = undefined;
+        var write_buf: [1024]u8 = undefined;
+        var reader = stream.reader(std.testing.io, &read_buf);
+        var writer = stream.writer(std.testing.io, &write_buf);
+
+        const body = try std.testing.allocator.alloc(u8, 100);
+        @memset(body, 'C');
+        defer std.testing.allocator.free(body);
+
+        try writer.interface.writeAll("POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 100\r\n\r\n");
+        try writer.interface.writeAll(body);
+        try writer.interface.flush();
+
+        const line = try reader.interface.takeDelimiterExclusive('\n');
+        try std.testing.expect(std.mem.indexOf(u8, line, "200") != null);
+    }
+    server.shutdown(std.testing.io);
 }

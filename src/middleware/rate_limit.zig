@@ -45,13 +45,8 @@ pub const RateLimiter = struct {
 
     /// Check if a request from the given key is allowed.
     /// Returns true if allowed, false if rate limited.
-    pub fn allow(self: *Self, key: []const u8) !bool {
-        const now = blk: {
-            var ts: std.posix.timespec = undefined;
-            const rc = std.os.linux.clock_gettime(std.posix.CLOCK.REALTIME, &ts);
-            if (rc == 0) break :blk ts.sec;
-            break :blk @as(i64, 0);
-        };
+    pub fn allow(self: *Self, key: []const u8, io: std.Io) !bool {
+        const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
         if (self.entries.getPtr(key)) |entry| {
             // Check if window has expired
@@ -80,9 +75,9 @@ pub const RateLimiter = struct {
 var default_limiter: ?RateLimiter = null;
 
 /// Default rate limit middleware (100 req/min).
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     const DefaultRL = middlewareWith(.{ .max_requests = 100, .window_seconds = 60 });
-    DefaultRL.handle(req, res, next);
+    DefaultRL.handle(io, req, res, next);
 }
 
 /// Create a rate limit middleware with custom configuration.
@@ -93,16 +88,16 @@ pub fn middlewareWith(comptime config: Config) type {
         var limiter: RateLimiter = undefined;
         var initialized: bool = false;
 
-        pub fn handle(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+        pub fn handle(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
             if (!initialized) {
-                limiter = RateLimiter.init(req.allocator, config);
+                limiter = RateLimiter.init(std.heap.page_allocator, config);
                 initialized = true;
             }
 
             // Use remote IP from headers or fallback to "default"
             const ip = req.headers.get("X-Forwarded-For") orelse "default";
 
-            const allowed = limiter.allow(ip) catch true;
+            const allowed = limiter.allow(ip, io) catch true;
             if (!allowed) {
                 log.warn("rate limited: {s} on {s} {s}", .{ ip, @tagName(req.method), req.path });
                 _ = res.status(429);
@@ -111,7 +106,7 @@ pub fn middlewareWith(comptime config: Config) type {
                 return;
             }
 
-            next(req, res);
+            next(io, req, res);
         }
 
         /// Free internal state. Call after all requests are processed.
@@ -123,7 +118,7 @@ pub fn middlewareWith(comptime config: Config) type {
         }
 
         /// Get the middleware function pointer for use in Chain.
-        pub fn middleware() *const fn (*Request, *Response, *const fn (*Request, *Response) void) void {
+        pub fn middleware() *const fn (std.Io, *Request, *Response, *const fn (std.Io, *Request, *Response) void) void {
             return handle;
         }
     };

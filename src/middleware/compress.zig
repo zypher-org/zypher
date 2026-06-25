@@ -7,23 +7,17 @@ const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const log = std.log.scoped(.compress);
 
-fn gzipBody(allocator: std.mem.Allocator, body: []const u8) ![]u8 {
-    var out = try std.Io.Writer.Allocating.initCapacity(allocator, body.len + std.compress.flate.Container.gzip.size());
-    defer out.deinit();
-
-    const window = try allocator.alloc(u8, std.compress.flate.max_window_len);
-    defer allocator.free(window);
-
-    var gzip = try std.compress.flate.Compress.init(&out.writer, window, .gzip, .default);
+fn gzipBody(body: []const u8, writer: *std.Io.Writer) !void {
+    var window: [std.compress.flate.max_window_len]u8 = undefined;
+    var gzip = try std.compress.flate.Compress.init(writer, &window, .gzip, .default);
     try gzip.writer.writeAll(body);
     try gzip.finish();
-    return try out.toOwnedSlice();
 }
 
 /// Compression middleware function.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     // Call handler first to get the response
-    next(req, res);
+    next(io, req, res);
 
     // Check if client accepts gzip
     const accept = req.header("Accept-Encoding") orelse return;
@@ -47,7 +41,17 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
     }
 
     const original_len = body.len;
-    const compressed = gzipBody(res.allocator, body) catch |err| {
+    var alloc_writer = std.Io.Writer.Allocating.initCapacity(res.allocator, body.len + std.compress.flate.Container.gzip.size()) catch {
+        log.warn("gzip compression failed: out of memory", .{});
+        return;
+    };
+    defer alloc_writer.deinit();
+
+    gzipBody(body, &alloc_writer.writer) catch |err| {
+        log.warn("gzip compression failed: {}", .{err});
+        return;
+    };
+    const compressed = alloc_writer.toOwnedSlice() catch |err| {
         log.warn("gzip compression failed: {}", .{err});
         return;
     };

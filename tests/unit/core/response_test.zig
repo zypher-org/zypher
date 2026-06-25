@@ -1,6 +1,7 @@
 /// Unit tests for zypher Response.
 const std = @import("std");
 const Response = @import("zypher").core.Response;
+const testing = std.testing;
 
 // ── Status code and reason phrase ────────────────────────────────
 
@@ -169,12 +170,13 @@ test "Response.setCookie preserves multiple Set-Cookie headers" {
 
     try std.testing.expectEqual(@as(usize, 2), res.set_cookie_headers.items.len);
 
-    var buf: std.ArrayList(u8) = .empty;
-    defer buf.deinit(std.testing.allocator);
-    try res.send(std.testing.allocator, &buf);
+    var buf = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer buf.deinit();
+    try res.send(std.testing.io, &buf.writer);
 
-    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Set-Cookie: a=1; Path=/; SameSite=Lax\r\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Set-Cookie: b=2; Path=/; SameSite=Lax\r\n") != null);
+    const output = buf.written();
+    try std.testing.expect(std.mem.indexOf(u8, output, "Set-Cookie: a=1; Path=/; SameSite=Lax\r\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "Set-Cookie: b=2; Path=/; SameSite=Lax\r\n") != null);
 }
 
 // ── Serialise response to bytes ──────────────────────────────────
@@ -184,10 +186,10 @@ test "Response.send serialises HTTP/1.1 response" {
     defer res.deinit();
     _ = res.status(200);
     try res.text("OK");
-    var buf: std.ArrayList(u8) = .empty;
-    defer buf.deinit(std.testing.allocator);
-    try res.send(std.testing.allocator, &buf);
-    const output = buf.items;
+    var buf = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer buf.deinit();
+    try res.send(std.testing.io, &buf.writer);
+    const output = buf.written();
     // Should start with HTTP/1.1 200 OK
     try std.testing.expect(std.mem.startsWith(u8, output, "HTTP/1.1 200 OK\r\n"));
     // Should contain Content-Type
@@ -201,14 +203,59 @@ test "Response.send emits Content-Length zero for empty redirect body" {
     defer res.deinit();
     try res.redirect("/", 302);
 
-    var buf: std.ArrayList(u8) = .empty;
-    defer buf.deinit(std.testing.allocator);
-    try res.send(std.testing.allocator, &buf);
+    var buf = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer buf.deinit();
+    try res.send(std.testing.io, &buf.writer);
 
-    try std.testing.expect(std.mem.indexOf(u8, buf.items, "HTTP/1.1 302 Found\r\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Content-Length: 0\r\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, buf.items, "Location: /\r\n") != null);
-    try std.testing.expect(std.mem.endsWith(u8, buf.items, "\r\n\r\n"));
+    const output = buf.written();
+    try std.testing.expect(std.mem.indexOf(u8, output, "HTTP/1.1 302 Found\r\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "Content-Length: 0\r\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "Location: /\r\n") != null);
+    try std.testing.expect(std.mem.endsWith(u8, output, "\r\n\r\n"));
+}
+
+// ── 206 Partial Content ──────────────────────────────────────────
+
+test "Response.status 206 has Partial Content reason phrase" {
+    var res = Response.init(std.testing.allocator);
+    defer res.deinit();
+    _ = res.status(206);
+    try std.testing.expectEqual(@as(u16, 206), res.status_code);
+    try std.testing.expectEqualStrings("Partial Content", res.reason_phrase.?);
+}
+
+// ── Streaming file body ─────────────────────────────────────────
+
+test "Response.send with file_body streams file content" {
+    const gpa = std.testing.allocator;
+
+    // Create a temp file with known content
+    const tmp_path = ".zig-cache/tmp/resp-stream-test.txt";
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDirPath(std.testing.io, ".zig-cache/tmp") catch {};
+    try cwd.writeFile(std.testing.io, .{ .sub_path = tmp_path, .data = "streamed content here" });
+
+    const file = try cwd.openFile(
+        std.testing.io,
+        tmp_path,
+        .{},
+    );
+    defer file.close(std.testing.io);
+
+    var res = Response.init(gpa);
+    defer res.deinit();
+    _ = res.status(200);
+    _ = res.header("Content-Type", "text/plain");
+    try res.setFileBody(file.handle, 21);
+
+    var buf = std.Io.Writer.Allocating.init(gpa);
+    defer buf.deinit();
+    try res.send(std.testing.io, &buf.writer);
+
+    const output = buf.written();
+    try std.testing.expect(std.mem.indexOf(u8, output, "200 OK") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "Content-Length: 21") != null);
+    try std.testing.expect(std.mem.endsWith(u8, output, "streamed content here"));
 }
 
 // ── Deinit ───────────────────────────────────────────────────────

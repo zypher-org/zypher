@@ -9,8 +9,8 @@ const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 
 /// Recovery middleware. Calls the next handler.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-    next(req, res);
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    next(io, req, res);
 }
 
 test {

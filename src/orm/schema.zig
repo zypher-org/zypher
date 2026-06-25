@@ -149,8 +149,33 @@ pub fn Model(comptime table: [:0]const u8, comptime Fields: type) type {
             break :blk result ++ " FROM " ++ table;
         };
 
+        /// Find the primary key field name (comptime).
+        pub const primary_key_name: [:0]const u8 = blk: {
+            var found: [:0]const u8 = "id";
+            for (field_names) |name| {
+                const f = @field(fields_instance, name);
+                if (f.primary) {
+                    found = f.name;
+                    break;
+                }
+            }
+            break :blk found;
+        };
+
+        /// Index of the primary key field in the fields array.
+        pub const primary_key_index: usize = blk: {
+            var found: usize = 0;
+            for (field_names, 0..) |name, i| {
+                if (@field(fields_instance, name).primary) {
+                    found = i;
+                    break;
+                }
+            }
+            break :blk found;
+        };
+
         /// Generate SELECT by primary key SQL.
-        pub const select_by_id_sql: [:0]const u8 = select_all_sql ++ " WHERE id = ?";
+        pub const select_by_id_sql: [:0]const u8 = select_all_sql ++ " WHERE " ++ primary_key_name ++ " = ?";
 
         /// Generate UPDATE by primary key SQL.
         pub const update_by_id_sql: [:0]const u8 = blk: {
@@ -163,11 +188,11 @@ pub fn Model(comptime table: [:0]const u8, comptime Fields: type) type {
                 first = false;
                 result = result ++ f.name ++ " = ?";
             }
-            break :blk result ++ " WHERE id = ?";
+            break :blk result ++ " WHERE " ++ primary_key_name ++ " = ?";
         };
 
         /// Generate DELETE by primary key SQL.
-        pub const delete_by_id_sql: [:0]const u8 = "DELETE FROM " ++ table ++ " WHERE id = ?";
+        pub const delete_by_id_sql: [:0]const u8 = "DELETE FROM " ++ table ++ " WHERE " ++ primary_key_name ++ " = ?";
     };
 }
 

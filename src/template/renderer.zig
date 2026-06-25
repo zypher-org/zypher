@@ -281,30 +281,28 @@ pub const Template = struct {
         const iterable = ctx.get(node.value) orelse return;
         switch (iterable) {
             .list => |items| {
+                var child_ctx = Context.init(self.allocator);
+                defer child_ctx.deinit();
+
+                var it = ctx.data.iterator();
+                while (it.next()) |entry| {
+                    try child_ctx.data.put(entry.key_ptr.*, entry.value_ptr.*);
+                }
+
+                var forloop_ctx = Context.init(self.allocator);
+                defer forloop_ctx.deinit();
+
                 for (items, 0..) |item, i| {
-                    var child_ctx = Context.init(self.allocator);
-                    defer child_ctx.deinit();
-
-                    var it = ctx.data.iterator();
-                    while (it.next()) |entry| {
-                        try child_ctx.data.put(entry.key_ptr.*, entry.value_ptr.*);
-                    }
-                    try child_ctx.put(node.loop_var, item);
-
-                    var forloop_ctx = try self.allocator.create(Context);
-                    forloop_ctx.* = Context.init(self.allocator);
-                    try forloop_ctx.put("counter0", .{ .int = @as(i64, @intCast(i)) });
-                    try forloop_ctx.put("counter", .{ .int = @as(i64, @intCast(i + 1)) });
-                    try forloop_ctx.put("first", .{ .bool = i == 0 });
-                    try forloop_ctx.put("last", .{ .bool = i == items.len - 1 });
-                    try child_ctx.put("forloop", .{ .map = forloop_ctx });
+                    try child_ctx.data.put(node.loop_var, item);
+                    try forloop_ctx.data.put("counter0", .{ .int = @as(i64, @intCast(i)) });
+                    try forloop_ctx.data.put("counter", .{ .int = @as(i64, @intCast(i + 1)) });
+                    try forloop_ctx.data.put("first", .{ .bool = i == 0 });
+                    try forloop_ctx.data.put("last", .{ .bool = i == items.len - 1 });
+                    try child_ctx.data.put("forloop", .{ .map = &forloop_ctx });
 
                     for (node.children.items) |child| {
                         try self.renderNode(child, &child_ctx, writer);
                     }
-
-                    forloop_ctx.deinit();
-                    self.allocator.destroy(forloop_ctx);
                 }
             },
             else => log.warn("for iterable '{s}' is not a list", .{node.value}),
@@ -372,7 +370,22 @@ pub const TemplateEngine = struct {
         return self.cache.getPtr(name);
     }
 
-    pub fn load(self: *TemplateEngine, name: []const u8, source: []const u8) !*Template {
+    pub fn load(self: *TemplateEngine, io: std.Io, path: []const u8) !*Template {
+        const gpa = self.allocator;
+        if (self.cache.getPtr(path)) |tmpl| {
+            log.debug("cache hit for template '{s}'", .{path});
+            return tmpl;
+        }
+        const source = try std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(1024 * 1024));
+        defer gpa.free(source);
+        var tmpl = try Template.fromSource(gpa, source);
+        tmpl.engine = @ptrCast(self);
+        try self.cache.put(path, tmpl);
+        log.debug("loaded and cached template '{s}'", .{path});
+        return self.cache.getPtr(path).?;
+    }
+
+    pub fn loadFromSource(self: *TemplateEngine, name: []const u8, source: []const u8) !*Template {
         if (self.cache.getPtr(name)) |tmpl| {
             log.debug("cache hit for template '{s}'", .{name});
             return tmpl;

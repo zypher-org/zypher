@@ -26,17 +26,20 @@ fn reasonPhrase(code: u16) ?[]const u8 {
         200 => "OK",
         201 => "Created",
         204 => "No Content",
+        206 => "Partial Content",
         301 => "Moved Permanently",
         302 => "Found",
         303 => "See Other",
         307 => "Temporary Redirect",
         308 => "Permanent Redirect",
+        304 => "Not Modified",
         400 => "Bad Request",
         401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
+        416 => "Range Not Satisfiable",
         422 => "Unprocessable Entity",
         429 => "Too Many Requests",
         500 => "Internal Server Error",
@@ -70,6 +73,12 @@ fn rawJsonSlice(content: anytype) ?[]const u8 {
     };
 }
 
+/// File body to be read and written via std.Io.File.
+pub const FileBody = struct {
+    handle: std.Io.File.Handle,
+    size: usize,
+};
+
 pub const Response = struct {
     status_code: u16 = 200,
     reason_phrase: ?[]const u8 = "OK",
@@ -78,6 +87,10 @@ pub const Response = struct {
     body: ?[]const u8 = null,
     use_chunked: bool = false,
     allocator: std.mem.Allocator,
+    /// When set, the response body is streamed directly from this file
+    /// descriptor instead of from `body`. The caller is responsible for
+    /// closing the fd after the response has been sent.
+    file_body: ?FileBody = null,
 
     // ───────────── Lifecycle ─────────────
 
@@ -87,6 +100,15 @@ pub const Response = struct {
             .headers = std.StringHashMap([]const u8).init(gpa),
             .allocator = gpa,
         };
+    }
+
+    /// Use a file handle as the response body, streaming its contents
+    /// to the socket. The caller retains ownership of `handle` and
+    /// must close it after the response has been sent.
+    pub fn setFileBody(self: *Response, handle: std.Io.File.Handle, size: usize) !void {
+        if (self.body) |b| self.allocator.free(b);
+        self.body = null;
+        self.file_body = .{ .handle = handle, .size = size };
     }
 
     /// Free all owned memory.
@@ -254,47 +276,73 @@ pub const Response = struct {
 
     // ───────────── Serialisation ─────────────
 
-    /// Serialise the full HTTP response into the provided ArrayList.
-    pub fn send(self: *Response, gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+    /// Serialise the response status line and headers into the provided writer.
+    pub fn sendHeaders(self: *Response, w: *std.Io.Writer) !void {
         const phrase = self.reason_phrase orelse "";
-        try out.appendSlice(gpa, "HTTP/1.1 ");
+        try w.writeAll("HTTP/1.1 ");
         var int_buf: [8]u8 = undefined;
         const status_str = try std.fmt.bufPrint(&int_buf, "{d}", .{self.status_code});
-        try out.appendSlice(gpa, status_str);
-        try out.appendSlice(gpa, " ");
-        try out.appendSlice(gpa, phrase);
-        try out.appendSlice(gpa, "\r\n");
+        try w.writeAll(status_str);
+        try w.writeAll(" ");
+        try w.writeAll(phrase);
+        try w.writeAll("\r\n");
 
         if (!self.use_chunked) {
-            try out.appendSlice(gpa, "Content-Length: ");
+            try w.writeAll("Content-Length: ");
             var len_buf: [16]u8 = undefined;
-            const len = if (self.body) |b| b.len else 0;
+            const len = if (self.file_body) |fb|
+                fb.size
+            else if (self.body) |b|
+                b.len
+            else
+                0;
             const len_str = try std.fmt.bufPrint(&len_buf, "{d}", .{len});
-            try out.appendSlice(gpa, len_str);
-            try out.appendSlice(gpa, "\r\n");
+            try w.writeAll(len_str);
+            try w.writeAll("\r\n");
         }
 
         // Write all headers
         var it = self.headers.iterator();
         while (it.next()) |entry| {
-            try out.appendSlice(gpa, entry.key_ptr.*);
-            try out.appendSlice(gpa, ": ");
-            try out.appendSlice(gpa, entry.value_ptr.*);
-            try out.appendSlice(gpa, "\r\n");
+            try w.writeAll(entry.key_ptr.*);
+            try w.writeAll(": ");
+            try w.writeAll(entry.value_ptr.*);
+            try w.writeAll("\r\n");
         }
         for (self.set_cookie_headers.items) |cookie| {
-            try out.appendSlice(gpa, "Set-Cookie: ");
-            try out.appendSlice(gpa, cookie);
-            try out.appendSlice(gpa, "\r\n");
+            try w.writeAll("Set-Cookie: ");
+            try w.writeAll(cookie);
+            try w.writeAll("\r\n");
         }
 
-        try out.appendSlice(gpa, "\r\n");
+        try w.writeAll("\r\n");
+    }
+
+    /// Serialise the full HTTP response into the provided writer.
+    /// If `file_body` is set, the file content is read in chunks and written.
+    pub fn send(self: *Response, io: std.Io, w: *std.Io.Writer) !void {
+        try self.sendHeaders(w);
+
+        const phrase = self.reason_phrase orelse "";
 
         // Write body
         if (self.body) |b| {
-            try out.appendSlice(gpa, b);
+            try w.writeAll(b);
+        } else if (self.file_body) |fb| {
+            // Stream file content in chunks
+            var buf: [8192]u8 = undefined;
+            var remaining: usize = fb.size;
+            const file = std.Io.File{ .handle = fb.handle, .flags = .{ .nonblocking = false } };
+            while (remaining > 0) {
+                const to_read = @min(buf.len, remaining);
+                var data: [1][]u8 = .{buf[0..to_read]};
+                const n = try std.Io.File.readStreaming(file, io, &data);
+                if (n == 0) break;
+                try w.writeAll(buf[0..n]);
+                remaining -= n;
+            }
         }
 
-        log.info("response sent: {d} {s}, body_len={d}", .{ self.status_code, phrase, if (self.body) |b| b.len else 0 });
+        log.info("response sent: {d} {s}, body_len={d}", .{ self.status_code, phrase, if (self.file_body) |fb| fb.size else if (self.body) |b| b.len else 0 });
     }
 };

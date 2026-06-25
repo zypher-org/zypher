@@ -248,8 +248,8 @@ test "renderer: {% include %} via TemplateEngine" {
     var engine = renderer.TemplateEngine.init(gpa);
     defer engine.deinit();
 
-    _ = try engine.load("header.html", "<header>Site Title</header>");
-    _ = try engine.load("page.html", "before{% include \"header.html\" %}after");
+    _ = try engine.loadFromSource("header.html", "<header>Site Title</header>");
+    _ = try engine.loadFromSource("page.html", "before{% include \"header.html\" %}after");
 
     var ctx = Context.init(gpa);
     defer ctx.deinit();
@@ -269,8 +269,8 @@ test "renderer: {% extends %} with block override via TemplateEngine" {
     var engine = renderer.TemplateEngine.init(gpa);
     defer engine.deinit();
 
-    _ = try engine.load("base.html", "<html>{% block content %}{% endblock %}</html>");
-    _ = try engine.load("child.html", "{% extends \"base.html\" %}{% block content %}<h1>Hello</h1>{% endblock %}");
+    _ = try engine.loadFromSource("base.html", "<html>{% block content %}{% endblock %}</html>");
+    _ = try engine.loadFromSource("child.html", "{% extends \"base.html\" %}{% block content %}<h1>Hello</h1>{% endblock %}");
 
     var ctx = Context.init(gpa);
     defer ctx.deinit();
@@ -290,8 +290,8 @@ test "renderer: {% extends %} with context variables in blocks" {
     var engine = renderer.TemplateEngine.init(gpa);
     defer engine.deinit();
 
-    _ = try engine.load("base.html", "<div class=\"base\">{% block body %}{% endblock %}</div>");
-    _ = try engine.load("child.html", "{% extends \"base.html\" %}{% block body %}<p>{{ message }}</p>{% endblock %}");
+    _ = try engine.loadFromSource("base.html", "<div class=\"base\">{% block body %}{% endblock %}</div>");
+    _ = try engine.loadFromSource("child.html", "{% extends \"base.html\" %}{% block body %}<p>{{ message }}</p>{% endblock %}");
 
     var ctx = Context.init(gpa);
     defer ctx.deinit();
@@ -312,8 +312,8 @@ test "renderer: {% include %} with context values" {
     var engine = renderer.TemplateEngine.init(gpa);
     defer engine.deinit();
 
-    _ = try engine.load("greeting.html", "Hello {{ name }}!");
-    _ = try engine.load("page.html", "{% include \"greeting.html\" %} Welcome.");
+    _ = try engine.loadFromSource("greeting.html", "Hello {{ name }}!");
+    _ = try engine.loadFromSource("page.html", "{% include \"greeting.html\" %} Welcome.");
 
     var ctx = Context.init(gpa);
     defer ctx.deinit();

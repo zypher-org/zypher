@@ -7,9 +7,9 @@ const TemplateEngine = zypher.template.renderer.TemplateEngine;
 const Response = zypher.core.Response;
 
 pub fn loadTemplates(engine: *TemplateEngine) !void {
-    _ = try engine.load("layout.html", @embedFile("templates/layout.html"));
-    _ = try engine.load("login.html", @embedFile("templates/login.html"));
-    _ = try engine.load("form.html", @embedFile("templates/form.html"));
+    _ = try engine.loadFromSource("layout.html", @embedFile("templates/layout.html"));
+    _ = try engine.loadFromSource("login.html", @embedFile("templates/login.html"));
+    _ = try engine.loadFromSource("form.html", @embedFile("templates/form.html"));
 }
 
 pub fn render(engine: *TemplateEngine, res: *Response, name: []const u8, ctx: *Context) void {

@@ -2,9 +2,16 @@
 const std = @import("std");
 const log = std.log.scoped(.user);
 const password = @import("password.zig");
+const Session = @import("session.zig").Session;
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
 const csrf = @import("../middleware/csrf.zig");
+
+threadlocal var tl_io: ?std.Io = null;
+
+pub fn setIo(io: std.Io) void {
+    tl_io = io;
+}
 
 /// User model with hashed password, role, and active status.
 pub const User = struct {
@@ -17,10 +24,10 @@ pub const User = struct {
     const Self = @This();
 
     /// Initialize a new user with a hashed password.
-    pub fn init(gpa: std.mem.Allocator, username: []const u8, plaintext: []const u8) !Self {
+    pub fn init(io: std.Io, gpa: std.mem.Allocator, username: []const u8, plaintext: []const u8) !Self {
         const owned_username = try gpa.dupe(u8, username);
         errdefer gpa.free(owned_username);
-        const hashed = try password.hash(gpa, plaintext);
+        const hashed = try password.hash(io, gpa, plaintext);
         errdefer gpa.free(hashed);
 
         log.info("created user '{s}'", .{username});
@@ -86,9 +93,11 @@ pub fn superuserRequired(req: *Request, res: *Response, next: *const fn (*Reques
         _ = res.header("Location", "/login");
         return;
     }
-    const user: *User = @ptrCast(@alignCast(req.user.?));
-    if (!std.mem.eql(u8, user.role, "admin")) {
-        log.warn("non-admin access to {s} by user '{s}'", .{ req.path, user.username });
+    const session: *Session = @ptrCast(@alignCast(req.user.?));
+    const user_role = session.get("user_role") orelse "";
+    if (!std.mem.eql(u8, user_role, "admin")) {
+        const username = session.get("username") orelse "unknown";
+        log.warn("non-admin access to {s} by user '{s}'", .{ req.path, username });
         _ = res.status(403);
         res.text("Forbidden: admin access required") catch {};
         return;
@@ -100,8 +109,9 @@ pub fn superuserRequired(req: *Request, res: *Response, next: *const fn (*Reques
 /// Renders a simple login form with CSRF token.
 /// POST handler processes form submission; GET shows the form.
 pub fn loginView(req: *Request, res: *Response) void {
+    const io = tl_io orelse return;
     if (req.method == .get) {
-        const csrf_field = csrf.formFieldForRequest(res.allocator, req) catch "";
+        const csrf_field = csrf.formFieldForRequest(io, res.allocator, req) catch "";
         defer if (csrf_field.len > 0) res.allocator.free(csrf_field);
         const html = std.fmt.allocPrint(res.allocator,
             \\<!DOCTYPE html><html><head><title>Login</title></head><body>
@@ -137,8 +147,9 @@ pub fn logoutView(req: *Request, res: *Response) void {
 /// Built-in register view handler.
 /// GET shows registration form. POST processes registration.
 pub fn registerView(req: *Request, res: *Response) void {
+    const io = tl_io orelse return;
     if (req.method == .get) {
-        const csrf_field = csrf.formFieldForRequest(res.allocator, req) catch "";
+        const csrf_field = csrf.formFieldForRequest(io, res.allocator, req) catch "";
         defer if (csrf_field.len > 0) res.allocator.free(csrf_field);
         const html = std.fmt.allocPrint(res.allocator,
             \\<!DOCTYPE html><html><head><title>Register</title></head><body>

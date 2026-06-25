@@ -172,6 +172,81 @@ test "Request.cookie reads the Cookie header" {
     try std.testing.expectEqual(@as(?[]const u8, null), req.cookie("missing"));
 }
 
+// ── Range header parsing ─────────────────────────────────────────
+
+test "parseRangeHeader parses bytes=start-end" {
+    const range = Request.parseRangeHeader("bytes=0-99") orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(u64, 0), range.start);
+    try std.testing.expectEqual(@as(?u64, 99), range.end);
+}
+
+test "parseRangeHeader parses bytes=start- (open-ended)" {
+    const range = Request.parseRangeHeader("bytes=100-") orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(u64, 100), range.start);
+    try std.testing.expectEqual(@as(?u64, null), range.end);
+}
+
+test "parseRangeHeader parses bytes=-suffix (last N bytes)" {
+    const range = Request.parseRangeHeader("bytes=-500") orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(?u64, null), range.start);
+    try std.testing.expectEqual(@as(u64, 500), range.end);
+}
+
+test "parseRangeHeader returns null for invalid range" {
+    try std.testing.expectEqual(@as(?Request.Range, null), Request.parseRangeHeader("invalid"));
+    try std.testing.expectEqual(@as(?Request.Range, null), Request.parseRangeHeader("bytes="));
+    try std.testing.expectEqual(@as(?Request.Range, null), Request.parseRangeHeader("bytes=abc-def"));
+}
+
+test "parseRangeHeader returns null for missing header" {
+    try std.testing.expectEqual(@as(?Request.Range, null), Request.parseRangeHeader(""));
+}
+
+test "Range.satisfy computes correct byte range" {
+    const range = Request.Range{ .start = 0, .end = 99 };
+    const satisfied = range.satisfy(1000) orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(u64, 0), satisfied.start);
+    try std.testing.expectEqual(@as(u64, 99), satisfied.end);
+    try std.testing.expectEqual(@as(u64, 100), satisfied.length);
+}
+
+test "Range.satisfy clamps end to file size" {
+    const range = Request.Range{ .start = 0, .end = 9999 };
+    const satisfied = range.satisfy(100) orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(u64, 0), satisfied.start);
+    try std.testing.expectEqual(@as(u64, 99), satisfied.end);
+    try std.testing.expectEqual(@as(u64, 100), satisfied.length);
+}
+
+test "Range.satisfy handles open-ended range" {
+    const range = Request.Range{ .start = 950, .end = null };
+    const satisfied = range.satisfy(1000) orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(u64, 950), satisfied.start);
+    try std.testing.expectEqual(@as(u64, 999), satisfied.end);
+    try std.testing.expectEqual(@as(u64, 50), satisfied.length);
+}
+
+test "Range.satisfy handles suffix range" {
+    const range = Request.Range{ .start = null, .end = 50 };
+    const satisfied = range.satisfy(1000) orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(u64, 950), satisfied.start);
+    try std.testing.expectEqual(@as(u64, 999), satisfied.end);
+    try std.testing.expectEqual(@as(u64, 50), satisfied.length);
+}
+
+test "Range.satisfy clamps suffix to file size" {
+    const range = Request.Range{ .start = null, .end = 200 };
+    const satisfied = range.satisfy(100) orelse return error.UnexpectedNull;
+    try std.testing.expectEqual(@as(u64, 0), satisfied.start);
+    try std.testing.expectEqual(@as(u64, 99), satisfied.end);
+    try std.testing.expectEqual(@as(u64, 100), satisfied.length);
+}
+
+test "Range.satisfy returns null for unsatisfiable range" {
+    const range = Request.Range{ .start = 100, .end = null };
+    try std.testing.expectEqual(@as(?Request.Range.Satisfied, null), range.satisfy(50));
+}
+
 // ── Request deinit ──────────────────────────────────────────────
 
 test "Request.deinit frees all owned memory" {
