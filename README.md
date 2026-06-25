@@ -1,5 +1,10 @@
 # zypher
 
+[![CI](https://github.com/zypher-org/zypher/actions/workflows/ci.yml/badge.svg)](https://github.com/zypher-org/zypher/actions/workflows/ci.yml)
+[![Examples CI](https://github.com/zypher-org/zypher/actions/workflows/examples.yml/badge.svg)](https://github.com/zypher-org/zypher/actions/workflows/examples.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Zig](https://img.shields.io/badge/Zig-0.17.0--dev.857+2b2b85c5f-orange)](https://ziglang.org)
+
 > **A batteries-included web framework, built the Zig way.**
 
 zypher is a Django-inspired web framework written in **Zig**, designed for developers who want **clarity, control, and correctness** without sacrificing productivity.
