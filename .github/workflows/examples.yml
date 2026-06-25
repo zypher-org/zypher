@@ -1,0 +1,29 @@
+name: Examples CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  examples:
+    name: ${{ matrix.example }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - books-api
+          - io-config-demo
+          - large-file-upload
+          - notes-app
+          - online-storage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+      - name: Build
+        run: zig build
+        working-directory: examples/${{ matrix.example }}
+      - name: Test
+        run: zig build test --summary all
+        working-directory: examples/${{ matrix.example }}
