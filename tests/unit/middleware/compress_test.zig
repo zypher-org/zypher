@@ -32,7 +32,7 @@ test "Compression: no Accept-Encoding passes through uncompressed" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, text_handler);
+    MyChain.run(std.testing.io, &req, &res, text_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     // No Content-Encoding should be set
@@ -51,7 +51,7 @@ test "Compression: gzip accepted sets Content-Encoding header" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, text_handler);
+    MyChain.run(std.testing.io, &req, &res, text_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     const encoding = res.headers.get("Content-Encoding");
@@ -75,7 +75,7 @@ test "Compression: accepts lowercase accept-encoding request header" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, text_handler);
+    MyChain.run(std.testing.io, &req, &res, text_handler);
 
     try std.testing.expectEqualStrings("gzip", res.headers.get("Content-Encoding").?);
 }

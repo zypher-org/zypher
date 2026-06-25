@@ -5,7 +5,6 @@ const builtin = @import("builtin");
 const log = std.log.scoped(.password);
 const pbkdf2 = std.crypto.pwhash.pbkdf2;
 const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
-const posix = std.posix;
 const util = @import("../util.zig");
 
 /// Hash output length in bytes.
@@ -24,9 +23,9 @@ pub const PasswordError = error{
 
 /// Hash a password using PBKDF2-HMAC-SHA256 with a random salt.
 /// Returns an owned string in the format: "$pbkdf2-sha256${iterations}${salt_hex}${hash_hex}"
-pub fn hash(gpa: std.mem.Allocator, plaintext: []const u8) ![]const u8 {
+pub fn hash(io: std.Io, gpa: std.mem.Allocator, plaintext: []const u8) ![]const u8 {
     var salt: [SALT_LEN]u8 = undefined;
-    try util.randomBytes(&salt);
+    util.randomBytes(io, &salt);
 
     // Derive key
     var dk: [HASH_LEN]u8 = undefined;

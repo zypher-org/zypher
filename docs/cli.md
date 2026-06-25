@@ -16,8 +16,7 @@ CLI command dispatcher with subcommands for project scaffolding, running, docume
 ### Helpers
 - `parseRunserverConfig(args) RunserverConfig` — parse runserver arguments
 - `runserverDefaultHandler(req, res)` — default health-check handler (returns 404)
-- `bindRunserverSignalTarget(app, io)` — bind SIGINT handler for graceful shutdown
-- `clearRunserverSignalTarget()` — clear signal handler
+- `sigint_app` — pointer to the active `*App`, set during runserver/docs-server; the SIGINT handler in `cli/main.zig` reads this to call `app.shutdown(io)`.
 
 ## Commands
 
@@ -67,6 +66,7 @@ CLI command dispatcher with subcommands for project scaffolding, running, docume
 
 ### Help
 - `zypher help` — show available commands
+- `zypher version` / `zypher --version` — print the framework version
 
 ## Built-in Templates
 Templates are embedded into the binary at compile time. Each style has an HTML variant and an API variant:

@@ -13,6 +13,7 @@
 const std = @import("std");
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
+const IoFile = std.Io.File;
 const log = std.log.scoped(.static);
 
 /// Configuration for static file middleware.
@@ -173,59 +174,6 @@ fn hasPathTraversal(path: []const u8) bool {
     return false;
 }
 
-fn closeFd(fd: std.posix.fd_t) void {
-    switch (std.posix.errno(std.posix.system.close(fd))) {
-        .SUCCESS, .INTR => {},
-        else => |err| log.warn("failed to close static file fd: {}", .{err}),
-    }
-}
-
-/// Read a file into an allocated slice. Returns null if the file does not exist.
-fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
-    const fd = std.posix.openat(std.posix.AT.FDCWD, path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0) catch |err| switch (err) {
-        error.FileNotFound, error.NotDir => return null,
-        error.IsDir => return null,
-        else => return err,
-    };
-    defer closeFd(fd);
-
-    var bytes: std.ArrayList(u8) = .empty;
-    errdefer bytes.deinit(allocator);
-
-    var buf: [8192]u8 = undefined;
-    while (true) {
-        const n = try std.posix.read(fd, &buf);
-        if (n == 0) break;
-        try bytes.appendSlice(allocator, buf[0..n]);
-    }
-    return try bytes.toOwnedSlice(allocator);
-}
-
-fn lseek(fd: std.posix.fd_t, offset: i64, whence: u32) i64 {
-    if (@import("builtin").os.tag == .linux) {
-        return @as(i64, @bitCast(std.os.linux.lseek(fd, offset, whence)));
-    }
-    return std.posix.system.lseek(fd, offset, whence);
-}
-
-/// Read a byte range from a file. The file must already be positioned
-/// at the desired offset (via lseek). Returns up to `length` bytes.
-fn readFileRange(allocator: std.mem.Allocator, fd: std.posix.fd_t, length: usize) ![]u8 {
-    const bytes = try allocator.alloc(u8, length);
-    errdefer allocator.free(bytes);
-
-    var total: usize = 0;
-    while (total < length) {
-        const n = try std.posix.read(fd, bytes[total..]);
-        if (n == 0) break;
-        total += n;
-    }
-    if (total < length) {
-        return bytes[0..total];
-    }
-    return bytes;
-}
-
 fn httpDate(buf: []u8, timestamp: std.Io.Timestamp) ![]const u8 {
     const secs = timestamp.toSeconds();
     if (secs < 0) return error.InvalidTimestamp;
@@ -256,32 +204,9 @@ fn httpDate(buf: []u8, timestamp: std.Io.Timestamp) ![]const u8 {
     );
 }
 
-fn fileMtime(gpa: std.mem.Allocator, path: []const u8) ?std.Io.Timestamp {
-    const path_z = gpa.dupeSentinel(u8, path, 0) catch return null;
-    defer gpa.free(path_z);
-
-    if (@import("builtin").os.tag == .linux) {
-        var stx: std.os.linux.Statx = undefined;
-        const rc = std.os.linux.statx(
-            std.posix.AT.FDCWD,
-            path_z.ptr,
-            std.os.linux.AT.NO_AUTOMOUNT,
-            .{ .MTIME = true },
-            &stx,
-        );
-        switch (std.posix.errno(rc)) {
-            .SUCCESS => {
-                const nanos = @as(i96, @intCast(stx.mtime.sec)) * std.time.ns_per_s + @as(i96, @intCast(stx.mtime.nsec));
-                return std.Io.Timestamp.fromNanoseconds(nanos);
-            },
-            else => return null,
-        }
-    }
-
-    var st: std.posix.system.Stat = undefined;
-    _ = std.posix.system.stat(path_z.ptr, &st);
-    const nanos = @as(i96, @intCast(st.mtim.sec)) * std.time.ns_per_s;
-    return std.Io.Timestamp.fromNanoseconds(nanos);
+fn fileMtime(file: IoFile, io: std.Io) ?std.Io.Timestamp {
+    const st = file.stat(io) catch return null;
+    return st.mtime;
 }
 
 fn relativeStaticPath(comptime config: Config, path: []const u8) ?[]const u8 {
@@ -297,8 +222,8 @@ fn relativeStaticPath(comptime config: Config, path: []const u8) ?[]const u8 {
 }
 
 /// Default static file middleware.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-    middlewareWith(.{})(req, res, next);
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    middlewareWith(.{})(io, req, res, next);
 }
 
 /// Create a static file middleware with custom configuration.
@@ -310,12 +235,12 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
 /// - If-None-Match / If-Modified-Since → 304 Not Modified
 /// - Path traversal → 403 Forbidden
 /// - Missing file → passes through to next handler
-pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *const fn (*Request, *Response) void) void {
+pub fn middlewareWith(comptime config: Config) *const fn (std.Io, *Request, *Response, *const fn (std.Io, *Request, *Response) void) void {
     return struct {
-        fn handle(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+        fn handle(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
             // Only serve GET and HEAD
             if (req.method != .get and req.method != .head) {
-                next(req, res);
+                next(io, req, res);
                 return;
             }
 
@@ -332,12 +257,12 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
 
             // Check if path starts with prefix
             if (!std.mem.startsWith(u8, path, config.prefix)) {
-                next(req, res);
+                next(io, req, res);
                 return;
             }
 
             const rel = relativeStaticPath(config, path) orelse {
-                next(req, res);
+                next(io, req, res);
                 return;
             };
             if (hasPathTraversal(rel)) {
@@ -355,11 +280,11 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
             };
             defer res.allocator.free(fs_path);
 
-            // Open file; if not found or is a directory, pass through
-            const fd = std.posix.openat(std.posix.AT.FDCWD, fs_path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0) catch |err| switch (err) {
+            // Open file via std.Io.File
+            var file = std.Io.Dir.cwd().openFile(io, fs_path, .{ .mode = .read_only, .allow_directory = false }) catch |err| switch (err) {
                 error.FileNotFound, error.NotDir, error.IsDir => {
                     log.debug("static file not found: {s}", .{fs_path});
-                    next(req, res);
+                    next(io, req, res);
                     return;
                 },
                 else => {
@@ -369,39 +294,48 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                     return;
                 },
             };
-            defer closeFd(fd);
+            defer file.close(io);
 
-            // Get file size via seeking to end
-            const file_size: u64 = @intCast(lseek(fd, 0, 2)); // SEEK_END = 2
-            _ = lseek(fd, 0, 0); // SEEK_SET = 0 — seek back to beginning
+            const file_size = file.length(io) catch {
+                _ = res.status(500);
+                res.text("Internal Server Error") catch {};
+                return;
+            };
 
             var last_modified_buf: [40]u8 = undefined;
-            const last_modified = if (fileMtime(res.allocator, fs_path)) |mtime|
+            const last_modified = if (fileMtime(file, io)) |mtime|
                 httpDate(&last_modified_buf, mtime) catch ""
             else
                 "";
 
-            // Compute ETag (hash of full content — read into a temp buffer)
-            const etag_str = etag: {
-                var hasher = std.hash.XxHash32.init(0);
-                var hash_buf: [8192]u8 = undefined;
-                var total: usize = 0;
-                while (true) {
-                    const n = std.posix.read(fd, &hash_buf) catch break;
-                    if (n == 0) break;
-                    hasher.update(hash_buf[0..n]);
-                    total += n;
-                }
-                // Seek back to start after computing hash
-                _ = lseek(fd, 0, 0); // SEEK_SET = 0
-                const etag_hash = hasher.final();
-                var eb: [16]u8 = undefined;
-                break :etag std.fmt.bufPrint(&eb, "\"{x}\"", .{etag_hash}) catch return;
+            // Read full content once — use for both ETag and body
+            const content = res.allocator.alloc(u8, file_size) catch {
+                _ = res.status(500);
+                res.text("Internal Server Error") catch {};
+                return;
+            };
+            const bytes_read = IoFile.readPositionalAll(file, io, content, 0) catch {
+                res.allocator.free(content);
+                _ = res.status(500);
+                res.text("Internal Server Error") catch {};
+                return;
+            };
+            const content_slice = content[0..bytes_read];
+
+            // Compute ETag from content
+            var hasher = std.hash.XxHash32.init(0);
+            hasher.update(content_slice);
+            const etag_hash = hasher.final();
+            var eb: [16]u8 = undefined;
+            const etag_str = std.fmt.bufPrint(&eb, "\"{x}\"", .{etag_hash}) catch {
+                res.allocator.free(content);
+                return;
             };
 
             // Check If-None-Match for 304
             if (req.header("If-None-Match")) |inm| {
                 if (std.mem.eql(u8, inm, etag_str)) {
+                    res.allocator.free(content);
                     _ = res.status(304);
                     _ = res.header("ETag", etag_str);
                     if (last_modified.len > 0) _ = res.header("Last-Modified", last_modified);
@@ -415,6 +349,7 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
             if (last_modified.len > 0) {
                 if (req.header("If-Modified-Since")) |ims| {
                     if (std.mem.eql(u8, ims, last_modified)) {
+                        res.allocator.free(content);
                         _ = res.status(304);
                         _ = res.header("ETag", etag_str);
                         _ = res.header("Accept-Ranges", "bytes");
@@ -442,6 +377,7 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                         "bytes {d}-{d}/{d}",
                         .{ satisfied.start, satisfied.end, file_size },
                     ) catch {
+                        res.allocator.free(content);
                         _ = res.status(500);
                         res.text("Internal Server Error") catch {};
                         return;
@@ -449,26 +385,33 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                     _ = res.header("Content-Range", content_range);
 
                     if (is_head) {
-                        // HEAD: set Content-Length header, no body
+                        res.allocator.free(content);
                         var cl_buf: [16]u8 = undefined;
                         const len_str = std.fmt.bufPrint(&cl_buf, "{d}", .{satisfied.length}) catch return;
                         _ = res.header("Content-Length", len_str);
                     } else {
-                        // Seek to range start and read the range
-                        _ = lseek(fd, @intCast(satisfied.start), 0); // SEEK_SET = 0
-                        const range_bytes = readFileRange(res.allocator, fd, @intCast(satisfied.length)) catch {
+                        const range_bytes = res.allocator.alloc(u8, @intCast(satisfied.length)) catch {
+                            res.allocator.free(content);
                             _ = res.status(500);
                             res.text("Internal Server Error") catch {};
                             return;
                         };
+                        const range_read = IoFile.readPositionalAll(file, io, range_bytes, satisfied.start) catch {
+                            res.allocator.free(range_bytes);
+                            res.allocator.free(content);
+                            _ = res.status(500);
+                            res.text("Internal Server Error") catch {};
+                            return;
+                        };
+                        res.allocator.free(content);
                         if (res.body) |old| res.allocator.free(old);
-                        res.body = range_bytes;
+                        res.body = range_bytes[0..range_read];
                     }
 
                     log.info("served range {d}-{d}/{d} of {s}", .{ satisfied.start, satisfied.end, file_size, fs_path });
                     return;
                 } else {
-                    // Range not satisfiable
+                    res.allocator.free(content);
                     _ = res.status(416);
                     var cr_buf: [32]u8 = undefined;
                     const content_range = std.fmt.bufPrint(&cr_buf, "bytes */{d}", .{file_size}) catch return;
@@ -480,7 +423,7 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
 
             // Full file response (no Range header)
             if (is_head) {
-                // HEAD: set Content-Length header, no body
+                res.allocator.free(content);
                 var len_buf: [16]u8 = undefined;
                 const len_str = std.fmt.bufPrint(&len_buf, "{d}", .{file_size}) catch return;
                 _ = res.header("Content-Length", len_str);
@@ -489,22 +432,11 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                 return;
             }
 
-            // Read full file content
-            const body = readFileAlloc(res.allocator, fs_path) catch |err| {
-                log.err("failed to read static file {s}: {}", .{ fs_path, err });
-                _ = res.status(500);
-                res.text("Internal Server Error") catch {};
-                return;
-            };
-            const owned_body = body orelse {
-                log.debug("static file not found: {s}", .{fs_path});
-                next(req, res);
-                return;
-            };
+            // Set the body — content is already loaded
             if (res.body) |old| res.allocator.free(old);
-            res.body = owned_body;
+            res.body = content_slice;
             _ = res.status(200);
-            log.info("served static file {s} ({d} bytes)", .{ fs_path, owned_body.len });
+            log.info("served static file {s} ({d} bytes)", .{ fs_path, content_slice.len });
         }
     }.handle;
 }

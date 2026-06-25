@@ -8,7 +8,7 @@ const log = std.log.scoped(.cors);
 pub const Config = struct {
     /// Origins allowed. null = allow all (reflect request Origin).
     /// Empty slice = block all (no CORS headers).
-    allowed_origins: ?[]const []const u8 = &.{},
+    allowed_origins: ?[]const []const u8 = null,
     /// Methods allowed for preflight responses.
     allowed_methods: []const u8 = "GET, POST, PUT, DELETE, PATCH, OPTIONS",
     /// Headers allowed for preflight responses.
@@ -20,19 +20,19 @@ pub const Config = struct {
 };
 
 /// Default CORS middleware — allows all origins.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
-    middlewareWith(.{})(req, res, next);
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
+    middlewareWith(.{})(io, req, res, next);
 }
 
 /// Create a CORS middleware with custom configuration.
-pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *const fn (*Request, *Response) void) void {
+pub fn middlewareWith(comptime config: Config) *const fn (std.Io, *Request, *Response, *const fn (std.Io, *Request, *Response) void) void {
     return struct {
-        fn handle(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+        fn handle(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
             const origin = req.header("Origin");
 
             // No Origin header — not a CORS request, pass through
             if (origin == null) {
-                next(req, res);
+                next(io, req, res);
                 return;
             }
 
@@ -64,7 +64,7 @@ pub fn middlewareWith(comptime config: Config) *const fn (*Request, *Response, *
                 _ = res.header("Access-Control-Allow-Credentials", "true");
             }
             log.debug("CORS allowed: {s}", .{origin.?});
-            next(req, res);
+            next(io, req, res);
         }
     }.handle;
 }

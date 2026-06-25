@@ -1,7 +1,11 @@
 # Core API
 
 ## Method
-HTTP method enum with 7 variants: `get`, `post`, `put`, `patch`, `delete`, `options`, `head`.
+HTTP method enum with 7 variants: `.get`, `.post`, `.put`, `.patch`, `.delete`, `.options`, `.head`.
+
+### Methods
+- `Method.fromStdString(m) Method` — convert from `std.http.Method`
+- `method.toStdString() std.http.Method` — convert to `std.http.Method`
 
 ## SameSite
 Cookie `SameSite` attribute enum:
@@ -32,17 +36,19 @@ Low-level HTTP server. Binds to a host:port, accepts connections, parses HTTP, a
 - `max_inline_body_size: usize = 1_048_576` — max body buffered before streaming (1 MiB); bodies larger than this are read via `Request.body_stream`
 - `max_requests: ?usize = null` — optional request limit (for tests)
 
-### Constants & Types
-- `HandlerFn = *const fn (*Request, *Response) void` — handler function signature
-- `ParsedTarget` — result of parsing a request target:
-  - `path: []const u8` — path portion
-  - `query: std.StringHashMap([]const u8)` — parsed query parameters
+### Server.HandlerFn
+- `= *const fn (*Request, *Response) void` — handler function signature (terminal handler does NOT receive `io`)
+
+### ParsedTarget
+Result of parsing a request target:
+- `path: []const u8` — path portion
+- `query: std.StringHashMap([]const u8)` — parsed query parameters
 
 ### Methods
 - `Server.init(config: Config) Server` — create a new server with the given config
-- `server.listenAddress(host, port) IpAddress` — parse host + port into an address
-- `server.parseRequestTarget(gpa, target) ParsedTarget` — parse a request target into path and query
-- `server.buildRequest(gpa, head_buffer, max_body_size) Request` — build a `Request` from raw HTTP head bytes; parses method, target, headers, validates content-length
+- `Server.listenAddress(host, port) !std.Io.net.IpAddress` — parse host + port into an address (static)
+- `Server.parseRequestTarget(gpa, target) ParsedTarget` — parse a request target into path and query (static)
+- `Server.buildRequest(gpa, head_buffer, max_body_size) !Request` — build a `Request` from raw HTTP head bytes; parses method, target, headers, validates content-length (static)
 - `server.listenAndServe(io, gpa, handler)` — start listening and dispatching; accepts io and allocator; blocks until shutdown or `max_requests` reached
 - `server.shutdown(io)` — set shutdown flag and close listener
 
@@ -72,7 +78,7 @@ High-level application struct that wraps Server, handlers, router, middleware, a
 - `app.routerHandler(fn_ptr)` — register a router dispatch handler (takes priority over plain handler)
 - `app.database(db)` — attach an ORM database connection
 - `app.middlewareHandler(fn_ptr)` — register a middleware pipeline handler (takes priority over router and handler)
-- `app.buildRequestFromHead(head_buffer) Request` — parse an HTTP request head into a `Request`
+- `app.buildRequestFromHead(head_buffer) !Request` — parse an HTTP request head into a `Request`
 - `app.handleRequest(req, res)` — dispatch through middleware → router → handler → default 404
 - `app.listenAndServe(io)` — start the server; blocks until shutdown. Warns if no handler is registered.
 - `app.shutdown(io)` — gracefully stop the server
@@ -100,6 +106,12 @@ Represents an incoming HTTP request.
 - `allocator: std.mem.Allocator` — allocator scoped to this request
 - `user: ?*anyopaque = null` — optional authenticated user (set by session/auth middleware)
 - `body_stream: ?BodyStream = null` — streaming body reader for bodies exceeding `max_inline_body_size`
+
+### BodyStream
+- `reader: *std.Io.Reader` — the underlying reader
+- `total_read: usize = 0` — total bytes read so far
+- `stream.read(buf) !usize` — read the next chunk
+- `stream.skip() !void` — discard remaining body
 
 ### FileUpload
 - `filename: []const u8` — client-provided filename
@@ -154,7 +166,7 @@ Represents an outgoing HTTP response.
 ### Types
 - `SameSite` enum: `Strict`, `Lax`, `None`
 - `Cookie` struct: name, value, path, domain, max_age, secure, http_only, same_site
-- `FileBody` struct: `fd: std.posix.fd_t`, `size: usize` — file descriptor for streaming file responses
+- `FileBody` struct: `handle: std.Io.File.Handle`, `size: usize` — file handle for streaming file responses
 
 ### Lifecycle
 - `Response.init(gpa) Response` — create a new response
@@ -179,10 +191,11 @@ All mutators return `*Response` for chaining unless they return an error union.
 - `res.deleteCookie(name) *Response` — delete a cookie by setting `Max-Age=0`
 
 ### File Body
-- `res.setFileBody(fd, size) !void` — set a file descriptor as the response body for streaming; bypasses buffering the entire payload in memory
+- `res.setFileBody(handle, size) !void` — set a file handle as the response body for streaming; bypasses buffering the entire payload in memory
 
 ### Serialization
-- `res.send(gpa, out: *ArrayList(u8)) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided ArrayList; if `file_body` is set, sends headers only (the caller is responsible for sending file contents)
+- `res.send(io, w: *std.Io.Writer) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided writer; if `file_body` is set, streams file content directly to the writer
+- `res.sendHeaders(w: *std.Io.Writer) !void` — serialize only the status line and headers (used when streaming file bodies manually)
 
 ### Known Status Codes
 200 OK, 201 Created, 204 No Content, 206 Partial Content, 301 Moved Permanently, 302 Found, 303 See Other, 304 Not Modified, 307 Temporary Redirect, 308 Permanent Redirect, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 405 Method Not Allowed, 413 Payload Too Large, 416 Range Not Satisfiable, 422 Unprocessable Entity, 429 Too Many Requests, 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable
@@ -193,9 +206,8 @@ All mutators return `*Response` for chaining unless they return an error union.
 const std = @import("std");
 const zypher = @import("zypher");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var app = zypher.core.App.init(gpa.allocator(), .{ .port = 8080 });
+pub fn main(init: std.process.Init) !void {
+    var app = zypher.core.App.init(init.gpa, .{ .port = 8080 });
 
     app.handler(struct {
         fn handle(req: *zypher.core.Request, res: *zypher.core.Response) void {
@@ -204,6 +216,29 @@ pub fn main() !void {
         }
     }.handle);
 
-    try app.listenAndServe(std.Io.default(gpa.allocator()));
+    try app.listenAndServe(init.io);
+}
+```
+
+## IO Configuration
+
+zypher provides a unified API for IO configuration through `zypher.core.IoConfig`. See [io_migration.md](io_migration.md) for detailed documentation.
+
+### Quick Start with IO Config
+
+```zig
+const std = @import("std");
+const zypher = @import("zypher");
+
+pub fn main(init: std.process.Init) !void {
+    // Use default IO configuration (recommended)
+    const io_config = zypher.core.IoConfig.default();
+    const io = try io_config.createIo(init);
+    
+    var app = zypher.core.App.init(init.gpa, .{ .port = 8080 });
+    defer app.deinit();
+
+    app.handler(myHandler);
+    try app.listenAndServe(io);
 }
 ```

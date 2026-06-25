@@ -131,9 +131,19 @@ pub const Server = struct {
 
         var served_requests: usize = 0;
         while (!self.shutdown_requested.load(.acquire)) {
+            io.checkCancel() catch |check_err| switch (check_err) {
+                error.Canceled => {
+                    log.info("server io cancelled, shutting down", .{});
+                    break;
+                },
+            };
             const stream = net_server.accept(io) catch |err| {
                 if (err == error.SocketNotListening and self.shutdown_requested.load(.acquire)) {
                     log.info("server shutdown requested", .{});
+                    break;
+                }
+                if (err == error.Canceled) {
+                    log.info("server accept cancelled", .{});
                     break;
                 }
                 log.warn("accept failed: {t}", .{err});
@@ -198,10 +208,7 @@ pub const Server = struct {
                 defer err_res.deinit();
                 _ = err_res.status(400);
                 try err_res.text("Bad Request");
-                var res_buf: std.ArrayList(u8) = .empty;
-                defer res_buf.deinit(gpa);
-                try err_res.send(gpa, &res_buf);
-                try stream_writer.interface.writeAll(res_buf.items);
+                try err_res.send(io, &stream_writer.interface);
                 try stream_writer.interface.flush();
                 return;
             };
@@ -284,10 +291,7 @@ pub const Server = struct {
                 }
             }
 
-            var res_buf: std.ArrayList(u8) = .empty;
-            defer res_buf.deinit(gpa);
-            try res.send(gpa, &res_buf);
-            try stream_writer.interface.writeAll(res_buf.items);
+            try res.send(io, &stream_writer.interface);
             try stream_writer.interface.flush();
         }
     }

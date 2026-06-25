@@ -1,7 +1,6 @@
 /// zypher auth — session management with in-memory store.
 const std = @import("std");
 const log = std.log.scoped(.session);
-const posix = std.posix;
 const util = @import("../util.zig");
 
 /// Session ID length in bytes (256-bit random).
@@ -23,11 +22,9 @@ pub fn cookieConfig() CookieConfig {
     return default_cookie_config;
 }
 
-/// Get current unix timestamp.
-fn unixTimestamp() i64 {
-    var ts: posix.timespec = undefined;
-    _ = posix.system.clock_gettime(posix.CLOCK.REALTIME, &ts);
-    return ts.sec;
+/// Get current unix timestamp via Io clock.
+fn unixTimestamp(io: std.Io) i64 {
+    return std.Io.Timestamp.now(io, .real).toSeconds();
 }
 
 /// A single session with ID, data, and expiry.
@@ -60,9 +57,9 @@ pub const Session = struct {
     }
 
     /// Check if this session has expired.
-    pub fn isExpired(self: *const Self) bool {
+    pub fn isExpired(self: *const Self, io: std.Io) bool {
         if (self.expires_at == 0) return false;
-        return unixTimestamp() > self.expires_at;
+        return unixTimestamp(io) > self.expires_at;
     }
 
     /// Free session data (not the session struct itself).
@@ -102,14 +99,14 @@ pub const SessionStore = struct {
     }
 
     /// Create a new session with random ID and default expiry.
-    pub fn create(self: *Self) !Session {
-        return self.createWithExpiry(unixTimestamp() + default_cookie_config.max_age);
+    pub fn create(self: *Self, io: std.Io) Session {
+        return self.createWithExpiry(io, unixTimestamp(io) + default_cookie_config.max_age);
     }
 
     /// Create a new session with a specific expiry timestamp.
-    pub fn createWithExpiry(self: *Self, expires_at: i64) !Session {
+    pub fn createWithExpiry(self: *Self, io: std.Io, expires_at: i64) Session {
         var id: [SESSION_ID_LEN]u8 = undefined;
-        try util.randomBytes(&id);
+        util.randomBytes(io, &id);
 
         const s = Session{
             .id = id,
@@ -174,10 +171,10 @@ pub const SessionStore = struct {
     }
 
     /// Get a session by hex-encoded ID string. Returns null if not found or expired.
-    pub fn getByHexId(self: *Self, hex_id: []const u8) !?*Session {
+    pub fn getByHexId(self: *Self, hex_id: []const u8, io: std.Io) !?*Session {
         const result = self.sessions.getPtr(hex_id);
         if (result) |s| {
-            if (s.isExpired()) {
+            if (s.isExpired(io)) {
                 log.info("session {s} expired", .{hex_id});
                 self.destroyByHexId(hex_id) catch {};
                 return null;
@@ -188,11 +185,11 @@ pub const SessionStore = struct {
     }
 
     /// Get a session by raw ID bytes. Returns null if not found or expired.
-    pub fn get(self: *Self, raw_id: [SESSION_ID_LEN]u8) !?*Session {
+    pub fn get(self: *Self, raw_id: [SESSION_ID_LEN]u8, io: std.Io) !?*Session {
         const hex_id = std.fmt.bytesToHex(raw_id, .lower);
         const hex_alloc = try self.gpa.dupe(u8, &hex_id);
         defer self.gpa.free(hex_alloc);
-        return self.getByHexId(hex_alloc);
+        return self.getByHexId(hex_alloc, io);
     }
 
     /// Destroy a session by hex-encoded ID string.

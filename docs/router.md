@@ -11,10 +11,7 @@ Create a route entry.
 
 ### Route.validatePattern(pattern) !void
 Validate a path pattern at comptime. Called automatically by `Router.init`. Returns an error for invalid patterns:
-- `error.EmptyPattern` — pattern must not be empty
-- `error.InvalidStart` — pattern must start with `/`
-- `error.TrailingSlashNotAllowed` — pattern must not end with `/` (except `/` itself)
-- `error.DoubleSlash` — no empty segments allowed
+- `error.InvalidPattern` — empty pattern, not starting with `/`, multiple wildcards, wildcard not last, empty param names, duplicate params
 
 ### Route.matchPath(pattern, actual, params) bool
 Match a concrete path against a pattern at runtime, extracting named parameters into the provided `RouteParams`. Returns `true` on match.
@@ -29,7 +26,7 @@ Zero-allocation URL parameter storage (fixed-size array of 16 entries).
 - `RouteParams.init(gpa) RouteParams` — create empty params
 - `params.deinit()` — free resources
 - `params.get(name) ?[]const u8` — get param value by name
-- `params.getAs(T, name) ?T` — get param parsed as type `T` (e.g. `params.getAs(u64, "id")`)
+- `params.getAs(T, name) !T` — get param parsed as type `T` (e.g. `params.getAs(u64, "id")`); returns `error.MissingParam` if not found, or parse error if value is invalid
 
 ## Router
 Comptime route table with runtime dispatch. Routes are defined at comptime; dispatch uses a linear scan with specificity scoring at runtime.

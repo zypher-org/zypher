@@ -46,12 +46,12 @@ test "full round-trip: GET / 200" {
     try std.testing.expectEqualStrings("text/plain; charset=utf-8", res.headers.get("Content-Type").?);
 
     // 7. Serialize the response
-    var buf: std.ArrayList(u8) = .empty;
-    defer buf.deinit(gpa);
-    try res.send(gpa, &buf);
+    var buf = std.Io.Writer.Allocating.init(gpa);
+    defer buf.deinit();
+    try res.send(std.testing.io, &buf.writer);
 
     // 8. Verify serialized response starts with status line and contains headers + body
-    const output = buf.items;
+    const output = buf.written();
     try std.testing.expect(std.mem.startsWith(u8, output, "HTTP/1.1 200 OK\r\n"));
     try std.testing.expect(std.mem.indexOf(u8, output, "Content-Type: text/plain; charset=utf-8\r\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "Content-Length: 18\r\n") != null);
@@ -87,10 +87,10 @@ test "full round-trip: POST /submit 201" {
     try std.testing.expectEqual(@as(u16, 201), res.status_code);
     try std.testing.expectEqualStrings("application/json", res.headers.get("Content-Type").?);
 
-    var buf: std.ArrayList(u8) = .empty;
-    defer buf.deinit(gpa);
-    try res.send(gpa, &buf);
-    try std.testing.expect(std.mem.startsWith(u8, buf.items, "HTTP/1.1 201 Created\r\n"));
+    var buf = std.Io.Writer.Allocating.init(gpa);
+    defer buf.deinit();
+    try res.send(std.testing.io, &buf.writer);
+    try std.testing.expect(std.mem.startsWith(u8, buf.written(), "HTTP/1.1 201 Created\r\n"));
 }
 
 test "full round-trip: GET /missing 404 when no handler" {

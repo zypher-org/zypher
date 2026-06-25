@@ -128,7 +128,7 @@ pub fn main() !void {
 
     _ = try engine.load("hello.html", "<h1>Hello, {{ name|upper }}!</h1>");
 
-    var ctx = zypher.core.Context.init(gpa.allocator());
+    var ctx = zypher.template.renderer.Context.init(gpa.allocator());
     defer ctx.deinit();
     try ctx.put("name", .{ .string = "world" });
 

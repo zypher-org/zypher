@@ -98,6 +98,7 @@ Because zypher is written in Zig:
 - Allocator ownership must be clear
 - No hidden global state
 - Thread-local storage explicitly documented (used by session, security headers, and admin middleware for configuration that would otherwise require runtime state in handler signatures)
+- **`std.Io` is always caller-supplied** — no zypher library source file may construct, own, or default-initialise an `std.Io` instance. Every module receives `io: std.Io` as a parameter, exactly like `Allocator`. The only exception is `src/cli/main.zig` (the binary entry point), which forwards its `std.process.Init.io` downstream. Violations are caught by `zig build test-io-clean`.
 - No undefined behavior tolerated
 
 Memory safety regressions are treated as **critical bugs**.

@@ -370,7 +370,22 @@ pub const TemplateEngine = struct {
         return self.cache.getPtr(name);
     }
 
-    pub fn load(self: *TemplateEngine, name: []const u8, source: []const u8) !*Template {
+    pub fn load(self: *TemplateEngine, io: std.Io, path: []const u8) !*Template {
+        const gpa = self.allocator;
+        if (self.cache.getPtr(path)) |tmpl| {
+            log.debug("cache hit for template '{s}'", .{path});
+            return tmpl;
+        }
+        const source = try std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(1024 * 1024));
+        defer gpa.free(source);
+        var tmpl = try Template.fromSource(gpa, source);
+        tmpl.engine = @ptrCast(self);
+        try self.cache.put(path, tmpl);
+        log.debug("loaded and cached template '{s}'", .{path});
+        return self.cache.getPtr(path).?;
+    }
+
+    pub fn loadFromSource(self: *TemplateEngine, name: []const u8, source: []const u8) !*Template {
         if (self.cache.getPtr(name)) |tmpl| {
             log.debug("cache hit for template '{s}'", .{name});
             return tmpl;

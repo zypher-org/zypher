@@ -24,6 +24,8 @@ zypher doc-user examples/blog
 - `Request` — incoming HTTP request with method, path, query, headers, body, files, params, user, cookies, file streaming
 - `Response` — outgoing HTTP response with status, headers, body, file_body, cookies, chunked streaming, serialization
 - `Context` — request-scoped context struct
+- `IoConfig` — unified API for IO configuration with `.default()` and `.custom(io)` factory methods
+- `IoModel` — enum for IO model selection (`.default`, `.custom`)
 
 ### Router (`zypher.router.*`)
 - `Route` — route definition with method, pattern, handler; supports named params, typed params, wildcards
@@ -35,7 +37,7 @@ zypher doc-user examples/blog
 - `logger.middleware` — request logging with method, path, status, duration
 - `cors.middleware` / `cors.middlewareWith(config)` — CORS with configurable origins, methods, headers, preflight
 - `csrf.middleware` — CSRF protection via session tokens
-- `rate_limit.middlewareWith(config)` — fixed window rate limiter per IP
+- `rate_limit.middleware` / `rate_limit.middlewareWith(config)` — fixed window rate limiter per IP
 - `static.middlewareWith(config)` — static file serving with MIME detection, ETag/304, Range/206
 - `compress.middleware` — gzip buffered response compression
 - `session.middleware` — session load/save middleware
@@ -47,7 +49,7 @@ zypher doc-user examples/blog
 - `parser.Parser` — template AST builder
 - `renderer.Template` — parsed template with render, extends, include, if, for
 - `renderer.TemplateEngine` — template cache with load/render
-- `core.Context` — template variable context (string-keyed Value map)
+- `renderer.Context` — template variable context (string-keyed Value map)
 - `renderer.Value` — template value union (string, int, float, bool, list, map, null)
 - `filters` — built-in filters (upper, lower, capitalize, title, trim, length, reverse, escape, safe, join, truncate, default, date)
 
@@ -64,8 +66,8 @@ zypher doc-user examples/blog
 - `form.FieldKind` — text, integer, boolean, file
 - `form.FieldDef` — field definition with name, kind, required, validator
 - `form.Form(name, Fields)` — comptime form generation with bind, bindRequest, BoundForm
-- `form.BoundForm` — bound form with getValue, validate, cleanedData, csrfField, csrfFieldForRequest
-- `validators` — built-in validators (email, minLength, maxLength, matches, integer, url)
+- `form.BoundForm` — bound form with getValue, validate, cleanedData, csrfField
+- `validators` — built-in validators (email, minLength, maxLength, regex, url, required, min, max, choices, custom)
 
 ### Auth (`zypher.auth.*`)
 - `session.SessionStore` — in-memory session store (create, save, getByHexId, destroyByHexId)
@@ -88,7 +90,7 @@ zypher doc-user examples/blog
 ### CLI (`zypher.cli_runner.*`)
 - `Runner` — CLI command dispatcher
 - `RunserverConfig` — server configuration struct
-- Commands: `new`, `templates`, `run`, `doc`, `doc-user`, `demo`, `runserver`, `migrate`, `makemigrations`, `createsuperuser`, `shell`, `help`
+- Commands: `new`, `templates`, `run`, `doc`, `doc-user`, `demo`, `runserver`, `migrate`, `makemigrations`, `createsuperuser`, `shell`, `help`, `version`
 - Built-in scaffold templates (single-file, clean-arch, mvc, mvp + API variants)
 - Superuser creation with password validation
 - SQL migration generation and application

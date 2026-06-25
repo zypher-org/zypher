@@ -28,7 +28,7 @@ test "migration: runner creates history table on first run" {
     defer db.close();
 
     var runner = MigrationRunner.init(&db);
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 
     // History table should exist
     var stmt = try db.prepare("SELECT COUNT(*) FROM zypher_migrations");
@@ -42,7 +42,7 @@ test "migration: applies all pending migrations" {
     defer db.close();
 
     var runner = MigrationRunner.init(&db);
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 
     // All 3 tables/columns should exist
     try db.exec("INSERT INTO users (name) VALUES ('alice')");
@@ -55,9 +55,9 @@ test "migration: is idempotent (running twice is safe)" {
     defer db.close();
 
     var runner = MigrationRunner.init(&db);
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
     // Run again — should skip already-applied migrations
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 
     // Count applied migrations
     try std.testing.expectEqual(@as(u64, 3), try runner.countApplied());
@@ -79,7 +79,7 @@ test "migration: status lists applied and pending" {
 
     // Apply first migration only
     const first_only = [_]Migration{migrations[0]};
-    try runner.migrate(&first_only);
+    try runner.migrate(&first_only, std.testing.io);
 
     const statuses_after = try runner.status(std.testing.allocator, &migrations);
     defer std.testing.allocator.free(statuses_after);
@@ -93,7 +93,7 @@ test "migration: rollback reverts a migration" {
     defer db.close();
 
     var runner = MigrationRunner.init(&db);
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 
     // Rollback the last migration (add_email_to_users)
     try runner.rollback(&migrations, 1);
@@ -110,7 +110,7 @@ test "migration: rollback multiple migrations" {
     defer db.close();
 
     var runner = MigrationRunner.init(&db);
-    try runner.migrate(&migrations);
+    try runner.migrate(&migrations, std.testing.io);
 
     // Rollback 2 migrations
     try runner.rollback(&migrations, 2);

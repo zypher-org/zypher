@@ -23,6 +23,11 @@ fn ok_handler(req: *Request, res: *Response) void {
     res.text("ok") catch {};
 }
 
+fn next_handler(io: std.Io, req: *Request, res: *Response) void {
+    _ = io;
+    ok_handler(req, res);
+}
+
 test "CSRF: GET passes through without session" {
     const gpa = std.testing.allocator;
 
@@ -33,7 +38,7 @@ test "CSRF: GET passes through without session" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 200), res.status_code);
     // No session, so no CSRF token is set — request still passes
@@ -47,7 +52,7 @@ test "CSRF: POST with valid session-backed token passes" {
     var store = SessionStore.init(gpa);
     defer store.deinit();
 
-    var session = try store.create();
+    var session = store.create(std.testing.io);
     defer session.deinit(gpa);
 
     // First, GET to establish a token in the session
@@ -56,7 +61,7 @@ test "CSRF: POST with valid session-backed token passes" {
     get_req.user = @ptrCast(&session);
     var get_res = Response.init(gpa);
     defer get_res.deinit();
-    csrf.middleware(&get_req, &get_res, ok_handler);
+    csrf.middleware(std.testing.io, &get_req, &get_res, next_handler);
     const token = get_res.headers.get("X-CSRF-Token").?;
 
     // Now POST with the token
@@ -67,7 +72,7 @@ test "CSRF: POST with valid session-backed token passes" {
     var post_res = Response.init(gpa);
     defer post_res.deinit();
 
-    csrf.middleware(&post_req, &post_res, ok_handler);
+    csrf.middleware(std.testing.io, &post_req, &post_res, next_handler);
 
     try std.testing.expectEqual(@as(u16, 200), post_res.status_code);
 }
@@ -78,7 +83,7 @@ test "CSRF: POST with valid form token passes" {
     var store = SessionStore.init(gpa);
     defer store.deinit();
 
-    var session = try store.create();
+    var session = store.create(std.testing.io);
     defer session.deinit(gpa);
 
     // GET to establish a token
@@ -87,7 +92,7 @@ test "CSRF: POST with valid form token passes" {
     get_req.user = @ptrCast(&session);
     var get_res = Response.init(gpa);
     defer get_res.deinit();
-    csrf.middleware(&get_req, &get_res, ok_handler);
+    csrf.middleware(std.testing.io, &get_req, &get_res, next_handler);
 
     const token = session.get("_csrf_token").?;
 
@@ -99,7 +104,7 @@ test "CSRF: POST with valid form token passes" {
     var post_res = Response.init(gpa);
     defer post_res.deinit();
 
-    csrf.middleware(&post_req, &post_res, ok_handler);
+    csrf.middleware(std.testing.io, &post_req, &post_res, next_handler);
 
     try std.testing.expectEqual(@as(u16, 200), post_res.status_code);
 }
@@ -114,7 +119,7 @@ test "CSRF: POST without token returns 403" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 403), res.status_code);
 }
@@ -130,7 +135,7 @@ test "CSRF: POST with wrong token returns 403" {
     var res = Response.init(gpa);
     defer res.deinit();
 
-    MyChain.run(&req, &res, ok_handler);
+    MyChain.run(std.testing.io, &req, &res, ok_handler);
 
     try std.testing.expectEqual(@as(u16, 403), res.status_code);
 }
@@ -141,7 +146,7 @@ test "CSRF: session-backed token is stored and required when session is attached
     var store = SessionStore.init(gpa);
     defer store.deinit();
 
-    var session = try store.create();
+    var session = store.create(std.testing.io);
     defer session.deinit(gpa);
 
     var get_req = makeRequest(gpa, .get, "/page");
@@ -150,7 +155,7 @@ test "CSRF: session-backed token is stored and required when session is attached
     var get_res = Response.init(gpa);
     defer get_res.deinit();
 
-    csrf.middleware(&get_req, &get_res, ok_handler);
+    csrf.middleware(std.testing.io, &get_req, &get_res, next_handler);
     const token = get_res.headers.get("X-CSRF-Token").?;
     try std.testing.expectEqualStrings(token, session.get("_csrf_token").?);
     try std.testing.expectEqual(@as(usize, 64), token.len);
@@ -162,7 +167,7 @@ test "CSRF: session-backed token is stored and required when session is attached
     var post_res = Response.init(gpa);
     defer post_res.deinit();
 
-    csrf.middleware(&post_req, &post_res, ok_handler);
+    csrf.middleware(std.testing.io, &post_req, &post_res, next_handler);
     try std.testing.expectEqual(@as(u16, 200), post_res.status_code);
 
     var bad_req = makeRequest(gpa, .post, "/submit");
@@ -172,6 +177,6 @@ test "CSRF: session-backed token is stored and required when session is attached
     var bad_res = Response.init(gpa);
     defer bad_res.deinit();
 
-    csrf.middleware(&bad_req, &bad_res, ok_handler);
+    csrf.middleware(std.testing.io, &bad_req, &bad_res, next_handler);
     try std.testing.expectEqual(@as(u16, 403), bad_res.status_code);
 }

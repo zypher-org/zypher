@@ -40,10 +40,10 @@ const COOKIE_NAME = "zypher_session";
 
 /// Session middleware function.
 /// Loads session from cookie, attaches to request.user, saves after handler.
-pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     const store = store_ptr orelse {
         log.warn("no session store configured, skipping session middleware", .{});
-        next(req, res);
+        next(io, req, res);
         return;
     };
 
@@ -52,7 +52,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
     var loaded_session: ?*Session = null;
 
     if (cookie_val) |hex_id| {
-        loaded_session = store.getByHexId(hex_id) catch null;
+        loaded_session = store.getByHexId(hex_id, io) catch null;
     }
 
     // Attach session to request (cast to *anyopaque for the user field)
@@ -61,21 +61,17 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
         log.debug("loaded session for {s}", .{req.path});
     } else {
         // No valid session — create a new one
-        var new_session = store.create() catch {
-            log.warn("failed to create session", .{});
-            next(req, res);
-            return;
-        };
+        var new_session = store.create(io);
         store.save(&new_session) catch {
             log.warn("failed to save new session", .{});
             new_session.deinit(store.gpa);
-            next(req, res);
+            next(io, req, res);
             return;
         };
         new_session.deinit(store.gpa); // save deep-copies
 
         // Re-fetch the stored session as a pointer
-        const retrieved = store.get(new_session.id) catch null;
+        const retrieved = store.get(new_session.id, io) catch null;
         if (retrieved) |s| {
             req.user = @ptrCast(s);
         }
@@ -90,7 +86,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
         var cookie_writer = std.Io.Writer.fixed(&cookie_buf);
         cookie_writer.print("{s}={s}", .{ COOKIE_NAME, &hex_buf }) catch {
             log.warn("failed to format session cookie - continuing without cookie", .{});
-            next(req, res);
+            next(io, req, res);
             return;
         };
         if (cookie_config.httponly) cookie_writer.writeAll("; HttpOnly") catch {};
@@ -103,7 +99,7 @@ pub fn middleware(req: *Request, res: *Response, next: *const fn (*Request, *Res
     }
 
     // Continue down the chain
-    next(req, res);
+    next(io, req, res);
 
     // After handler: save session if it was loaded
     // (The handler may have mutated session data via the pointer)

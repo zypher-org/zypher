@@ -7,7 +7,7 @@ test "regression: password verify timing within tolerance" {
     // Verify that failed and successful authentication take similar time.
     // This is a regression test — if the constant-time comparison is
     // broken, the timing difference will exceed the tolerance.
-    const hashed = try password.hash(std.testing.allocator, "testpassword");
+    const hashed = try password.hash(std.testing.io, std.testing.allocator, "testpassword");
     defer std.testing.allocator.free(hashed);
 
     // Warm up
@@ -49,20 +49,20 @@ test "regression: session store deep-copy prevents double-free" {
     defer store.deinit();
 
     // Create and save a session with data
-    var s = try store.create();
+    var s = store.create(std.testing.io);
     try s.put(std.testing.allocator, "key1", "val1");
     try s.put(std.testing.allocator, "key2", "val2");
     try store.save(&s);
     s.deinit(std.testing.allocator); // This should NOT double-free
 
     // Verify data is still accessible from the store
-    const retrieved = try store.get(s.id);
+    const retrieved = try store.get(s.id, std.testing.io);
     try std.testing.expect(retrieved != null);
     try std.testing.expectEqualStrings("val1", retrieved.?.get("key1") orelse "");
     try std.testing.expectEqualStrings("val2", retrieved.?.get("key2") orelse "");
 
     // Destroy and verify cleanup
     try store.destroy(s.id);
-    const after = try store.get(s.id);
+    const after = try store.get(s.id, std.testing.io);
     try std.testing.expect(after == null);
 }

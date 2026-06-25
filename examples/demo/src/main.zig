@@ -84,9 +84,7 @@ threadlocal var tlrouter: ?*const Router = null;
 // ── Utilities ─────────────────────────────────────────────────────────────
 
 fn unixTimestamp() i64 {
-    var ts: std.posix.timespec = undefined;
-    _ = std.posix.system.clock_gettime(.REALTIME, &ts);
-    return ts.sec;
+    return std.Io.Timestamp.now(tl_io, .real).toSeconds();
 }
 
 fn eng() *TemplateEngine {
@@ -135,7 +133,7 @@ fn setupContext(req: *Request, ctx: *Context, title: []const u8) void {
     ctx.put("flash", .{ .string = "" }) catch {};
     ctx.put("flash_type", .{ .string = "" }) catch {};
     ctx.put("content", .{ .string = "" }) catch {};
-    const csrf_field = csrf.formFieldForRequest(req.allocator, req) catch return;
+    const csrf_field = csrf.formFieldForRequest(tl_io, req.allocator, req) catch return;
     defer req.allocator.free(csrf_field);
     ctx.put("csrf_field", .{ .string = csrf_field }) catch {};
 }
@@ -164,7 +162,7 @@ fn redirect(res: *Response, url: []const u8) void {
 }
 
 fn appendCsrfInput(req: *Request, gpa: std.mem.Allocator, html: *std.ArrayList(u8)) !void {
-    const field = try csrf.formFieldForRequest(gpa, req);
+    const field = try csrf.formFieldForRequest(tl_io, gpa, req);
     defer gpa.free(field);
     try html.appendSlice(gpa, field);
 }
@@ -507,7 +505,7 @@ fn registerHandler(req: *Request, res: *Response) void {
     }
 
     // Hash password
-    const hash = password.hash(gpa, pass) catch {
+    const hash = password.hash(tl_io, gpa, pass) catch {
         _ = res.status(500);
         res.text("password hashing failed") catch {};
         return;
@@ -683,9 +681,11 @@ fn notFoundHandler(req: *Request, res: *Response) void {
 
 // ── Middleware ─────────────────────────────────────────────────────────────
 
-fn loggerMw(req: *Request, res: *Response, next: *const fn (*Request, *Response) void) void {
+threadlocal var tl_io: std.Io = undefined;
+
+fn loggerMw(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
     std.log.info("→ {s} {s}", .{ @tagName(req.method), req.path });
-    next(req, res);
+    next(io, req, res);
     std.log.info("← {d}", .{res.status_code});
 }
 
@@ -698,7 +698,7 @@ fn dispatchWrapper(req: *Request, res: *Response) void {
 }
 
 fn mwHandler(req: *Request, res: *Response) void {
-    MwChain.run(req, res, dispatchWrapper);
+    MwChain.run(tl_io, req, res, dispatchWrapper);
 }
 
 fn parsePort(init: std.process.Init) u16 {
@@ -720,6 +720,8 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
+    tl_io = io;
+
     // ── Database ───────────────────────────────────────────────────────
     var db = try sqlite.Db.open(allocator, "zypher_demo.db");
     errdefer db.close();
@@ -739,7 +741,7 @@ pub fn main(init: std.process.Init) !void {
     // ── Template Engine ────────────────────────────────────────────────
     var engine = TemplateEngine.init(allocator);
     defer engine.deinit();
-    _ = try engine.load("base.html",
+    _ = try engine.loadFromSource("base.html",
         \\<!DOCTYPE html>
         \\<html>
         \\<head>
