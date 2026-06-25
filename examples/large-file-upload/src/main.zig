@@ -10,9 +10,10 @@ var io: std.Io = undefined;
 
 pub fn main(init: std.process.Init) !void {
     io = init.io;
-    std.Io.Dir.createDirAbsolute(io, storage_dir, .default_dir) catch |err| switch (err) {
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDir(io, storage_dir, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
-        else => return err,
+        else => |e| return e,
     };
 
     var server = Server.init(.{
@@ -50,13 +51,13 @@ fn index(_: *Request, res: *Response) void {
         \\<h2>Stored Files</h2><ul>
     ) catch return;
 
-    var dir = std.Io.Dir.openDirAbsolute(io, storage_dir, .{}) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, storage_dir, .{ .iterate = true }) catch {
         res.html(buf.items) catch {};
         return;
     };
     defer dir.close(io);
 
-    var it = dir.iterate();
+    var it = std.Io.Dir.iterate(dir);
     while (it.next(io) catch null) |entry| {
         if (entry.kind != .file) continue;
         const link = std.fmt.allocPrint(gpa, "<li><a href=\"/files/{s}\">{s}</a></li>", .{ entry.name, entry.name }) catch return;
@@ -239,9 +240,7 @@ fn writeAll(fd: std.posix.fd_t, buf: []const u8) !usize {
 
 /// Returns the current Unix timestamp in seconds.
 fn unixTimestamp() i64 {
-    var ts: std.posix.timespec = undefined;
-    _ = std.posix.system.clock_gettime(std.posix.CLOCK.REALTIME, &ts);
-    return ts.sec;
+    return std.Io.Timestamp.now(io, .real).toSeconds();
 }
 
 /// Platform-specific lseek(2).

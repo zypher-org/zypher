@@ -78,41 +78,17 @@ fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
     return false;
 }
 
-fn randomBytes(buf: []u8) !void {
-    if (buf.len == 0) return;
-    if (@import("builtin").os.tag == .linux) {
-        var filled: usize = 0;
-        while (filled < buf.len) {
-            const remaining = buf[filled..];
-            const rc = std.os.linux.getrandom(remaining.ptr, remaining.len, 0);
-            switch (std.posix.errno(rc)) {
-                .SUCCESS => {
-                    const n: usize = @intCast(rc);
-                    if (n == 0) return error.EntropyUnavailable;
-                    filled += n;
-                },
-                .INTR => continue,
-                else => return error.EntropyUnavailable,
-            }
-        }
-        return;
-    }
-    if (@import("builtin").link_libc and @hasDecl(std.posix.system, "arc4random_buf")) {
-        std.posix.system.arc4random_buf(buf.ptr, buf.len);
-        return;
-    }
-    return error.EntropyUnavailable;
+fn randomBytes(buf: []u8) void {
+    tl_io.random(buf);
 }
 
 fn unixTimestamp() i64 {
-    var ts: std.posix.timespec = undefined;
-    _ = std.posix.system.clock_gettime(std.posix.CLOCK.REALTIME, &ts);
-    return ts.sec;
+    return std.Io.Timestamp.now(tl_io, .real).toSeconds();
 }
 
 fn generateRecoveryCode(gpa: std.mem.Allocator) ![]u8 {
     var bytes: [4]u8 = undefined;
-    try randomBytes(&bytes);
+    randomBytes(&bytes);
     const raw = (@as(u32, bytes[0]) << 24) | (@as(u32, bytes[1]) << 16) | (@as(u32, bytes[2]) << 8) | @as(u32, bytes[3]);
     return std.fmt.allocPrint(gpa, "{d:0>6}", .{raw % 1_000_000});
 }
