@@ -3,6 +3,10 @@
 ## Method
 HTTP method enum with 7 variants: `.get`, `.post`, `.put`, `.patch`, `.delete`, `.options`, `.head`.
 
+### Methods
+- `Method.fromStdString(m) Method` — convert from `std.http.Method`
+- `method.toStdString() std.http.Method` — convert to `std.http.Method`
+
 ## SameSite
 Cookie `SameSite` attribute enum:
 - `Strict` — only sent for same-site requests
@@ -42,9 +46,9 @@ Result of parsing a request target:
 
 ### Methods
 - `Server.init(config: Config) Server` — create a new server with the given config
-- `server.listenAddress(host, port) !std.Io.net.IpAddress` — parse host + port into an address
-- `server.parseRequestTarget(gpa, target) ParsedTarget` — parse a request target into path and query
-- `server.buildRequest(gpa, head_buffer, max_body_size) !Request` — build a `Request` from raw HTTP head bytes; parses method, target, headers, validates content-length
+- `Server.listenAddress(host, port) !std.Io.net.IpAddress` — parse host + port into an address (static)
+- `Server.parseRequestTarget(gpa, target) ParsedTarget` — parse a request target into path and query (static)
+- `Server.buildRequest(gpa, head_buffer, max_body_size) !Request` — build a `Request` from raw HTTP head bytes; parses method, target, headers, validates content-length (static)
 - `server.listenAndServe(io, gpa, handler)` — start listening and dispatching; accepts io and allocator; blocks until shutdown or `max_requests` reached
 - `server.shutdown(io)` — set shutdown flag and close listener
 
@@ -74,7 +78,7 @@ High-level application struct that wraps Server, handlers, router, middleware, a
 - `app.routerHandler(fn_ptr)` — register a router dispatch handler (takes priority over plain handler)
 - `app.database(db)` — attach an ORM database connection
 - `app.middlewareHandler(fn_ptr)` — register a middleware pipeline handler (takes priority over router and handler)
-- `app.buildRequestFromHead(head_buffer) Request` — parse an HTTP request head into a `Request`
+- `app.buildRequestFromHead(head_buffer) !Request` — parse an HTTP request head into a `Request`
 - `app.handleRequest(req, res)` — dispatch through middleware → router → handler → default 404
 - `app.listenAndServe(io)` — start the server; blocks until shutdown. Warns if no handler is registered.
 - `app.shutdown(io)` — gracefully stop the server

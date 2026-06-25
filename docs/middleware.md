@@ -56,6 +56,8 @@ Cross-Site Request Forgery protection middleware. Stores a 256-bit random token 
 - Unsafe methods (POST, PUT, DELETE, PATCH): validate `X-CSRF-Token` header or `_csrf` form value against session
 
 ### Functions
+- `setIo(io)` — set thread-local io for use by handler-context helpers
+- `getIo() std.Io` — get the thread-local io
 - `middleware(io, req, res, next)` — CSRF middleware function
 - `ensureToken(io, req) ![]const u8` — return the CSRF token from the session, creating and storing a random one if absent; requires `req.user` to be a `*Session`
 - `ensureTokenForRequest(req) ![]const u8` — same as `ensureToken` using thread-local io
@@ -73,7 +75,7 @@ Fixed window rate limiter per client IP.
 ### RateLimiter
 - `RateLimiter.init(allocator, config) RateLimiter` — create a new limiter
 - `limiter.deinit()` — free internal state
-- `limiter.allow(key) !bool` — check if a request from the given key is allowed
+- `limiter.allow(key, io) !bool` — check if a request from the given key is allowed
 
 ### middleware(io, req, res, next)
 Default rate limit middleware (100 req/min). Uses `X-Forwarded-For` header or `"default"` as the key.

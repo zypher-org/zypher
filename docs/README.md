@@ -37,7 +37,7 @@ zypher doc-user examples/blog
 - `logger.middleware` — request logging with method, path, status, duration
 - `cors.middleware` / `cors.middlewareWith(config)` — CORS with configurable origins, methods, headers, preflight
 - `csrf.middleware` — CSRF protection via session tokens
-- `rate_limit.middlewareWith(config)` — fixed window rate limiter per IP
+- `rate_limit.middleware` / `rate_limit.middlewareWith(config)` — fixed window rate limiter per IP
 - `static.middlewareWith(config)` — static file serving with MIME detection, ETag/304, Range/206
 - `compress.middleware` — gzip buffered response compression
 - `session.middleware` — session load/save middleware
@@ -66,7 +66,7 @@ zypher doc-user examples/blog
 - `form.FieldKind` — text, integer, boolean, file
 - `form.FieldDef` — field definition with name, kind, required, validator
 - `form.Form(name, Fields)` — comptime form generation with bind, bindRequest, BoundForm
-- `form.BoundForm` — bound form with getValue, validate, cleanedData, csrfField, csrfFieldForRequest
+- `form.BoundForm` — bound form with getValue, validate, cleanedData, csrfField
 - `validators` — built-in validators (email, minLength, maxLength, regex, url, required, min, max, choices, custom)
 
 ### Auth (`zypher.auth.*`)
@@ -90,7 +90,7 @@ zypher doc-user examples/blog
 ### CLI (`zypher.cli_runner.*`)
 - `Runner` — CLI command dispatcher
 - `RunserverConfig` — server configuration struct
-- Commands: `new`, `templates`, `run`, `doc`, `doc-user`, `demo`, `runserver`, `migrate`, `makemigrations`, `createsuperuser`, `shell`, `help`
+- Commands: `new`, `templates`, `run`, `doc`, `doc-user`, `demo`, `runserver`, `migrate`, `makemigrations`, `createsuperuser`, `shell`, `help`, `version`
 - Built-in scaffold templates (single-file, clean-arch, mvc, mvp + API variants)
 - Superuser creation with password validation
 - SQL migration generation and application

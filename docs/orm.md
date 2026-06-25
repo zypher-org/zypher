@@ -132,7 +132,7 @@ Database schema migration runner.
 - `MigrationRunner.init(db) MigrationRunner` — create a runner
 - `runner.ensureHistoryTable() MigrationError!void` — create `zypher_migrations` tracking table
 - `runner.countApplied() MigrationError!u64` — count applied migrations
-- `runner.migrate(migrations) MigrationError!void` — apply all pending migrations in order
+- `runner.migrate(migrations, io) MigrationError!void` — apply all pending migrations in order
 - `runner.status(gpa, migrations) MigrationError![]MigrationStatus` — return migration application status
 - `runner.rollback(migrations, n) MigrationError!void` — roll back the most recent `n` applied migrations (in reverse order) that have `down_sql`
 

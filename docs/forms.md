@@ -64,6 +64,7 @@ Built-in validation functions.
 
 - `email(value) ?[]const u8` — validate email format; returns error message or null
 - `required(value) ?[]const u8` — validate non-empty
+- `requiredOptional(value) ?[]const u8` — validate non-empty if value is present; passes null through
 - `minLength(n) *const fn ([]const u8) ?[]const u8` — minimum length validator factory
 - `maxLength(n) *const fn ([]const u8) ?[]const u8` — maximum length validator factory
 - `regex(pattern) *const fn ([]const u8) ?[]const u8` — glob-style pattern validator factory (`*` = any sequence, `?` = any char)

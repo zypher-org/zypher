@@ -66,6 +66,7 @@ CLI command dispatcher with subcommands for project scaffolding, running, docume
 
 ### Help
 - `zypher help` — show available commands
+- `zypher version` / `zypher --version` — print the framework version
 
 ## Built-in Templates
 Templates are embedded into the binary at compile time. Each style has an HTML variant and an API variant:
