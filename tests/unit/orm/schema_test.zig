@@ -104,7 +104,7 @@ test "schema: createTable SQL with foreign key" {
     const sql = Post.create_table_sql;
     try std.testing.expect(std.mem.indexOf(u8, sql, "CREATE TABLE IF NOT EXISTS posts") != null);
     try std.testing.expect(std.mem.indexOf(u8, sql, "author_id INTEGER REFERENCES users.id") != null);
-    try std.testing.expect(std.mem.indexOf(u8, sql, "published BOOLEAN DEFAULT 0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, sql, "published INTEGER DEFAULT 0") != null);
 }
 
 test "schema: dropTable SQL generation" {

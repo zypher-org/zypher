@@ -28,6 +28,7 @@ pub fn RowType(comptime M: type) type {
                 .float => f64,
                 .text => []const u8,
                 .boolean => bool,
+                .timestamp => i64,
             };
         }
         return @Tuple(&types);

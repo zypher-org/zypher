@@ -559,6 +559,7 @@ fn createHandler(comptime M: type) *const fn (*Request, *Response) void {
                         .integer => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
                         .float => sqlite.Value{ .float = std.fmt.parseFloat(f64, val) catch 0.0 },
                         .boolean => sqlite.Value{ .int = if (val.len > 0 and val[0] == '1') @as(i64, 1) else 0 },
+                        .timestamp => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
                     };
                     idx += 1;
                 }
@@ -725,6 +726,7 @@ fn updateHandler(comptime M: type) *const fn (*Request, *Response) void {
                         .integer => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
                         .float => sqlite.Value{ .float = std.fmt.parseFloat(f64, val) catch 0.0 },
                         .boolean => sqlite.Value{ .int = if (val.len > 0 and val[0] == '1') @as(i64, 1) else 0 },
+                        .timestamp => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
                     };
                     idx += 1;
                 }
