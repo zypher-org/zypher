@@ -56,6 +56,14 @@ pub const orm = struct {
         pub const postgres = @import("orm/driver/postgres.zig");
         pub const mysql = @import("orm/driver/mysql.zig");
     };
+    pub const document = struct {
+        pub const interface = @import("orm/document/interface.zig");
+        pub const mongodb = @import("orm/document/mongodb.zig");
+    };
+    pub const kv = struct {
+        pub const interface = @import("orm/kv/interface.zig");
+        pub const redis = @import("orm/kv/redis.zig");
+    };
 };
 
 // Re-export forms (Phase 6)
