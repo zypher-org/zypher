@@ -54,6 +54,7 @@ pub const orm = struct {
         pub const interface = @import("orm/driver/interface.zig");
         pub const sqlite = @import("orm/driver/sqlite.zig");
         pub const postgres = @import("orm/driver/postgres.zig");
+        pub const mysql = @import("orm/driver/mysql.zig");
     };
 };
 

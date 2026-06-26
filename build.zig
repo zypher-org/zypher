@@ -18,10 +18,12 @@ pub fn build(b: *std.Build) void {
     };
     // ── Optional backend flags ───────────────────────────────────────
     const db_postgres = b.option(bool, "db_postgres", "Enable PostgreSQL driver support (links libpq)") orelse false;
+    const db_mysql = b.option(bool, "db_mysql", "Enable MySQL/MariaDB driver support (links libmysqlclient)") orelse false;
 
     const opts = b.addOptions();
     opts.addOption([]const u8, "version", version_string);
     opts.addOption(bool, "has_postgres", db_postgres);
+    opts.addOption(bool, "has_mysql", db_mysql);
     const build_config_mod = opts.createModule();
 
     // ── Vendored SQLite3 ─────────────────────────────────────────────
@@ -41,6 +43,9 @@ pub fn build(b: *std.Build) void {
     lib_mod.link_libc = true;
     if (db_postgres) {
         lib_mod.linkSystemLibrary("pq", .{});
+    }
+    if (db_mysql) {
+        lib_mod.linkSystemLibrary("mysqlclient", .{});
     }
 
     // ── Generate embedded templates ────────────────────────────────

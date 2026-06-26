@@ -35,6 +35,9 @@ test {
     if (build_config.has_postgres) {
         _ = @import("orm/postgres_driver_test.zig");
     }
+    if (build_config.has_mysql) {
+        _ = @import("orm/mysql_driver_test.zig");
+    }
     _ = @import("forms/validators_test.zig");
     _ = @import("forms/form_test.zig");
     _ = @import("auth/session_test.zig");
