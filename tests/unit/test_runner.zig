@@ -1,4 +1,5 @@
 // Unit test runner — imports all unit test files.
+const build_config = @import("build_config");
 test {
     _ = @import("test_io");
     _ = @import("log_test.zig");
@@ -31,6 +32,9 @@ test {
     _ = @import("orm/driver_interface_test.zig");
     _ = @import("orm/sqlite_driver_test.zig");
     _ = @import("orm/dialect_test.zig");
+    if (build_config.has_postgres) {
+        _ = @import("orm/postgres_driver_test.zig");
+    }
     _ = @import("forms/validators_test.zig");
     _ = @import("forms/form_test.zig");
     _ = @import("auth/session_test.zig");

@@ -16,8 +16,12 @@ pub fn build(b: *std.Build) void {
         const end = std.mem.indexOfScalar(u8, zon[value_start..], '"') orelse break :blk "0.0.0";
         break :blk zon[value_start..][0..end];
     };
+    // ── Optional backend flags ───────────────────────────────────────
+    const db_postgres = b.option(bool, "db_postgres", "Enable PostgreSQL driver support (links libpq)") orelse false;
+
     const opts = b.addOptions();
     opts.addOption([]const u8, "version", version_string);
+    opts.addOption(bool, "has_postgres", db_postgres);
     const build_config_mod = opts.createModule();
 
     // ── Vendored SQLite3 ─────────────────────────────────────────────
@@ -35,6 +39,9 @@ pub fn build(b: *std.Build) void {
     lib_mod.linkLibrary(sqlite3_lib);
     lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
     lib_mod.link_libc = true;
+    if (db_postgres) {
+        lib_mod.linkSystemLibrary("pq", .{});
+    }
 
     // ── Generate embedded templates ────────────────────────────────
     const gen_templates_mod = b.createModule(.{
@@ -153,6 +160,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
             .{ .name = "test_io", .module = test_helpers_mod },
+            .{ .name = "build_config", .module = build_config_mod },
         },
     });
 
