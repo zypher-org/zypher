@@ -50,6 +50,10 @@ pub const orm = struct {
     pub const query = @import("orm/query.zig");
     pub const QuerySet = @import("orm/query.zig").QuerySet;
     pub const migration = @import("orm/migration.zig");
+    pub const driver = struct {
+        pub const interface = @import("orm/driver/interface.zig");
+        pub const sqlite = @import("orm/driver/sqlite.zig");
+    };
 };
 
 // Re-export forms (Phase 6)
