@@ -437,5 +437,3 @@ fn sanitizeFilename(gpa: std.mem.Allocator, name: []const u8) ?[]u8 {
     if (std.mem.indexOfScalar(u8, name, '\x00') != null) return null;
     return gpa.dupe(u8, name) catch null;
 }
-
-

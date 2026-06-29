@@ -53,7 +53,10 @@ pub fn readFile(io: std.Io, gpa: std.mem.Allocator, name: []const u8) ![]u8 {
     var buf: [8192]u8 = undefined;
     while (true) {
         var data: [1][]u8 = .{&buf};
-        const n = try std.Io.File.readStreaming(file, io, &data);
+        const n = std.Io.File.readStreaming(file, io, &data) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => |e| return e,
+        };
         if (n == 0) break;
         try bytes.appendSlice(gpa, buf[0..n]);
         if (bytes.items.len > 10 * 1024 * 1024) return error.FileTooLarge;
