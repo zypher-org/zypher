@@ -433,3 +433,43 @@ fn decodeUrlEncoded(gpa: std.mem.Allocator, raw: []const u8) ![]const u8 {
     }
     return buf.toOwnedSlice(gpa);
 }
+
+/// Percent-encode a string for use in a URI component.
+/// Unreserved characters (A-Z, a-z, 0-9, -, _, ., ~) are left as-is.
+/// Spaces are encoded as %20. All other bytes are percent-encoded.
+pub fn urlEncode(gpa: std.mem.Allocator, input: []const u8) ![]const u8 {
+    var buf: std.ArrayList(u8) = .empty;
+    errdefer buf.deinit(gpa);
+    for (input) |c| {
+        switch (c) {
+            'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~' => try buf.append(gpa, c),
+            ' ' => try buf.appendSlice(gpa, "%20"),
+            else => {
+                try buf.append(gpa, '%');
+                try buf.append(gpa, std.fmt.digitToChar(c >> 4, .upper));
+                try buf.append(gpa, std.fmt.digitToChar(c & 0xf, .upper));
+            },
+        }
+    }
+    return buf.toOwnedSlice(gpa);
+}
+
+/// Decode a percent-encoded URI component.
+/// This does NOT convert + to space (that is form-encoding specific).
+/// Returns `error.InvalidPercentEncoding` on malformed %-sequences.
+pub fn urlDecode(gpa: std.mem.Allocator, input: []const u8) ![]const u8 {
+    var buf: std.ArrayList(u8) = .empty;
+    errdefer buf.deinit(gpa);
+    var i: usize = 0;
+    while (i < input.len) {
+        if (input[i] == '%' and i + 2 < input.len) {
+            const byte = std.fmt.parseInt(u8, input[i + 1 .. i + 3], 16) catch return error.InvalidPercentEncoding;
+            try buf.append(gpa, byte);
+            i += 3;
+        } else {
+            try buf.append(gpa, input[i]);
+            i += 1;
+        }
+    }
+    return buf.toOwnedSlice(gpa);
+}

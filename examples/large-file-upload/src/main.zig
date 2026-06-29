@@ -4,6 +4,8 @@ const zypher = @import("zypher");
 const Request = zypher.core.Request;
 const Response = zypher.core.Response;
 const Server = zypher.core.Server;
+const urlEncode = zypher.core.urlEncode;
+const urlDecode = zypher.core.urlDecode;
 
 const storage_dir = "storage";
 var io: std.Io = undefined;
@@ -60,8 +62,10 @@ fn index(_: *Request, res: *Response) void {
     var it = std.Io.Dir.iterate(dir);
     while (it.next(io) catch null) |entry| {
         if (entry.kind != .file) continue;
-        const link = std.fmt.allocPrint(gpa, "<li><a href=\"/files/{s}\">{s}</a></li>", .{ entry.name, entry.name }) catch return;
+        const link_name = urlEncode(gpa, entry.name) catch return;
+        const link = std.fmt.allocPrint(gpa, "<li><a href=\"/files/{s}\">{s}</a></li>", .{ link_name, entry.name }) catch return;
         defer gpa.free(link);
+        defer gpa.free(link_name);
         buf.appendSlice(gpa, link) catch return;
     }
 
@@ -101,7 +105,7 @@ fn uploadInline(req: *Request, content_type: []const u8, res: *Response) void {
         return;
     };
 
-    const safe_name = sanitizeFilename(file.filename) orelse {
+    const safe_name = sanitizeFilename(res.allocator, file.filename) orelse {
         form_ptr.deinit();
         _ = res.status(400);
         res.text("Invalid filename") catch {};
@@ -142,11 +146,19 @@ fn uploadInline(req: *Request, content_type: []const u8, res: *Response) void {
 
     _ = std.posix.system.close(fd);
 
+    const url_name = urlEncode(res.allocator, safe_name) catch {
+        form_ptr.deinit();
+        res.allocator.free(safe_name);
+        res.allocator.free(path);
+        _ = res.status(500);
+        return;
+    };
+    defer res.allocator.free(url_name);
     const body = std.fmt.allocPrint(res.allocator,
         \\<p>Uploaded <strong>{s}</strong> ({d} bytes, <em>inline</em>)</p>
         \\<p><a href="/files/{s}">Download</a></p>
         \\<p><a href="/">Back</a></p>
-    , .{ safe_name, file.data.len, safe_name }) catch {
+    , .{ safe_name, file.data.len, url_name }) catch {
         form_ptr.deinit();
         res.allocator.free(safe_name);
         res.allocator.free(path);
@@ -164,7 +176,7 @@ fn uploadInline(req: *Request, content_type: []const u8, res: *Response) void {
 fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: []const u8, res: *Response) void {
     const gpa = res.allocator;
 
-    const boundary = extractBoundary(content_type) orelse {
+    const boundary = extractBoundary(gpa, content_type) orelse {
         _ = res.status(400);
         res.text("Missing multipart boundary") catch {};
         return;
@@ -202,7 +214,7 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
                 res.text("Missing filename in multipart headers") catch {};
                 return;
             };
-            const safe_name = sanitizeFilename(raw_name) orelse {
+            const safe_name = sanitizeFilename(gpa, raw_name) orelse {
                 _ = res.status(400);
                 res.text("Invalid filename") catch {};
                 return;
@@ -294,11 +306,18 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
 
             _ = std.posix.system.close(fd);
 
+            const url_name = urlEncode(gpa, safe_name) catch {
+                gpa.free(safe_name);
+                gpa.free(path);
+                _ = res.status(500);
+                return;
+            };
+            defer gpa.free(url_name);
             const body = std.fmt.allocPrint(gpa,
                 \\<p>Uploaded <strong>{s}</strong> ({d} bytes, <em>streamed</em>)</p>
                 \\<p><a href="/files/{s}">Download</a></p>
                 \\<p><a href="/">Back</a></p>
-            , .{ safe_name, total, safe_name }) catch {
+            , .{ safe_name, total, url_name }) catch {
                 gpa.free(safe_name);
                 gpa.free(path);
                 _ = res.status(500);
@@ -317,29 +336,42 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
 }
 
 fn download(req: *Request, res: *Response) void {
-    const name = req.path["/files/".len..];
-    if (name.len == 0 or std.mem.indexOfScalar(u8, name, '/') != null or
-        std.mem.indexOf(u8, name, "..") != null)
+    const raw_name = req.path["/files/".len..];
+    if (raw_name.len == 0 or std.mem.indexOfScalar(u8, raw_name, '/') != null or
+        std.mem.indexOf(u8, raw_name, "..") != null)
     {
         _ = res.status(400);
         res.text("Invalid filename") catch {};
         return;
     }
+    const name = urlDecode(res.allocator, raw_name) catch {
+        _ = res.status(400);
+        res.text("Invalid URL encoding") catch {};
+        return;
+    };
+    defer res.allocator.free(name);
+
+    if (name.len == 0 or name.len > 255 or
+        std.mem.indexOfScalar(u8, name, '/') != null or
+        std.mem.indexOf(u8, name, "..") != null or
+        std.mem.indexOfScalar(u8, name, '\x00') != null)
+    {
+        _ = res.status(400);
+        res.text("Invalid filename") catch {};
+        return;
+    }
+
     const path = std.fs.path.join(res.allocator, &.{ storage_dir, name }) catch {
         _ = res.status(500);
         return;
     };
     defer res.allocator.free(path);
 
-    const data = readFileAlloc(res.allocator, path) catch |err| {
+    const fd = std.posix.openat(std.posix.AT.FDCWD, path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0) catch |err| {
         switch (err) {
             error.FileNotFound => {
                 _ = res.status(404);
                 res.text("File Not Found") catch {};
-            },
-            error.FileTooLarge => {
-                _ = res.status(413);
-                res.text("File too large to buffer in memory") catch {};
             },
             else => {
                 _ = res.status(500);
@@ -348,20 +380,25 @@ fn download(req: *Request, res: *Response) void {
         }
         return;
     };
-    if (data.len == 0) return;
+
+    const size = lseek(fd, 0, 2);
+    _ = lseek(fd, 0, 0);
 
     const disposition = std.fmt.allocPrint(res.allocator, "attachment; filename=\"{s}\"", .{name}) catch {
+        _ = std.posix.system.close(fd);
         _ = res.status(500);
         return;
     };
-    defer res.allocator.free(disposition);
     _ = res.header("Content-Type", "application/octet-stream");
     _ = res.header("Content-Disposition", disposition);
-    if (res.body) |old| res.allocator.free(old);
-    res.body = data;
+    res.setFileBody(fd, @intCast(size)) catch {
+        _ = std.posix.system.close(fd);
+        _ = res.status(500);
+        return;
+    };
 }
 
-fn extractBoundary(content_type: []const u8) ?[]u8 {
+fn extractBoundary(gpa: std.mem.Allocator, content_type: []const u8) ?[]u8 {
     var it = std.mem.splitScalar(u8, content_type, ';');
     _ = it.next() orelse return null;
     while (it.next()) |param| {
@@ -371,7 +408,7 @@ fn extractBoundary(content_type: []const u8) ?[]u8 {
             if (value.len >= 2 and value[0] == '"' and value[value.len - 1] == '"') {
                 value = value[1 .. value.len - 1];
             }
-            return std.heap.page_allocator.dupe(u8, value) catch null;
+            return gpa.dupe(u8, value) catch null;
         }
     }
     return null;
@@ -408,34 +445,12 @@ fn dispositionParam(value: []const u8, param_name: []const u8) ?[]const u8 {
     return null;
 }
 
-fn sanitizeFilename(name: []const u8) ?[]u8 {
+fn sanitizeFilename(gpa: std.mem.Allocator, name: []const u8) ?[]u8 {
     if (name.len == 0 or name.len > 255) return null;
     if (std.mem.indexOfScalar(u8, name, '/') != null) return null;
     if (std.mem.indexOf(u8, name, "..") != null) return null;
     if (std.mem.indexOfScalar(u8, name, '\x00') != null) return null;
-    return std.heap.page_allocator.dupe(u8, name) catch null;
-}
-
-fn readFileAlloc(gpa: std.mem.Allocator, path: []const u8) ![]u8 {
-    const fd = try std.posix.openat(std.posix.AT.FDCWD, path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
-    defer _ = std.posix.system.close(fd);
-
-    const size = @as(u64, @intCast(lseek(fd, 0, 2)));
-    _ = lseek(fd, 0, 0);
-
-    const max_download: u64 = 10 * 1024 * 1024;
-    if (size > max_download) return error.FileTooLarge;
-
-    const buf = try gpa.alloc(u8, @intCast(size));
-    errdefer gpa.free(buf);
-
-    var total: usize = 0;
-    while (total < size) {
-        const n = try std.posix.read(fd, buf[total..]);
-        if (n == 0) break;
-        total += n;
-    }
-    return buf;
+    return gpa.dupe(u8, name) catch null;
 }
 
 fn writeAll(fd: std.posix.fd_t, buf: []const u8) !usize {

@@ -103,16 +103,19 @@ pub const Response = struct {
     }
 
     /// Use a file handle as the response body, streaming its contents
-    /// to the socket. The caller retains ownership of `handle` and
-    /// must close it after the response has been sent.
+    /// to the socket. The file handle is automatically closed when the
+    /// response is deinitialized.
     pub fn setFileBody(self: *Response, handle: std.Io.File.Handle, size: usize) !void {
         if (self.body) |b| self.allocator.free(b);
         self.body = null;
         self.file_body = .{ .handle = handle, .size = size };
     }
 
-    /// Free all owned memory.
+    /// Free all owned memory and close any file body handle.
     pub fn deinit(self: *Response) void {
+        if (self.file_body) |fb| {
+            _ = std.posix.system.close(fb.handle);
+        }
         if (self.body) |b| {
             self.allocator.free(b);
         }
