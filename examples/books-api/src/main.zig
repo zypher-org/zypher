@@ -244,6 +244,7 @@ pub fn main(init: std.process.Init) !void {
     context.set(db_conn.asRelationalDb(), &router);
 
     tl_io = init.io;
+    context.setIo(tl_io);
     var app = zypher.core.App.init(init.gpa, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();
     app.middlewareHandler(runChain);

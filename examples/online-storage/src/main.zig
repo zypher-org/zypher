@@ -41,6 +41,7 @@ test "online storage uploads and downloads file bytes" {
 
     var upload_res = zypher.core.Response.init(gpa);
     defer upload_res.deinit();
+    handlers.setIo(std.testing.io);
     handlers.upload(&upload_req, &upload_res);
     try std.testing.expectEqual(@as(u16, 200), upload_res.status_code);
 

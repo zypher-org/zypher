@@ -5,6 +5,12 @@ const service = @import("../application/home_service.zig");
 const Request = zypher.core.Request;
 const Response = zypher.core.Response;
 
+threadlocal var tl_io: std.Io = undefined;
+
+pub fn setIo(io: std.Io) void {
+    tl_io = io;
+}
+
 pub fn index(_: *Request, res: *Response) void {
     const greeting = service.homeGreeting();
     const body = std.fmt.allocPrint(
@@ -31,7 +37,7 @@ pub fn upload(req: *Request, res: *Response) void {
         res.text("missing multipart file field 'file'") catch {};
         return;
     };
-    const stored = service.saveUpload(upload_file) catch |err| {
+    const stored = service.saveUpload(tl_io, upload_file) catch |err| {
         _ = res.status(400);
         const body = std.fmt.allocPrint(res.allocator, "upload failed: {s}", .{@errorName(err)}) catch {
             res.text("upload failed") catch {};
@@ -59,7 +65,7 @@ pub fn download(req: *Request, res: *Response) void {
         res.text("Not Found") catch {};
         return;
     };
-    const bytes = service.readFile(res.allocator, name) catch |err| {
+    const bytes = service.readFile(tl_io, res.allocator, name) catch |err| {
         _ = res.status(if (err == error.FileNotFound) 404 else 400);
         res.text("file not found") catch {};
         return;

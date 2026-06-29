@@ -170,7 +170,7 @@ Represents an outgoing HTTP response.
 
 ### Lifecycle
 - `Response.init(gpa) Response` — create a new response
-- `res.deinit()` — free all owned memory (body, headers, cookie headers)
+- `res.deinit()` — free all owned memory (body, headers, cookie headers); the file body handle (if any) is closed by `send()`, not by `deinit()`
 
 ### Chaining Mutators
 All mutators return `*Response` for chaining unless they return an error union.
@@ -191,10 +191,10 @@ All mutators return `*Response` for chaining unless they return an error union.
 - `res.deleteCookie(name) *Response` — delete a cookie by setting `Max-Age=0`
 
 ### File Body
-- `res.setFileBody(handle, size) !void` — set a file handle as the response body for streaming; bypasses buffering the entire payload in memory
+- `res.setFileBody(handle, size) !void` — set a file handle as the response body for streaming; bypasses buffering entire payload in memory; the handle is automatically closed by `send()`
 
 ### Serialization
-- `res.send(io, w: *std.Io.Writer) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided writer; if `file_body` is set, streams file content directly to the writer
+- `res.send(io, w: *std.Io.Writer) !void` — serialize the full HTTP response (status line, headers, Set-Cookie headers, body) into the provided writer; if `file_body` is set, streams file content directly to the writer and auto-closes the file handle
 - `res.sendHeaders(w: *std.Io.Writer) !void` — serialize only the status line and headers (used when streaming file bodies manually)
 
 ### Known Status Codes

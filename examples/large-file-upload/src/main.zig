@@ -119,9 +119,8 @@ fn uploadInline(req: *Request, content_type: []const u8, res: *Response) void {
         return;
     };
 
-    const fd = std.posix.openat(std.posix.AT.FDCWD, path, .{
-        .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true,
-    }, 0o644) catch |err| {
+    const cwd = std.Io.Dir.cwd();
+    const file_out = cwd.createFile(io, path, .{}) catch |err| {
         form_ptr.deinit();
         res.allocator.free(safe_name);
         res.allocator.free(path);
@@ -129,22 +128,16 @@ fn uploadInline(req: *Request, content_type: []const u8, res: *Response) void {
         res.text(std.fmt.allocPrint(res.allocator, "open error: {}", .{err}) catch "open error") catch {};
         return;
     };
+    defer file_out.close(io);
 
-    var written: usize = 0;
-    while (written < file.data.len) {
-        const n = writeAll(fd, file.data[written..]) catch |err| {
-            form_ptr.deinit();
-            res.allocator.free(safe_name);
-            res.allocator.free(path);
-            _ = std.posix.system.close(fd);
-            _ = res.status(500);
-            res.text(std.fmt.allocPrint(res.allocator, "write error: {}", .{err}) catch "write error") catch {};
-            return;
-        };
-        written += n;
-    }
-
-    _ = std.posix.system.close(fd);
+    file_out.writeStreamingAll(io, file.data) catch |err| {
+        form_ptr.deinit();
+        res.allocator.free(safe_name);
+        res.allocator.free(path);
+        _ = res.status(500);
+        res.text(std.fmt.allocPrint(res.allocator, "write error: {}", .{err}) catch "write error") catch {};
+        return;
+    };
 
     const url_name = urlEncode(res.allocator, safe_name) catch {
         form_ptr.deinit();
@@ -226,15 +219,15 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
                 return;
             };
 
-            const fd = std.posix.openat(std.posix.AT.FDCWD, path, .{
-                .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true,
-            }, 0o644) catch |err| {
+            const cwd = std.Io.Dir.cwd();
+            const file_out = cwd.createFile(io, path, .{}) catch |err| {
                 _ = res.status(500);
                 res.text(std.fmt.allocPrint(gpa, "open error: {}", .{err}) catch "open error") catch {};
                 gpa.free(safe_name);
                 gpa.free(path);
                 return;
             };
+            defer file_out.close(io);
 
             const remaining = hbuf[body_start..hlen];
             var total: usize = 0;
@@ -245,7 +238,6 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
             defer window.deinit(gpa);
 
             window.appendSlice(gpa, remaining) catch {
-                _ = std.posix.system.close(fd);
                 _ = res.status(500);
                 gpa.free(safe_name);
                 gpa.free(path);
@@ -254,7 +246,6 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
 
             while (true) {
                 const nr = body_stream.read(&buf) catch |err| {
-                    _ = std.posix.system.close(fd);
                     _ = res.status(500);
                     res.text(std.fmt.allocPrint(gpa, "read error: {}", .{err}) catch "read error") catch {};
                     gpa.free(safe_name);
@@ -263,7 +254,6 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
                 };
                 if (nr > 0) {
                     window.appendSlice(gpa, buf[0..nr]) catch {
-                        _ = std.posix.system.close(fd);
                         _ = res.status(500);
                         gpa.free(safe_name);
                         gpa.free(path);
@@ -272,19 +262,18 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
                 }
 
                 if (std.mem.indexOf(u8, window.items, marker)) |mp| {
-                    _ = writeAll(fd, window.items[0..mp]) catch {};
+                    file_out.writeStreamingAll(io, window.items[0..mp]) catch {};
                     break;
                 }
 
                 if (nr == 0) {
-                    _ = writeAll(fd, window.items) catch {};
+                    file_out.writeStreamingAll(io, window.items) catch {};
                     break;
                 }
 
                 if (window.items.len > win_size) {
                     const flush_end = window.items.len - win_size;
-                    _ = writeAll(fd, window.items[0..flush_end]) catch |err| {
-                        _ = std.posix.system.close(fd);
+                    file_out.writeStreamingAll(io, window.items[0..flush_end]) catch |err| {
                         _ = res.status(500);
                         res.text(std.fmt.allocPrint(gpa, "write error: {}", .{err}) catch "write error") catch {};
                         gpa.free(safe_name);
@@ -295,7 +284,6 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
                     const trail = window.items[flush_end..];
                     window = std.ArrayList(u8).empty;
                     window.appendSlice(gpa, trail) catch {
-                        _ = std.posix.system.close(fd);
                         _ = res.status(500);
                         gpa.free(safe_name);
                         gpa.free(path);
@@ -303,8 +291,6 @@ fn uploadStreamed(_: *Request, body_stream: *Request.BodyStream, content_type: [
                     };
                 }
             }
-
-            _ = std.posix.system.close(fd);
 
             const url_name = urlEncode(gpa, safe_name) catch {
                 gpa.free(safe_name);
@@ -367,7 +353,7 @@ fn download(req: *Request, res: *Response) void {
     };
     defer res.allocator.free(path);
 
-    const fd = std.posix.openat(std.posix.AT.FDCWD, path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0) catch |err| {
+    const file = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_only }) catch |err| {
         switch (err) {
             error.FileNotFound => {
                 _ = res.status(404);
@@ -381,18 +367,17 @@ fn download(req: *Request, res: *Response) void {
         return;
     };
 
-    const size = lseek(fd, 0, 2);
-    _ = lseek(fd, 0, 0);
+    const size = io.vtable.fileLength(io.userdata, file) catch @as(u64, 0);
 
     const disposition = std.fmt.allocPrint(res.allocator, "attachment; filename=\"{s}\"", .{name}) catch {
-        _ = std.posix.system.close(fd);
+        file.close(io);
         _ = res.status(500);
         return;
     };
     _ = res.header("Content-Type", "application/octet-stream");
     _ = res.header("Content-Disposition", disposition);
-    res.setFileBody(fd, @intCast(size)) catch {
-        _ = std.posix.system.close(fd);
+    res.setFileBody(file.handle, @intCast(size)) catch {
+        file.close(io);
         _ = res.status(500);
         return;
     };
@@ -453,23 +438,4 @@ fn sanitizeFilename(gpa: std.mem.Allocator, name: []const u8) ?[]u8 {
     return gpa.dupe(u8, name) catch null;
 }
 
-fn writeAll(fd: std.posix.fd_t, buf: []const u8) !usize {
-    if (comptime @import("builtin").os.tag == .linux) {
-        const rc = std.os.linux.write(fd, buf.ptr, buf.len);
-        switch (std.posix.errno(rc)) {
-            .SUCCESS => return @intCast(rc),
-            .INTR => return 0,
-            else => return error.WriteFailed,
-        }
-    }
-    const rc = std.posix.system.write(fd, buf.ptr, buf.len);
-    if (rc < 0) return error.WriteFailed;
-    return @intCast(rc);
-}
 
-fn lseek(fd: std.posix.fd_t, offset: i64, whence: u32) i64 {
-    if (comptime @import("builtin").os.tag == .linux) {
-        return @as(i64, @bitCast(std.os.linux.lseek(fd, offset, whence)));
-    }
-    return std.posix.system.lseek(fd, offset, whence);
-}

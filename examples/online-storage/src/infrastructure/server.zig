@@ -278,6 +278,7 @@ pub fn serve(init: std.process.Init) !void {
     tl_router = &router;
 
     tl_io = init.io;
+    handlers.setIo(tl_io);
     var app = zypher.core.App.init(init.gpa, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();
     app.middlewareHandler(runChain);

@@ -8,9 +8,7 @@ const Request = zypher.core.Request;
 const Response = zypher.core.Response;
 
 fn unixTimestamp() i64 {
-    var ts: std.posix.timespec = undefined;
-    _ = std.posix.system.clock_gettime(.REALTIME, &ts);
-    return ts.sec;
+    return std.Io.Timestamp.now(context.io(), .real).toSeconds();
 }
 
 fn input(req: *Request) book.BookInput {

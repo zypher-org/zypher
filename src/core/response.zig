@@ -88,8 +88,8 @@ pub const Response = struct {
     use_chunked: bool = false,
     allocator: std.mem.Allocator,
     /// When set, the response body is streamed directly from this file
-    /// descriptor instead of from `body`. The caller is responsible for
-    /// closing the fd after the response has been sent.
+    /// descriptor instead of from `body`. The file handle is automatically
+    /// closed by `send()` after streaming.
     file_body: ?FileBody = null,
 
     // ───────────── Lifecycle ─────────────
@@ -103,19 +103,15 @@ pub const Response = struct {
     }
 
     /// Use a file handle as the response body, streaming its contents
-    /// to the socket. The file handle is automatically closed when the
-    /// response is deinitialized.
+    /// to the socket. The file handle is automatically closed by `send()`.
     pub fn setFileBody(self: *Response, handle: std.Io.File.Handle, size: usize) !void {
         if (self.body) |b| self.allocator.free(b);
         self.body = null;
         self.file_body = .{ .handle = handle, .size = size };
     }
 
-    /// Free all owned memory and close any file body handle.
+    /// Free all owned memory. The file body handle is closed by `send()`.
     pub fn deinit(self: *Response) void {
-        if (self.file_body) |fb| {
-            _ = std.posix.system.close(fb.handle);
-        }
         if (self.body) |b| {
             self.allocator.free(b);
         }
@@ -332,10 +328,10 @@ pub const Response = struct {
         if (self.body) |b| {
             try w.writeAll(b);
         } else if (self.file_body) |fb| {
-            // Stream file content in chunks
+            const file = std.Io.File{ .handle = fb.handle, .flags = .{ .nonblocking = false } };
+            defer file.close(io);
             var buf: [8192]u8 = undefined;
             var remaining: usize = fb.size;
-            const file = std.Io.File{ .handle = fb.handle, .flags = .{ .nonblocking = false } };
             while (remaining > 0) {
                 const to_read = @min(buf.len, remaining);
                 var data: [1][]u8 = .{buf[0..to_read]};
