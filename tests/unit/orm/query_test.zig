@@ -1,15 +1,14 @@
 const std = @import("std");
 const schema = @import("zypher").orm.schema;
-const sqlite = @import("zypher").orm.sqlite;
+const driver_iface = @import("zypher").orm.driver.interface;
+const SqliteDb = @import("zypher").orm.driver.sqlite.SqliteDb;
 const query = @import("zypher").orm.query;
 
 const FieldDef = schema.FieldDef;
 const Field = schema.Field;
 const Model = schema.Model;
-const Db = sqlite.Db;
-const Value = sqlite.Value;
-
-// ── Test model ────────────────────────────────────────────────────────────
+const RelationalDb = driver_iface.RelationalDb;
+const Value = driver_iface.Value;
 
 const ItemFields = struct {
     id: FieldDef = Field("id", .integer, .{ .primary = true }),
@@ -19,14 +18,8 @@ const ItemFields = struct {
 const Item = Model("items", ItemFields);
 const ItemRow = query.RowType(Item);
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-fn openTestDb() !Db {
-    return Db.open(std.testing.allocator, ":memory:");
-}
-
-fn createItemsTable(db: *Db) !void {
-    try db.exec(Item.create_table_sql);
+fn openTestDb() !SqliteDb {
+    return try SqliteDb.open(std.testing.allocator, ":memory:");
 }
 
 fn freeItemRows(rows: *std.ArrayList(ItemRow)) void {
@@ -36,14 +29,14 @@ fn freeItemRows(rows: *std.ArrayList(ItemRow)) void {
     rows.deinit(std.testing.allocator);
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────
-
 test "query: create and retrieve a record" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    const row_id = try query.create(Item, &db, &.{
+    try db.exec(Item.create_table_sql);
+
+    const row_id = try query.create(Item, db, &.{
         .{ .text = "alpha" },
         .{ .int = 10 },
     });
@@ -64,120 +57,135 @@ test "query: create and retrieve a record" {
 }
 
 test "query: get by id returns record" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    const row_id = try query.create(Item, &db, &.{
+    const row_id = try query.create(Item, db, &.{
         .{ .text = "beta" },
         .{ .int = 20 },
     });
 
-    var row = try query.getById(Item, &db, std.testing.allocator, row_id);
-    defer query.freeRow(Item, std.testing.allocator, &row);
+    var row = try query.getById(Item, db, gpa, row_id);
+    defer query.freeRow(Item, gpa, &row);
     try std.testing.expectEqual(row_id, row[0]);
     try std.testing.expectEqualStrings("beta", row[1]);
     try std.testing.expectEqual(@as(i64, 20), row[2]);
 }
 
 test "query: get by id returns NotFound for missing record" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    const result = query.getById(Item, &db, std.testing.allocator, 9999);
+    const result = query.getById(Item, db, gpa, 9999);
     try std.testing.expectError(error.NotFound, result);
 }
 
 test "query: all returns all records" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    _ = try query.create(Item, &db, &.{ .{ .text = "a" }, .{ .int = 1 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "b" }, .{ .int = 2 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "c" }, .{ .int = 3 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "a" }, .{ .int = 1 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "b" }, .{ .int = 2 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "c" }, .{ .int = 3 } });
 
-    var rows = try query.all(Item, &db, std.testing.allocator);
+    var rows = try query.all(Item, db, gpa);
     defer freeItemRows(&rows);
     try std.testing.expectEqual(@as(usize, 3), rows.items.len);
 }
 
 test "query: updateById modifies a record" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    const row_id = try query.create(Item, &db, &.{
+    const row_id = try query.create(Item, db, &.{
         .{ .text = "original" },
         .{ .int = 100 },
     });
 
-    try query.updateById(Item, &db, row_id, &.{
+    try query.updateById(Item, db, row_id, &.{
         .{ .text = "updated" },
         .{ .int = 200 },
     });
 
-    var row = try query.getById(Item, &db, std.testing.allocator, row_id);
-    defer query.freeRow(Item, std.testing.allocator, &row);
+    var row = try query.getById(Item, db, gpa, row_id);
+    defer query.freeRow(Item, gpa, &row);
     try std.testing.expectEqualStrings("updated", row[1]);
     try std.testing.expectEqual(@as(i64, 200), row[2]);
 }
 
 test "query: deleteById removes a record" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    const row_id = try query.create(Item, &db, &.{
+    const row_id = try query.create(Item, db, &.{
         .{ .text = "doomed" },
         .{ .int = 0 },
     });
 
-    try query.deleteById(Item, &db, row_id);
+    try query.deleteById(Item, db, row_id);
 
-    const result = query.getById(Item, &db, std.testing.allocator, row_id);
+    const result = query.getById(Item, db, gpa, row_id);
     try std.testing.expectError(error.NotFound, result);
 }
 
 test "query: count returns number of records" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    try std.testing.expectEqual(@as(u64, 0), try query.count(Item, &db));
+    try std.testing.expectEqual(@as(u64, 0), try query.count(Item, db));
 
-    _ = try query.create(Item, &db, &.{ .{ .text = "x" }, .{ .int = 1 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "y" }, .{ .int = 2 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "x" }, .{ .int = 1 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "y" }, .{ .int = 2 } });
 
-    try std.testing.expectEqual(@as(u64, 2), try query.count(Item, &db));
+    try std.testing.expectEqual(@as(u64, 2), try query.count(Item, db));
 }
 
 test "query: filter with WHERE clause" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    _ = try query.create(Item, &db, &.{ .{ .text = "foo" }, .{ .int = 1 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "bar" }, .{ .int = 2 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "foo" }, .{ .int = 3 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "foo" }, .{ .int = 1 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "bar" }, .{ .int = 2 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "foo" }, .{ .int = 3 } });
 
-    var rows = try query.filter(Item, &db, std.testing.allocator, "name = ?", &.{.{ .text = "foo" }});
+    var rows = try query.filter(Item, db, gpa, "name = ?", &.{.{ .text = "foo" }});
     defer freeItemRows(&rows);
     try std.testing.expectEqual(@as(usize, 2), rows.items.len);
 }
 
 test "query: filter with LIMIT and OFFSET" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    _ = try query.create(Item, &db, &.{ .{ .text = "a" }, .{ .int = 1 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "b" }, .{ .int = 2 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "c" }, .{ .int = 3 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "d" }, .{ .int = 4 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "a" }, .{ .int = 1 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "b" }, .{ .int = 2 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "c" }, .{ .int = 3 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "d" }, .{ .int = 4 } });
 
-    var rows = try query.filterLimitOffset(Item, &db, std.testing.allocator, "", &.{}, 2, 1);
+    var rows = try query.filterLimitOffset(Item, db, gpa, "", &.{}, 2, 1);
     defer freeItemRows(&rows);
     try std.testing.expectEqual(@as(usize, 2), rows.items.len);
     try std.testing.expectEqualStrings("b", rows.items[0][1]);
@@ -185,15 +193,17 @@ test "query: filter with LIMIT and OFFSET" {
 }
 
 test "query: filter with ORDER BY" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    _ = try query.create(Item, &db, &.{ .{ .text = "c" }, .{ .int = 3 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "a" }, .{ .int = 1 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "b" }, .{ .int = 2 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "c" }, .{ .int = 3 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "a" }, .{ .int = 1 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "b" }, .{ .int = 2 } });
 
-    var rows = try query.filterOrderLimitOffset(Item, &db, std.testing.allocator, "", &.{}, "name ASC", 10, 0);
+    var rows = try query.filterOrderLimitOffset(Item, db, gpa, "", &.{}, "name ASC", 10, 0);
     defer freeItemRows(&rows);
     try std.testing.expectEqual(@as(usize, 3), rows.items.len);
     try std.testing.expectEqualStrings("a", rows.items[0][1]);
@@ -202,54 +212,61 @@ test "query: filter with ORDER BY" {
 }
 
 test "query: first returns first matching row" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    _ = try query.create(Item, &db, &.{ .{ .text = "a" }, .{ .int = 1 } });
-    _ = try query.create(Item, &db, &.{ .{ .text = "b" }, .{ .int = 2 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "a" }, .{ .int = 1 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "b" }, .{ .int = 2 } });
 
-    var row = try query.first(Item, &db, std.testing.allocator, "name = ?", &.{.{ .text = "a" }});
-    defer if (row) |*r| query.freeRow(Item, std.testing.allocator, r);
+    var row = try query.first(Item, db, gpa, "name = ?", &.{.{ .text = "a" }});
+    defer if (row) |*r| query.freeRow(Item, gpa, r);
     try std.testing.expect(row != null);
     try std.testing.expectEqualStrings("a", row.?[1]);
 }
 
 test "query: first returns null on no match" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    const row = try query.first(Item, &db, std.testing.allocator, "name = ?", &.{.{ .text = "nonexistent" }});
+    const row = try query.first(Item, db, gpa, "name = ?", &.{.{ .text = "nonexistent" }});
     try std.testing.expect(row == null);
 }
 
 test "query: save inserts new record" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
     var row: ItemRow = undefined;
     row[0] = 0;
     row[1] = "saved";
     row[2] = 42;
-    const row_id = try query.save(Item, &db, std.testing.allocator, &row);
+    const row_id = try query.save(Item, db, gpa, &row);
     try std.testing.expect(row_id > 0);
     try std.testing.expectEqual(@as(i64, @intCast(row_id)), row[0]);
 }
 
 test "query: SQL injection is safely bound, not injected" {
-    var db = try openTestDb();
-    defer db.close();
-    try createItemsTable(&db);
+    const gpa = std.testing.allocator;
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try db.exec(Item.create_table_sql);
 
-    _ = try query.create(Item, &db, &.{ .{ .text = "normal" }, .{ .int = 1 } });
+    _ = try query.create(Item, db, &.{ .{ .text = "normal" }, .{ .int = 1 } });
 
     const injection = "'; DROP TABLE items; --";
-    var rows = try query.filter(Item, &db, std.testing.allocator, "name = ?", &.{.{ .text = injection }});
+    var rows = try query.filter(Item, db, gpa, "name = ?", &.{.{ .text = injection }});
     defer freeItemRows(&rows);
     try std.testing.expectEqual(@as(usize, 0), rows.items.len);
 
-    // Verify table still exists by counting
-    try std.testing.expectEqual(@as(u64, 1), try query.count(Item, &db));
+    try std.testing.expectEqual(@as(u64, 1), try query.count(Item, db));
 }

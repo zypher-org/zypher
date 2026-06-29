@@ -3,8 +3,8 @@ const std = @import("std");
 const Route = @import("../router/route.zig").Route;
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
-const sqlite = @import("../orm/sqlite.zig");
 const query = @import("../orm/query.zig");
+const RelationalDb = query.RelationalDb;
 const TemplateEngine = @import("../template/renderer.zig").TemplateEngine;
 const Context = @import("../template/renderer.zig").Context;
 const Value = @import("../template/renderer.zig").Value;
@@ -14,10 +14,10 @@ const log = std.log.scoped(.admin);
 
 // ── Thread-local DB connection (set by the application before admin dispatch) ─
 
-threadlocal var admin_db: ?*sqlite.Db = null;
+threadlocal var admin_db: ?RelationalDb = null;
 threadlocal var admin_engine: ?*TemplateEngine = null;
 
-pub fn setDb(db: *sqlite.Db) void {
+pub fn setDb(db: RelationalDb) void {
     admin_db = db;
 }
 
@@ -548,18 +548,18 @@ fn createHandler(comptime M: type) *const fn (*Request, *Response) void {
                 res.text("Admin: no database") catch {};
                 return;
             };
-            var values: [M.insert_field_count]sqlite.Value = undefined;
+            var values: [M.insert_field_count]query.Value = undefined;
             var idx: usize = 0;
             inline for (0..M.fields_len) |i| {
                 const f = M.fieldAt(i);
                 if (!f.primary) {
                     const val = req.formValue(f.name) orelse "";
                     values[idx] = switch (f.kind) {
-                        .text => sqlite.Value{ .text = val },
-                        .integer => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
-                        .float => sqlite.Value{ .float = std.fmt.parseFloat(f64, val) catch 0.0 },
-                        .boolean => sqlite.Value{ .int = if (val.len > 0 and val[0] == '1') @as(i64, 1) else 0 },
-                        .timestamp => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
+                        .text => query.Value{ .text = val },
+                        .integer => query.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
+                        .float => query.Value{ .float = std.fmt.parseFloat(f64, val) catch 0.0 },
+                        .boolean => query.Value{ .int = if (val.len > 0 and val[0] == '1') @as(i64, 1) else 0 },
+                        .timestamp => query.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
                     };
                     idx += 1;
                 }
@@ -715,18 +715,18 @@ fn updateHandler(comptime M: type) *const fn (*Request, *Response) void {
                 res.text("Invalid ID") catch {};
                 return;
             };
-            var values: [M.insert_field_count]sqlite.Value = undefined;
+            var values: [M.insert_field_count]query.Value = undefined;
             var idx: usize = 0;
             inline for (0..M.fields_len) |i| {
                 const f = M.fieldAt(i);
                 if (!f.primary) {
                     const val = req.formValue(f.name) orelse "";
                     values[idx] = switch (f.kind) {
-                        .text => sqlite.Value{ .text = val },
-                        .integer => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
-                        .float => sqlite.Value{ .float = std.fmt.parseFloat(f64, val) catch 0.0 },
-                        .boolean => sqlite.Value{ .int = if (val.len > 0 and val[0] == '1') @as(i64, 1) else 0 },
-                        .timestamp => sqlite.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
+                        .text => query.Value{ .text = val },
+                        .integer => query.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
+                        .float => query.Value{ .float = std.fmt.parseFloat(f64, val) catch 0.0 },
+                        .boolean => query.Value{ .int = if (val.len > 0 and val[0] == '1') @as(i64, 1) else 0 },
+                        .timestamp => query.Value{ .int = std.fmt.parseInt(i64, val, 10) catch 0 },
                     };
                     idx += 1;
                 }

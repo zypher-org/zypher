@@ -1,6 +1,5 @@
-/// zypher ORM — runtime query execution using comptime schema SQL.
 const std = @import("std");
-const sqlite = @import("sqlite.zig");
+const driver_iface = @import("driver/interface.zig");
 const schema = @import("schema.zig");
 
 const log = std.log.scoped(.query);
@@ -16,7 +15,10 @@ pub const QueryError = error{
     AllocatorFailed,
 };
 
-/// Row type returned by query functions. Fields match the model's FieldDef order.
+pub const Value = driver_iface.Value;
+pub const RelationalDb = driver_iface.RelationalDb;
+pub const AnyStmt = driver_iface.AnyStmt;
+
 pub fn RowType(comptime M: type) type {
     comptime {
         @setEvalBranchQuota(10000);
@@ -35,8 +37,7 @@ pub fn RowType(comptime M: type) type {
     }
 }
 
-/// Read a row from the current statement step, copying text fields into owned memory.
-fn readRow(comptime M: type, stmt: *sqlite.Stmt, gpa: std.mem.Allocator) QueryError!RowType(M) {
+fn readRow(comptime M: type, stmt: *const AnyStmt, gpa: std.mem.Allocator) QueryError!RowType(M) {
     var row: RowType(M) = undefined;
     inline for (0..M.fields_len) |i| {
         const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
@@ -58,7 +59,6 @@ fn readRow(comptime M: type, stmt: *sqlite.Stmt, gpa: std.mem.Allocator) QueryEr
     return row;
 }
 
-/// Free owned text memory in a row.
 pub fn freeRow(comptime M: type, gpa: std.mem.Allocator, row: *RowType(M)) void {
     inline for (0..M.fields_len) |i| {
         const FieldType = @typeInfo(RowType(M)).@"struct".field_types[i];
@@ -68,22 +68,19 @@ pub fn freeRow(comptime M: type, gpa: std.mem.Allocator, row: *RowType(M)) void 
     }
 }
 
-/// INSERT a new record. Returns the rowid.
-pub fn create(comptime M: type, db: *sqlite.Db, values: []const sqlite.Value) QueryError!i64 {
+pub fn create(comptime M: type, db: RelationalDb, values: []const Value) QueryError!i64 {
     var stmt = db.prepare(M.insert_sql) catch return error.PrepareFailed;
     defer stmt.finalize();
     for (values, 0..) |v, i| {
         stmt.bind(v, @intCast(i + 1)) catch return error.BindFailed;
     }
     _ = stmt.step() catch return error.StepFailed;
-    const row_id = db.lastInsertRowId();
+    const row_id = db.lastInsertId();
     log.info("created record in {s}: rowid={d}", .{ M.table_name, row_id });
     return row_id;
 }
 
-/// SELECT by primary key. Returns the row or error.NotFound.
-/// Caller owns the row's text memory — call freeRow when done.
-pub fn getById(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, id: i64) QueryError!RowType(M) {
+pub fn getById(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator, id: i64) QueryError!RowType(M) {
     var stmt = db.prepare(M.select_by_id_sql) catch return error.PrepareFailed;
     defer stmt.finalize();
     stmt.bind(.{ .int = id }, 1) catch return error.BindFailed;
@@ -92,9 +89,7 @@ pub fn getById(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, id: i64
     return readRow(M, &stmt, gpa);
 }
 
-/// SELECT all rows.
-/// Caller owns the rows and their text memory — call freeRow on each when done.
-pub fn all(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator) QueryError!std.ArrayList(RowType(M)) {
+pub fn all(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
     var stmt = db.prepare(M.select_all_sql) catch return error.PrepareFailed;
     defer stmt.finalize();
@@ -106,8 +101,7 @@ pub fn all(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator) QueryError!
     return list;
 }
 
-/// UPDATE by primary key.
-pub fn updateById(comptime M: type, db: *sqlite.Db, id: i64, values: []const sqlite.Value) QueryError!void {
+pub fn updateById(comptime M: type, db: RelationalDb, id: i64, values: []const Value) QueryError!void {
     var stmt = db.prepare(M.update_by_id_sql) catch return error.PrepareFailed;
     defer stmt.finalize();
     for (values, 0..) |v, i| {
@@ -118,8 +112,7 @@ pub fn updateById(comptime M: type, db: *sqlite.Db, id: i64, values: []const sql
     log.info("updated record in {s}: id={d}", .{ M.table_name, id });
 }
 
-/// DELETE by primary key.
-pub fn deleteById(comptime M: type, db: *sqlite.Db, id: i64) QueryError!void {
+pub fn deleteById(comptime M: type, db: RelationalDb, id: i64) QueryError!void {
     var stmt = db.prepare(M.delete_by_id_sql) catch return error.PrepareFailed;
     defer stmt.finalize();
     stmt.bind(.{ .int = id }, 1) catch return error.BindFailed;
@@ -127,10 +120,7 @@ pub fn deleteById(comptime M: type, db: *sqlite.Db, id: i64) QueryError!void {
     log.info("deleted record from {s}: id={d}", .{ M.table_name, id });
 }
 
-/// ORDER BY a column expression. Returns all rows sorted.
-/// WARNING: `order_by` is a raw SQL fragment. Do not pass user input directly.
-/// Caller owns the rows and their text memory — call freeRow on each when done.
-pub fn order(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, order_by: []const u8) QueryError!std.ArrayList(RowType(M)) {
+pub fn order(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator, order_by: []const u8) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
     const sql: [:0]const u8 = if (order_by.len > 0)
         std.fmt.allocPrintSentinel(gpa, "{s} ORDER BY {s}", .{ M.select_all_sql, order_by }, 0) catch return error.AllocatorFailed
@@ -147,28 +137,26 @@ pub fn order(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, order_by:
     return list;
 }
 
-/// Chainable QuerySet builder. Each method returns `*Self` for chaining.
-/// Call `.exec()` to execute the built query.
 pub fn QuerySet(comptime M: type) type {
     return struct {
         const Self = @This();
-        db: *sqlite.Db,
+        db: RelationalDb,
         gpa: std.mem.Allocator,
         where_clause: [:0]const u8 = "",
-        where_vals: std.ArrayList(sqlite.Value),
+        where_vals: std.ArrayList(Value),
         order_clause: []const u8 = "",
         limit_val: ?u64 = null,
         offset_val: ?u64 = null,
 
-        pub fn init(db: *sqlite.Db, gpa: std.mem.Allocator) Self {
-            return .{ .db = db, .gpa = gpa, .where_vals = std.ArrayList(sqlite.Value).empty };
+        pub fn init(db: RelationalDb, gpa: std.mem.Allocator) Self {
+            return .{ .db = db, .gpa = gpa, .where_vals = std.ArrayList(Value).empty };
         }
 
         pub fn deinit(self: *Self) void {
             self.where_vals.deinit(self.gpa);
         }
 
-        pub fn filterBy(self: *Self, where: [:0]const u8, values: []const sqlite.Value) *Self {
+        pub fn filterBy(self: *Self, where: [:0]const u8, values: []const Value) *Self {
             self.where_clause = where;
             for (values) |v| self.where_vals.append(self.gpa, v) catch return self;
             return self;
@@ -189,7 +177,6 @@ pub fn QuerySet(comptime M: type) type {
             return self;
         }
 
-        /// Execute the query and return results.
         pub fn exec(self: *Self) QueryError!std.ArrayList(RowType(M)) {
             const hw = self.where_clause.len > 0;
             const ho = self.order_clause.len > 0;
@@ -222,8 +209,7 @@ pub fn QuerySet(comptime M: type) type {
     };
 }
 
-/// COUNT all rows.
-pub fn count(comptime M: type, db: *sqlite.Db) QueryError!u64 {
+pub fn count(comptime M: type, db: RelationalDb) QueryError!u64 {
     const sql = "SELECT COUNT(*) FROM " ++ M.table_name;
     var stmt = db.prepare(sql) catch return error.PrepareFailed;
     defer stmt.finalize();
@@ -233,10 +219,7 @@ pub fn count(comptime M: type, db: *sqlite.Db) QueryError!u64 {
     return @intCast(val.int);
 }
 
-/// FILTER with WHERE clause. Values are bound as parameters (SQL injection safe).
-/// WARNING: `where` is a raw SQL fragment after the WHERE keyword. Do not pass user input directly.
-/// Caller owns the rows and their text memory — call freeRow on each when done.
-pub fn filter(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value) QueryError!std.ArrayList(RowType(M)) {
+pub fn filter(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator, where: [:0]const u8, values: []const Value) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
     const sql: [:0]const u8 = if (where.len > 0) std.fmt.allocPrintSentinel(gpa, "{s} WHERE {s}", .{ M.select_all_sql, where }, 0) catch return error.AllocatorFailed else M.select_all_sql;
     defer if (where.len > 0) gpa.free(@constCast(sql));
@@ -253,10 +236,7 @@ pub fn filter(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [
     return list;
 }
 
-/// FILTER with WHERE, LIMIT, and OFFSET.
-/// WARNING: `where` is a raw SQL fragment after the WHERE keyword. Do not pass user input directly.
-/// Caller owns the rows and their text memory — call freeRow on each when done.
-pub fn filterLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value, limit: u64, offset: u64) QueryError!std.ArrayList(RowType(M)) {
+pub fn filterLimitOffset(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator, where: [:0]const u8, values: []const Value, limit: u64, offset: u64) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
     const sql: [:0]const u8 = if (where.len > 0)
         std.fmt.allocPrintSentinel(gpa, "{s} WHERE {s} LIMIT ? OFFSET ?", .{ M.select_all_sql, where }, 0) catch return error.AllocatorFailed
@@ -280,10 +260,7 @@ pub fn filterLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocato
     return list;
 }
 
-/// FILTER with WHERE, ORDER BY, LIMIT, and OFFSET.
-/// WARNING: `where` and `order_by` are raw SQL fragments. Do not pass user input directly.
-/// Caller owns the rows and their text memory — call freeRow on each when done.
-pub fn filterOrderLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value, order_by: []const u8, limit: u64, offset: u64) QueryError!std.ArrayList(RowType(M)) {
+pub fn filterOrderLimitOffset(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator, where: [:0]const u8, values: []const Value, order_by: []const u8, limit: u64, offset: u64) QueryError!std.ArrayList(RowType(M)) {
     var list = std.ArrayList(RowType(M)).empty;
     const has_where = where.len > 0;
     const has_order = order_by.len > 0;
@@ -318,10 +295,7 @@ pub fn filterOrderLimitOffset(comptime M: type, db: *sqlite.Db, gpa: std.mem.All
     return list;
 }
 
-/// SELECT first matching row. Returns null if no match.
-/// WARNING: `where` is a raw SQL fragment after the WHERE keyword. Do not pass user input directly.
-/// Caller owns the row's text memory — call freeRow when done.
-pub fn first(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:0]const u8, values: []const sqlite.Value) QueryError!?RowType(M) {
+pub fn first(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator, where: [:0]const u8, values: []const Value) QueryError!?RowType(M) {
     var rows = try filterLimitOffset(M, db, gpa, where, values, 1, 0);
     if (rows.items.len == 0) return null;
     const row = rows.items[0];
@@ -329,14 +303,11 @@ pub fn first(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, where: [:
     return row;
 }
 
-/// INSERT or UPDATE a record. If the primary key field is 0, inserts; otherwise updates.
-/// Returns the rowid. On insert, the primary key field is updated with the new id.
-pub fn save(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, row: *RowType(M)) QueryError!i64 {
+pub fn save(comptime M: type, db: RelationalDb, gpa: std.mem.Allocator, row: *RowType(M)) QueryError!i64 {
     _ = gpa;
     const pk_idx = comptime M.primary_key_index;
     const id: i64 = row[pk_idx];
     if (id == 0) {
-        // INSERT — skip primary key field (auto-increment)
         var stmt = db.prepare(M.insert_sql) catch return error.PrepareFailed;
         defer stmt.finalize();
         var bind_idx: c_int = 1;
@@ -355,13 +326,12 @@ pub fn save(comptime M: type, db: *sqlite.Db, gpa: std.mem.Allocator, row: *RowT
             bind_idx += 1;
         }
         _ = stmt.step() catch return error.StepFailed;
-        const new_id = db.lastInsertRowId();
+        const new_id = db.lastInsertId();
         row[pk_idx] = new_id;
         log.info("saved new record in {s}: rowid={d}", .{ M.table_name, new_id });
         return new_id;
     } else {
-        // UPDATE — collect values for all non-PK fields
-        var arr: [M.fields_len - 1]sqlite.Value = undefined;
+        var arr: [M.fields_len - 1]Value = undefined;
         var arr_idx: usize = 0;
         inline for (0..M.fields_len) |i| {
             if (i == pk_idx) continue;
