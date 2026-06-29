@@ -3,7 +3,8 @@ const zypher = @import("zypher");
 
 const schema = zypher.orm.schema;
 const query = zypher.orm.query;
-const sqlite = zypher.orm.sqlite;
+
+const RelationalDb = query.RelationalDb;
 
 pub const BookFields = struct {
     id: schema.FieldDef = schema.Field("id", .integer, .{ .primary = true }),
@@ -23,11 +24,11 @@ pub const BookInput = struct {
     year: i64,
 };
 
-pub fn migrate(db: *sqlite.Db) !void {
+pub fn migrate(db: RelationalDb) !void {
     try db.exec(Book.create_table_sql);
 }
 
-pub fn create(db: *sqlite.Db, input: BookInput, now: i64) !i64 {
+pub fn create(db: RelationalDb, input: BookInput, now: i64) !i64 {
     return query.create(Book, db, &.{
         .{ .text = input.title },
         .{ .text = input.author },
@@ -36,15 +37,15 @@ pub fn create(db: *sqlite.Db, input: BookInput, now: i64) !i64 {
     });
 }
 
-pub fn list(db: *sqlite.Db, allocator: std.mem.Allocator) !BookList {
+pub fn list(db: RelationalDb, allocator: std.mem.Allocator) !BookList {
     return query.all(Book, db, allocator);
 }
 
-pub fn get(db: *sqlite.Db, allocator: std.mem.Allocator, id: i64) !BookRow {
+pub fn get(db: RelationalDb, allocator: std.mem.Allocator, id: i64) !BookRow {
     return query.getById(Book, db, allocator, id);
 }
 
-pub fn update(db: *sqlite.Db, id: i64, input: BookInput, created_at: i64) !void {
+pub fn update(db: RelationalDb, id: i64, input: BookInput, created_at: i64) !void {
     try query.updateById(Book, db, id, &.{
         .{ .text = input.title },
         .{ .text = input.author },
@@ -53,7 +54,7 @@ pub fn update(db: *sqlite.Db, id: i64, input: BookInput, created_at: i64) !void 
     });
 }
 
-pub fn delete(db: *sqlite.Db, id: i64) !void {
+pub fn delete(db: RelationalDb, id: i64) !void {
     try query.deleteById(Book, db, id);
 }
 

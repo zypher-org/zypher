@@ -1,7 +1,7 @@
 const zypher = @import("zypher");
 
 pub const AppContext = struct {
-    db: *zypher.orm.sqlite.Db,
+    db: zypher.orm.query.RelationalDb,
     engine: *zypher.template.renderer.TemplateEngine,
     sessions: *zypher.auth.session.SessionStore,
     router: *const zypher.router.Router,

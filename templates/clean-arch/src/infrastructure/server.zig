@@ -11,6 +11,7 @@ const Session = zypher.auth.session.Session;
 const SessionStore = zypher.auth.session.SessionStore;
 const TemplateEngine = zypher.template.renderer.TemplateEngine;
 const sqlite = zypher.orm.sqlite;
+const RelationalDb = zypher.orm.driver.interface.RelationalDb;
 const password = zypher.auth.password;
 const AdminSite = zypher.admin.AdminSite;
 const Registration = zypher.admin.Registration;
@@ -24,7 +25,7 @@ const Chain = zypher.middleware.Chain(.{
     zypher.middleware.security_headers.middleware,
 });
 
-threadlocal var tl_db: ?*sqlite.Db = null;
+threadlocal var tl_db: ?RelationalDb = null;
 threadlocal var tl_router: ?*const Router = null;
 
 fn loginForm(_: *Request, res: *Response) void {
@@ -71,13 +72,13 @@ fn login(req: *Request, res: *Response) void {
     res.redirect("/admin/", 302) catch {};
 }
 
-fn ensureAuthRecoverySchema(db: *sqlite.Db) void {
+fn ensureAuthRecoverySchema(db: RelationalDb) void {
     if (!userColumnExists(db, "email")) db.exec("ALTER TABLE users ADD COLUMN email TEXT") catch {};
     if (!userColumnExists(db, "reset_code")) db.exec("ALTER TABLE users ADD COLUMN reset_code TEXT") catch {};
     if (!userColumnExists(db, "reset_code_expires_at")) db.exec("ALTER TABLE users ADD COLUMN reset_code_expires_at INTEGER") catch {};
 }
 
-fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
+fn userColumnExists(db: RelationalDb, name: []const u8) bool {
     var stmt = db.prepare("PRAGMA table_info(users)") catch return false;
     defer stmt.finalize();
     while (stmt.step() catch false) {
@@ -224,7 +225,7 @@ fn resetPassword(req: *Request, res: *Response) void {
         res.text("Invalid recovery code") catch {};
         return;
     }
-    const hash = password.hash(req.allocator, plain) catch return;
+    const hash = password.hash(tl_io, req.allocator, plain) catch return;
     defer req.allocator.free(hash);
     var update = db.prepare("UPDATE users SET password_hash = ?, reset_code = NULL, reset_code_expires_at = NULL WHERE email = ?") catch return;
     defer update.finalize();
@@ -274,7 +275,7 @@ pub fn serve(init: std.process.Init) !void {
     var engine = TemplateEngine.init(init.gpa);
     defer engine.deinit();
     Admin.loadTemplates(&engine);
-    zypher.admin.setDb(&db);
+    zypher.admin.setDb(db.asRelationalDb());
     zypher.admin.setEngine(&engine);
 
     var sessions = SessionStore.init(init.gpa);
@@ -295,7 +296,7 @@ pub fn serve(init: std.process.Init) !void {
     };
     const routes = app_routes ++ admin_routes;
     var router = Router.initFromSlice(&routes, notFound);
-    tl_db = &db;
+    tl_db = db.asRelationalDb();
     tl_router = &router;
 
     tl_io = init.io;

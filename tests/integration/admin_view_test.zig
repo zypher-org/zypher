@@ -2,7 +2,8 @@
 const std = @import("std");
 const zypher = @import("zypher");
 
-const sqlite = zypher.orm.sqlite;
+const SqliteDb = zypher.orm.driver.sqlite.SqliteDb;
+const RelationalDb = zypher.orm.driver.interface.RelationalDb;
 const schema = zypher.orm.schema;
 const query = zypher.orm.query;
 const migration = zypher.orm.migration;
@@ -35,11 +36,11 @@ const Site = admin.AdminSite(.{
     .products = admin.Registration(Product, .{ .list_display = &.{ "name", "price" } }),
 });
 
-fn openTestDb() !sqlite.Db {
-    return sqlite.Db.open(std.testing.allocator, ":memory:");
+fn openTestDb() !SqliteDb {
+    return SqliteDb.open(std.testing.allocator, ":memory:");
 }
 
-fn migrateProductTable(db: *sqlite.Db) !void {
+fn migrateProductTable(db: RelationalDb) !void {
     var runner = migration.MigrationRunner.init(db);
     const migrations = [_]migration.Migration{
         .{ .id = 1, .name = "create_products", .up_sql = Product.create_table_sql, .down_sql = Product.drop_table_sql },
@@ -61,7 +62,7 @@ fn setAdminSession(req: *Request) !*Session {
         .expires_at = 0,
     };
     try session.put(gpa, "role", "admin");
-    req.user = @ptrCast(session);
+    req.user = @ptrCast(session); // Simulates SessionMiddleware setting req.user
     return session;
 }
 
@@ -77,10 +78,11 @@ fn findHandler(comptime pattern: []const u8, comptime method: Method) ?*const fn
 }
 
 test "admin views: index returns 200 and lists registered models" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     var req = Request{
         .method = .get,
@@ -108,10 +110,11 @@ test "admin views: index returns 200 and lists registered models" {
 }
 
 test "admin views: list view shows empty table" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     const handler = findHandler("/admin/products/", .get) orelse return error.SkipZigTest;
 
@@ -140,13 +143,14 @@ test "admin views: list view shows empty table" {
 }
 
 test "admin views: list view shows created record" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     // Create a record directly
-    _ = try query.create(Product, &db, &.{
+    _ = try query.create(Product, db, &.{
         .{ .text = "Widget" },
         .{ .int = 99 },
     });
@@ -180,10 +184,11 @@ test "admin views: list view shows created record" {
 }
 
 test "admin views: add form renders correctly" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     const handler = findHandler("/admin/products/add/", .get) orelse return error.SkipZigTest;
 
@@ -214,10 +219,11 @@ test "admin views: add form renders correctly" {
 }
 
 test "admin views: create handler inserts record" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     const handler = findHandler("/admin/products/add/", .post) orelse return error.SkipZigTest;
 
@@ -248,7 +254,7 @@ test "admin views: create handler inserts record" {
     try std.testing.expectEqual(@as(u16, 302), res.status_code);
 
     // Verify record was created
-    var rows = try query.all(Product, &db, std.testing.allocator);
+    var rows = try query.all(Product, db, std.testing.allocator);
     defer {
         for (rows.items) |*r| query.freeRow(Product, std.testing.allocator, r);
         rows.deinit(std.testing.allocator);
@@ -257,13 +263,14 @@ test "admin views: create handler inserts record" {
 }
 
 test "admin views: create and then change handler shows existing values" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     // Create a record
-    _ = try query.create(Product, &db, &.{
+    _ = try query.create(Product, db, &.{
         .{ .text = "Gadget" },
         .{ .int = 49 },
     });
@@ -301,13 +308,14 @@ test "admin views: create and then change handler shows existing values" {
 }
 
 test "admin views: delete confirmation renders" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     // Create a record
-    _ = try query.create(Product, &db, &.{
+    _ = try query.create(Product, db, &.{
         .{ .text = "Trash" },
         .{ .int = 5 },
     });
@@ -345,13 +353,14 @@ test "admin views: delete confirmation renders" {
 }
 
 test "admin views: delete handler removes record" {
-    var db = try openTestDb();
-    defer db.close();
-    try migrateProductTable(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migrateProductTable(db);
+    admin.setDb(db);
 
     // Create a record
-    _ = try query.create(Product, &db, &.{
+    _ = try query.create(Product, db, &.{
         .{ .text = "Trash" },
         .{ .int = 5 },
     });
@@ -390,7 +399,7 @@ test "admin views: delete handler removes record" {
     try std.testing.expectEqual(@as(u16, 302), res.status_code);
 
     // Verify record is gone
-    try std.testing.expectEqual(@as(u64, 0), try query.count(Product, &db));
+    try std.testing.expectEqual(@as(u64, 0), try query.count(Product, db));
 }
 
 // ── Pagination test model (list_per_page = 2) ────────────────────────────
@@ -413,7 +422,7 @@ fn findPageHandler(comptime pattern: []const u8, comptime method: Method) ?*cons
     return null;
 }
 
-fn migratePageItems(db: *sqlite.Db) !void {
+fn migratePageItems(db: RelationalDb) !void {
     var runner = migration.MigrationRunner.init(db);
     try runner.migrate(&[_]migration.Migration{
         .{ .id = 1, .name = "create_page_items", .up_sql = PageItem.create_table_sql, .down_sql = PageItem.drop_table_sql },
@@ -421,15 +430,16 @@ fn migratePageItems(db: *sqlite.Db) !void {
 }
 
 test "admin views: pagination — page 1 shows first items" {
-    var db = try openTestDb();
-    defer db.close();
-    try migratePageItems(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migratePageItems(db);
+    admin.setDb(db);
 
     // Create 3 items (2 per page)
-    _ = try query.create(PageItem, &db, &.{.{ .text = "Alpha" }});
-    _ = try query.create(PageItem, &db, &.{.{ .text = "Beta" }});
-    _ = try query.create(PageItem, &db, &.{.{ .text = "Gamma" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "Alpha" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "Beta" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "Gamma" }});
 
     const handler = findPageHandler("/admin/page_items/", .get) orelse return error.SkipZigTest;
 
@@ -466,14 +476,15 @@ test "admin views: pagination — page 1 shows first items" {
 }
 
 test "admin views: pagination — page 2 shows remaining items" {
-    var db = try openTestDb();
-    defer db.close();
-    try migratePageItems(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migratePageItems(db);
+    admin.setDb(db);
 
-    _ = try query.create(PageItem, &db, &.{.{ .text = "Alpha" }});
-    _ = try query.create(PageItem, &db, &.{.{ .text = "Beta" }});
-    _ = try query.create(PageItem, &db, &.{.{ .text = "Gamma" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "Alpha" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "Beta" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "Gamma" }});
 
     const handler = findPageHandler("/admin/page_items/", .get) orelse return error.SkipZigTest;
 
@@ -510,12 +521,13 @@ test "admin views: pagination — page 2 shows remaining items" {
 }
 
 test "admin views: pagination — invalid page defaults to 1" {
-    var db = try openTestDb();
-    defer db.close();
-    try migratePageItems(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migratePageItems(db);
+    admin.setDb(db);
 
-    _ = try query.create(PageItem, &db, &.{.{ .text = "Only" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "Only" }});
 
     const handler = findPageHandler("/admin/page_items/", .get) orelse return error.SkipZigTest;
 
@@ -543,12 +555,13 @@ test "admin views: pagination — invalid page defaults to 1" {
 }
 
 test "admin views: pagination — page 0 defaults to page 1" {
-    var db = try openTestDb();
-    defer db.close();
-    try migratePageItems(&db);
-    admin.setDb(&db);
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try migratePageItems(db);
+    admin.setDb(db);
 
-    _ = try query.create(PageItem, &db, &.{.{ .text = "First" }});
+    _ = try query.create(PageItem, db, &.{.{ .text = "First" }});
 
     const handler = findPageHandler("/admin/page_items/", .get) orelse return error.SkipZigTest;
 

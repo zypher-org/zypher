@@ -1,6 +1,5 @@
-/// zypher ORM — database migration runner.
 const std = @import("std");
-const sqlite = @import("sqlite.zig");
+const iface = @import("driver/interface.zig");
 
 const log = std.log.scoped(.migration);
 
@@ -14,7 +13,6 @@ pub const MigrationError = error{
     NoMigrationsToRollback,
 };
 
-/// A single migration with up/down SQL.
 pub const Migration = struct {
     id: i64,
     name: [:0]const u8,
@@ -22,34 +20,31 @@ pub const Migration = struct {
     down_sql: [:0]const u8,
 };
 
-/// Status of a single migration.
 pub const MigrationStatus = struct {
     id: i64,
     name: [:0]const u8,
     applied: bool,
 };
 
-/// Migration runner — manages the zypher_migrations history table.
-pub const MigrationRunner = struct {
-    db: *sqlite.Db,
+const RelationalDb = iface.RelationalDb;
 
-    /// Initialize the runner. Call migrate() to apply migrations.
-    pub fn init(db: *sqlite.Db) MigrationRunner {
+pub const MigrationRunner = struct {
+    db: RelationalDb,
+
+    pub fn init(db: RelationalDb) MigrationRunner {
         return .{ .db = db };
     }
 
-    /// Ensure the migration history table exists.
     pub fn ensureHistoryTable(self: *MigrationRunner) MigrationError!void {
-        self.db.exec(
-            \\CREATE TABLE IF NOT EXISTS zypher_migrations (
-            \\  id INTEGER PRIMARY KEY,
-            \\  name TEXT NOT NULL,
-            \\  applied_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
-            \\)
-        ) catch return error.ExecFailed;
+        const d = self.db.dialect();
+        const int_type: []const u8 = if (std.mem.indexOf(u8, d.pk_type, "INTEGER") != null) "INTEGER" else "BIGINT";
+        var buf: [256]u8 = undefined;
+        const result = std.fmt.bufPrint(buf[0..], "CREATE TABLE IF NOT EXISTS zypher_migrations (id {s} PRIMARY KEY, name TEXT NOT NULL, applied_at {s} NOT NULL DEFAULT ({s}))", .{ int_type, int_type, d.timestamp_now }) catch return error.ExecFailed;
+        buf[result.len] = 0;
+        const sql: [:0]const u8 = buf[0..result.len :0];
+        self.db.exec(sql) catch return error.ExecFailed;
     }
 
-    /// Check if a migration has been applied.
     fn isApplied(self: *MigrationRunner, id: i64) MigrationError!bool {
         var stmt = self.db.prepare("SELECT id FROM zypher_migrations WHERE id = ?") catch return error.PrepareFailed;
         defer stmt.finalize();
@@ -58,7 +53,6 @@ pub const MigrationRunner = struct {
         return has_row;
     }
 
-    /// Record a migration as applied.
     fn recordApplied(self: *MigrationRunner, m: Migration) MigrationError!void {
         var stmt = self.db.prepare("INSERT INTO zypher_migrations (id, name) VALUES (?, ?)") catch return error.PrepareFailed;
         defer stmt.finalize();
@@ -67,7 +61,6 @@ pub const MigrationRunner = struct {
         _ = stmt.step() catch return error.StepFailed;
     }
 
-    /// Remove a migration record (for rollback).
     fn removeRecord(self: *MigrationRunner, id: i64) MigrationError!void {
         var stmt = self.db.prepare("DELETE FROM zypher_migrations WHERE id = ?") catch return error.PrepareFailed;
         defer stmt.finalize();
@@ -75,7 +68,6 @@ pub const MigrationRunner = struct {
         _ = stmt.step() catch return error.StepFailed;
     }
 
-    /// Count the number of applied migrations.
     pub fn countApplied(self: *MigrationRunner) MigrationError!u64 {
         var stmt = self.db.prepare("SELECT COUNT(*) FROM zypher_migrations") catch return error.PrepareFailed;
         defer stmt.finalize();
@@ -85,7 +77,6 @@ pub const MigrationRunner = struct {
         return @intCast(val.int);
     }
 
-    /// Apply all pending migrations in order.
     pub fn migrate(self: *MigrationRunner, migrations: []const Migration, io: std.Io) MigrationError!void {
         _ = io;
         try self.ensureHistoryTable();
@@ -103,7 +94,6 @@ pub const MigrationRunner = struct {
         }
     }
 
-    /// Get the status of all migrations.
     pub fn status(self: *MigrationRunner, gpa: std.mem.Allocator, migrations: []const Migration) MigrationError![]MigrationStatus {
         try self.ensureHistoryTable();
         var list = std.ArrayList(MigrationStatus).empty;
@@ -118,11 +108,9 @@ pub const MigrationRunner = struct {
         return list.toOwnedSlice(gpa) catch return error.AllocatorFailed;
     }
 
-    /// Rollback the last N applied migrations (in reverse order).
     pub fn rollback(self: *MigrationRunner, migrations: []const Migration, n: usize) MigrationError!void {
         try self.ensureHistoryTable();
 
-        // Find applied migrations in reverse order
         var rolled_back: usize = 0;
         var i: usize = migrations.len;
         while (i > 0 and rolled_back < n) {

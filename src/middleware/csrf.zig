@@ -26,6 +26,7 @@ pub fn getIo() std.Io {
 /// Return the request CSRF token, creating and storing one in the session.
 pub fn ensureToken(io: std.Io, req: *Request) ![]const u8 {
     const user_ptr = req.user orelse return error.CsrfSessionUnavailable;
+    // Safe: req.user is set by SessionMiddleware to *Session; exclusive writer invariant
     const session: *Session = @ptrCast(@alignCast(user_ptr));
     if (session.get(session_key)) |token| return token;
 
@@ -44,6 +45,7 @@ pub fn ensureTokenForRequest(req: *Request) ![]const u8 {
 /// Validate a token against the request session.
 pub fn validateTokenForRequest(req: *Request, token: []const u8) bool {
     if (req.user) |user_ptr| {
+        // Safe: same req.user invariant as ensureToken()
         const session: *Session = @ptrCast(@alignCast(user_ptr));
         const expected = session.get(session_key) orelse return false;
         if (expected.len != token.len or expected.len != 64) return false;

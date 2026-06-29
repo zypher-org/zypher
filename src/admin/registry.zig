@@ -220,6 +220,7 @@ fn requireAdmin(req: *Request, res: *Response) bool {
         _ = res.header("Location", "/admin/login");
         return false;
     };
+    // Safe: req.user is set by SessionMiddleware -> *Session; admin middleware runs after session
     const session: *Session = @ptrCast(@alignCast(user_ptr));
     const role = session.get("role") orelse {
         _ = res.status(403);
@@ -570,6 +571,7 @@ fn createHandler(comptime M: type) *const fn (*Request, *Response) void {
                 return;
             };
             if (req.user) |user_ptr| {
+                // Safe: req.user invariant — set exclusively by SessionMiddleware
                 const session: *Session = @ptrCast(@alignCast(user_ptr));
                 const who = session.get("username") orelse "unknown";
                 log.info("admin: {s} created {s}#{d}", .{ who, M.table_name, row_id });
@@ -737,6 +739,7 @@ fn updateHandler(comptime M: type) *const fn (*Request, *Response) void {
                 return;
             };
             if (req.user) |user_ptr| {
+                // Safe: req.user invariant
                 const session: *Session = @ptrCast(@alignCast(user_ptr));
                 const who = session.get("username") orelse "unknown";
                 log.info("admin: {s} updated {s}#{d}", .{ who, M.table_name, id });
@@ -831,6 +834,7 @@ fn deleteHandler(comptime M: type) *const fn (*Request, *Response) void {
                 return;
             };
             if (req.user) |user_ptr| {
+                // Safe: req.user invariant
                 const session: *Session = @ptrCast(@alignCast(user_ptr));
                 const who = session.get("username") orelse "unknown";
                 log.info("admin: {s} deleted {s}#{d}", .{ who, M.table_name, id });

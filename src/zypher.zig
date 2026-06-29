@@ -50,21 +50,39 @@ pub const orm = struct {
     pub const query = @import("orm/query.zig");
     pub const QuerySet = @import("orm/query.zig").QuerySet;
     pub const migration = @import("orm/migration.zig");
+
+    // ── Driver interface (backends) ─────────────────────────────
     pub const driver = struct {
         pub const interface = @import("orm/driver/interface.zig");
         pub const sqlite = @import("orm/driver/sqlite.zig");
         pub const postgres = @import("orm/driver/postgres.zig");
         pub const mysql = @import("orm/driver/mysql.zig");
     };
+
+    // ── Document stores (MongoDB) ──────────────────────────────
     pub const document = struct {
         pub const interface = @import("orm/document/interface.zig");
         pub const mongodb = @import("orm/document/mongodb.zig");
     };
+
+    // ── KV stores (Redis) ──────────────────────────────────────
     pub const kv = struct {
         pub const interface = @import("orm/kv/interface.zig");
         pub const redis = @import("orm/kv/redis.zig");
     };
+
+    // ── Database config & open helper ──────────────────────────
     pub const config = @import("orm/config.zig");
+
+    // ── Convenience re-exports (most common types at orm.*) ───
+    pub const RelationalDb = driver.interface.RelationalDb;
+    pub const DocumentStore = document.interface.DocumentStore;
+    pub const KVStore = kv.interface.KVStore;
+    pub const Value = driver.interface.Value;
+    pub const Dialect = driver.interface.Dialect;
+    pub const DatabaseConfig = config.DatabaseConfig;
+    pub const openDatabase = config.openDatabase;
+    pub const OpenResult = config.OpenResult;
 };
 
 // Re-export forms (Phase 6)

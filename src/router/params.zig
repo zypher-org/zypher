@@ -11,6 +11,7 @@ pub const RouteParams = struct {
     allocator: std.mem.Allocator,
 
     /// Create an empty RouteParams.
+    /// .names/.values are undefined — safe because .len == 0 prevents reads.
     pub fn init(gpa: std.mem.Allocator) RouteParams {
         return .{
             .names = undefined,

@@ -2,6 +2,7 @@
 const build_config = @import("build_config");
 test {
     _ = @import("test_io");
+    _ = @import("build_options_test.zig");
     _ = @import("log_test.zig");
     _ = @import("errors_test.zig");
     _ = @import("core/request_test.zig");

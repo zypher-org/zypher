@@ -225,6 +225,7 @@ pub const SqliteStmt = struct {
             },
             .text => {
                 if (col_type != c.SQLITE_TEXT) return error.ColumnFailed;
+                // Safe: sqlite3_column_text always returns a null-terminated string or NULL
                 const ptr: [*:0]const u8 = @ptrCast(c.sqlite3_column_text(self.handle, idx));
                 const len = std.mem.sliceTo(ptr, 0).len;
                 return .{ .text = ptr[0..len] };

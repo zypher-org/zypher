@@ -2,12 +2,13 @@
 const std = @import("std");
 const zypher = @import("zypher");
 
-const sqlite = zypher.orm.sqlite;
+const SqliteDb = zypher.orm.driver.sqlite.SqliteDb;
+const RelationalDb = zypher.orm.driver.interface.RelationalDb;
 const schema = zypher.orm.schema;
 const query = zypher.orm.query;
 const migration = zypher.orm.migration;
 
-const Db = sqlite.Db;
+const Db = SqliteDb;
 const FieldDef = schema.FieldDef;
 const Field = schema.Field;
 const Model = schema.Model;
@@ -28,8 +29,8 @@ const UserRow = query.RowType(User);
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-fn openTestDb() !Db {
-    return Db.open(std.testing.allocator, ":memory:");
+fn openTestDb() !SqliteDb {
+    return SqliteDb.open(std.testing.allocator, ":memory:");
 }
 
 fn freeUserRows(rows: *std.ArrayList(UserRow)) void {
@@ -42,18 +43,19 @@ fn freeUserRows(rows: *std.ArrayList(UserRow)) void {
 // ── Integration Tests ─────────────────────────────────────────────────────
 
 test "orm integration: full lifecycle — migrate, create, read, update, delete" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
     // 1. Run migration to create the users table
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     const migrations = [_]Migration{
         .{ .id = 1, .name = "create_users", .up_sql = User.create_table_sql, .down_sql = User.drop_table_sql },
     };
     try runner.migrate(&migrations, std.testing.io);
 
     // 2. Create a user
-    const row_id = try query.create(User, &db, &.{
+    const row_id = try query.create(User, db, &.{
         .{ .text = "alice@example.com" },
         .{ .text = "Alice" },
         .{ .int = 30 },
@@ -62,7 +64,7 @@ test "orm integration: full lifecycle — migrate, create, read, update, delete"
     try std.testing.expect(row_id > 0);
 
     // 3. Read the user back by ID
-    var row = try query.getById(User, &db, std.testing.allocator, row_id);
+    var row = try query.getById(User, db, std.testing.allocator, row_id);
     defer query.freeRow(User, std.testing.allocator, &row);
     try std.testing.expectEqual(row_id, row[0]);
     try std.testing.expectEqualStrings("alice@example.com", row[1]);
@@ -71,7 +73,7 @@ test "orm integration: full lifecycle — migrate, create, read, update, delete"
     try std.testing.expect(row[4]);
 
     // 4. Update the user
-    try query.updateById(User, &db, row_id, &.{
+    try query.updateById(User, db, row_id, &.{
         .{ .text = "alice.new@example.com" },
         .{ .text = "Alice Updated" },
         .{ .int = 31 },
@@ -79,7 +81,7 @@ test "orm integration: full lifecycle — migrate, create, read, update, delete"
     });
 
     // 5. Verify the update
-    var updated = try query.getById(User, &db, std.testing.allocator, row_id);
+    var updated = try query.getById(User, db, std.testing.allocator, row_id);
     defer query.freeRow(User, std.testing.allocator, &updated);
     try std.testing.expectEqualStrings("alice.new@example.com", updated[1]);
     try std.testing.expectEqualStrings("Alice Updated", updated[2]);
@@ -87,20 +89,21 @@ test "orm integration: full lifecycle — migrate, create, read, update, delete"
     try std.testing.expect(!updated[4]);
 
     // 6. Delete the user
-    try query.deleteById(User, &db, row_id);
-    const result = query.getById(User, &db, std.testing.allocator, row_id);
+    try query.deleteById(User, db, row_id);
+    const result = query.getById(User, db, std.testing.allocator, row_id);
     try std.testing.expectError(error.NotFound, result);
 
     // 7. Count should be 0
-    try std.testing.expectEqual(@as(u64, 0), try query.count(User, &db));
+    try std.testing.expectEqual(@as(u64, 0), try query.count(User, db));
 }
 
 test "orm integration: multiple records, filter, and pagination" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
     // Migrate
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     const migrations = [_]Migration{
         .{ .id = 1, .name = "create_users", .up_sql = User.create_table_sql, .down_sql = User.drop_table_sql },
     };
@@ -110,7 +113,7 @@ test "orm integration: multiple records, filter, and pagination" {
     const names = [_][]const u8{ "Alice", "Bob", "Charlie", "Diana", "Eve" };
     const emails = [_][]const u8{ "alice@ex.com", "bob@ex.com", "charlie@ex.com", "diana@ex.com", "eve@ex.com" };
     for (names, emails, 0..) |name, email, i| {
-        _ = try query.create(User, &db, &.{
+        _ = try query.create(User, db, &.{
             .{ .text = email },
             .{ .text = name },
             .{ .int = @intCast(20 + i) },
@@ -119,21 +122,21 @@ test "orm integration: multiple records, filter, and pagination" {
     }
 
     // All should return 5
-    var all_rows = try query.all(User, &db, std.testing.allocator);
+    var all_rows = try query.all(User, db, std.testing.allocator);
     defer freeUserRows(&all_rows);
     try std.testing.expectEqual(@as(usize, 5), all_rows.items.len);
 
     // Count should be 5
-    try std.testing.expectEqual(@as(u64, 5), try query.count(User, &db));
+    try std.testing.expectEqual(@as(u64, 5), try query.count(User, db));
 
     // Filter by name
-    var filtered = try query.filter(User, &db, std.testing.allocator, "name = ?", &.{.{ .text = "Bob" }});
+    var filtered = try query.filter(User, db, std.testing.allocator, "name = ?", &.{.{ .text = "Bob" }});
     defer freeUserRows(&filtered);
     try std.testing.expectEqual(@as(usize, 1), filtered.items.len);
     try std.testing.expectEqualStrings("Bob", filtered.items[0][2]);
 
     // Filter with limit and offset (page 2 of 2)
-    var page = try query.filterLimitOffset(User, &db, std.testing.allocator, "", &.{}, 2, 2);
+    var page = try query.filterLimitOffset(User, db, std.testing.allocator, "", &.{}, 2, 2);
     defer freeUserRows(&page);
     try std.testing.expectEqual(@as(usize, 2), page.items.len);
     try std.testing.expectEqualStrings("Charlie", page.items[0][2]);
@@ -141,10 +144,11 @@ test "orm integration: multiple records, filter, and pagination" {
 }
 
 test "orm integration: migration rollback and re-apply" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     const migrations = [_]Migration{
         .{ .id = 1, .name = "create_users", .up_sql = User.create_table_sql, .down_sql = User.drop_table_sql },
     };
@@ -162,11 +166,11 @@ test "orm integration: migration rollback and re-apply" {
     try std.testing.expectEqual(@as(u64, 1), try runner.countApplied());
 
     // Table should work again after re-apply
-    _ = try query.create(User, &db, &.{
+    _ = try query.create(User, db, &.{
         .{ .text = "test@example.com" },
         .{ .text = "Test" },
         .{ .int = 25 },
         .{ .int = 1 },
     });
-    try std.testing.expectEqual(@as(u64, 1), try query.count(User, &db));
+    try std.testing.expectEqual(@as(u64, 1), try query.count(User, db));
 }

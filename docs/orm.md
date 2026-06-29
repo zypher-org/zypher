@@ -1,29 +1,48 @@
 # ORM API
 
-## SQLite
-Thin SQLite3 C FFI wrapper using manual `extern` declarations (no `@cImport`).
+## Driver Interface (Multi-Database)
 
-### Types
-- `ColumnType` enum: `integer`, `float`, `text`, `blob`, `null`
+Zypher supports multiple database backends through a vtable-by-value interface. All relational operations use `RelationalDb` and `AnyStmt` regardless of the underlying driver.
+
+### Interface Types (`orm.driver.interface` / `orm.*`)
+
+- `RelationalDb` — vtable wrapper with `prepare`, `exec`, `close`, `lastInsertId`, `dialect`
+- `AnyStmt` — vtable wrapper with `bind`, `step`, `column`, `columnType`, `reset`, `finalize`
 - `Value` union: `int: i64`, `float: f64`, `text: []const u8`, `null: void`
+- `ColumnType` enum: `integer`, `float`, `text`, `blob`, `null`
+- `Dialect` — dialect metadata: `name`, `placeholder`, `pk_type`, `float_type`, `bool_type`, `text_type`, `timestamp_now`
 - `DbError` error set: `OpenFailed`, `ExecFailed`, `PrepareFailed`, `StepFailed`, `BindFailed`, `ColumnFailed`, `ConstraintViolation`, `UnexpectedResult`
 
-### Db
-- `Db.open(gpa, path) DbError!Db` — open a database; use `:memory:` for in-memory databases
-- `db.close()` — close the database connection
-- `db.isOpen() bool` — check if connection is open
-- `db.exec(sql) DbError!void` — execute SQL directly (no parameters, no result rows)
-- `db.prepare(sql) DbError!Stmt` — prepare a parameterised statement
-- `db.lastInsertRowId() i64` — get rowid of last INSERT
-- `db.changes() i64` — number of rows changed by last UPDATE/DELETE
+### SQLite Driver (`orm.driver.sqlite`)
+- `SqliteDb.open(gpa, path) SqliteDb` — open a SQLite database
+- `SqliteDb.asRelationalDb() RelationalDb` — wrap in vtable
 
-### Stmt
-- `stmt.finalize()` — finalize the prepared statement
-- `stmt.reset() DbError!void` — reset statement for re-execution
-- `stmt.bind(value, idx) DbError!void` — bind a value to parameter at 1-based index
-- `stmt.step() DbError!bool` — step to next row; returns `true` if row available, `false` if done
-- `stmt.column(kind, idx) DbError!Value` — read column value from current row
-- `stmt.columnType(idx) DbError!ColumnType` — get column type
+### PostgreSQL Driver (`orm.driver.postgres`) [optional, `-Ddb_postgres=true`]
+- `PostgresDb.open(gpa, connstr) PostgresDb` — open via libpq
+- `PostgresDb.asRelationalDb() RelationalDb` — wrap in vtable
+
+### MySQL Driver (`orm.driver.mysql`) [optional, `-Ddb_mysql=true`]
+- `MysqlDb.open(gpa, config) MysqlDb` — open via libmysqlclient
+- `MysqlDb.asRelationalDb() RelationalDb` — wrap in vtable
+
+### Database Configuration API (`orm.config` / `orm.*`)
+- `SqliteConfig`, `PostgresConfig`, `MysqlConfig`, `MongoConfig`, `RedisConfig`
+- `DatabaseConfig` tagged union: `{ .sqlite = ... }`, `{ .postgres = ... }`, etc.
+- `openDatabase(gpa, cfg) OpenResult` — open any backend from a config union
+- `OpenResult` contains `open_db: OpenDb` (cleanup handle) + typed wrappers
+- `DriverNotEnabled` error returned for disabled backends
+
+Convenience re-exports at `orm.*`:
+
+| Type | Path |
+|------|------|
+| `orm.RelationalDb` | `orm.driver.interface.RelationalDb` |
+| `orm.DocumentStore` | `orm.document.interface.DocumentStore` |
+| `orm.KVStore` | `orm.kv.interface.KVStore` |
+| `orm.Value` | `orm.driver.interface.Value` |
+| `orm.Dialect` | `orm.driver.interface.Dialect` |
+| `orm.DatabaseConfig` | `orm.config.DatabaseConfig` |
+| `orm.openDatabase` | `orm.config.openDatabase` |
 
 ## Schema
 Comptime model and field definition.
@@ -140,6 +159,8 @@ Database schema migration runner.
 Error set: `PrepareFailed`, `StepFailed`, `ExecFailed`, `BindFailed`, `ColumnFailed`, `AllocatorFailed`, `NoMigrationsToRollback`
 
 ## Full Example
+
+### SQLite (via config API)
 ```zig
 const std = @import("std");
 const zypher = @import("zypher");
@@ -153,21 +174,45 @@ const UserModel = zypher.orm.schema.Model("users", .{
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var db = try zypher.orm.sqlite.Db.open(gpa.allocator(), "app.db");
-    defer db.close();
+    const alloc = gpa.allocator();
 
+    // Open via config API (supports sqlite, postgres, mysql)
+    var result = try zypher.orm.openDatabase(alloc, .{
+        .sqlite = .{ .path = "app.db" },
+    });
+    defer result.open_db.close(alloc);
+
+    const db = result.relational orelse return error.NoDatabase;
     try db.exec(UserModel.create_table_sql);
 
     // Insert a record
-    const id = try zypher.orm.query.create(UserModel, &db, &.{
+    const id = try zypher.orm.query.create(UserModel, db, &.{
         .{ .text = "Alice" },
         .{ .int = 30 },
         .{ .int = 1 },
     });
 
     // Fetch by ID
-    const row = try zypher.orm.query.getById(UserModel, &db, gpa.allocator(), id);
-    defer zypher.orm.query.freeRow(UserModel, gpa.allocator(), &row);
+    const row = try zypher.orm.query.getById(UserModel, db, alloc, id);
+    defer zypher.orm.query.freeRow(UserModel, alloc, &row);
     // row[0] == id, row[1] == "Alice", row[2] == 30, row[3] == true
 }
+```
+
+### PostgreSQL
+```zig
+var result = try zypher.orm.openDatabase(alloc, .{
+    .postgres = .{ .connstr = "postgresql://user:pass@localhost/mydb" },
+});
+defer result.open_db.close(alloc);
+const db = result.relational orelse return error.NoDatabase;
+```
+
+### MySQL
+```zig
+var result = try zypher.orm.openDatabase(alloc, .{
+    .mysql = .{ .db = "mydb", .user = "root", .pass = "secret" },
+});
+defer result.open_db.close(alloc);
+const db = result.relational orelse return error.NoDatabase;
 ```

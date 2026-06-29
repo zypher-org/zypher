@@ -12,3 +12,4 @@ task.md
 .idea
 .DS_Store
 Thumbs.db
+storage/

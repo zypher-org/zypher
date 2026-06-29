@@ -24,9 +24,10 @@ pub const Node = struct {
     type: NodeType,
     value: []const u8, // variable name, condition, iterable name, block name, template path
     loop_var: []const u8 = "", // for-block iterator variable name
-    children: ArrayList(Node) = undefined, // body nodes
-    else_children: ArrayList(Node) = undefined, // else branch nodes
-    elif_branches: ArrayList(ElifBranch) = undefined, // elif branches
+    // Must be initialized via Node.init() before accessing children/else_children/elif_branches
+    children: ArrayList(Node) = undefined,
+    else_children: ArrayList(Node) = undefined,
+    elif_branches: ArrayList(ElifBranch) = undefined,
 
     pub fn init(t: NodeType, v: []const u8) Node {
         return .{

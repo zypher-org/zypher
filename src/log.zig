@@ -19,6 +19,7 @@ var current_level: Level = .info;
 var custom_writer: ?*std.Io.Writer = null;
 
 /// Allocator used for capture buffer operations.
+/// Must be set via setCapture() before use on the capture path.
 var capture_gpa: std.mem.Allocator = undefined;
 
 /// Buffer used when capturing log output to an ArrayList.

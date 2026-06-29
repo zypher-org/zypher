@@ -133,12 +133,14 @@ pub const Request = struct {
     query_owned: bool = false,
 
     /// Uploaded files parsed from multipart/form-data, keyed by field name.
+    /// Must be initialized before reading; check files_owned to determine if init'd.
     files: std.StringHashMap(FileUpload) = undefined,
 
     /// Whether files has been initialized and owns its entries.
     files_owned: bool = false,
 
     /// Route-extracted URL parameters (populated by Router.dispatch)
+    /// .names/.values are undefined when .len == 0 — read only after Router.dispatch sets them
     params: RouteParams = .{ .names = undefined, .values = undefined, .len = 0, .allocator = undefined },
 
     /// Allocator scoped to this request
