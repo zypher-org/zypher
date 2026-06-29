@@ -64,6 +64,7 @@ pub const orm = struct {
         pub const interface = @import("orm/kv/interface.zig");
         pub const redis = @import("orm/kv/redis.zig");
     };
+    pub const config = @import("orm/config.zig");
 };
 
 // Re-export forms (Phase 6)

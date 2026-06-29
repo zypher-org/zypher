@@ -40,6 +40,7 @@ test {
     }
     _ = @import("orm/document_test.zig");
     _ = @import("orm/kv_test.zig");
+    _ = @import("orm/config_test.zig");
     _ = @import("forms/validators_test.zig");
     _ = @import("forms/form_test.zig");
     _ = @import("auth/session_test.zig");
