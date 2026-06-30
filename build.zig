@@ -53,9 +53,8 @@ pub fn build(b: *std.Build) void {
     lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
     lib_mod.link_libc = true;
     if (db_postgres) {
-        const libpq_lib = createLibpqLibrary(b, target, optimize);
-        lib_mod.linkLibrary(libpq_lib);
-        lib_mod.addIncludePath(b.path("vendor/postgresql-17.4/src/interfaces/libpq"));
+        addLibpqSources(lib_mod, b);
+        lib_mod.linkSystemLibrary("pthread", .{});
     }
     if (db_mysql) {
         lib_mod.linkSystemLibrary("mysqlclient", .{});
@@ -439,18 +438,10 @@ fn createHiredisLibrary(
     });
 }
 
-fn createLibpqLibrary(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-) *std.Build.Step.Compile {
+fn addLibpqSources(lib_mod: *std.Build.Module, b: *std.Build) void {
     const root = "vendor/postgresql-17.4";
-    const libpq_mod = b.createModule(.{
-        .target = target,
-        .optimize = optimize,
-    });
     // libpq core (14 files, excludes GSSAPI/OpenSSL/Windows variants)
-    libpq_mod.addCSourceFiles(.{
+    lib_mod.addCSourceFiles(.{
         .root = b.path(root),
         .files = &.{
             "src/interfaces/libpq/fe-auth.c",
@@ -464,19 +455,23 @@ fn createLibpqLibrary(
             "src/interfaces/libpq/fe-protocol3.c",
             "src/interfaces/libpq/fe-secure.c",
             "src/interfaces/libpq/fe-trace.c",
-            "src/interfaces/libpq/legacy-pqsignal.c",
             "src/interfaces/libpq/libpq-events.c",
             "src/interfaces/libpq/pqexpbuffer.c",
         },
         .flags = &.{ "-std=c11", "-D_GNU_SOURCE" },
     });
     // common support (needed by libpq)
-    libpq_mod.addCSourceFiles(.{
+    // Compile with -DFRONTEND so these files use the frontend (libpq) include
+    // path instead of the backend (postgres.h) include path, avoiding
+    // references to backend-only symbols (errstart, palloc, etc.).
+    lib_mod.addCSourceFiles(.{
         .root = b.path(root),
         .files = &.{
             "src/common/base64.c",
             "src/common/cryptohash.c",
             "src/common/encnames.c",
+            "src/common/fe_memutils.c",
+            "src/common/fe_stubs.c",
             "src/common/hmac.c",
             "src/common/ip.c",
             "src/common/link-canary.c",
@@ -491,12 +486,12 @@ fn createLibpqLibrary(
             "src/common/username.c",
             "src/common/wchar.c",
         },
-        .flags = &.{ "-std=c11", "-D_GNU_SOURCE" },
+        .flags = &.{ "-std=c11", "-D_GNU_SOURCE", "-DFRONTEND" },
     });
     // portability layer (needed by libpq)
     // musl's strerror_r uses POSIX (returns int), not GNU (returns char*)
-    const port_cflags = &.{ "-std=c11", "-D_GNU_SOURCE", "-DSTRERROR_R_INT" };
-    libpq_mod.addCSourceFiles(.{
+    const port_cflags = &.{ "-std=c11", "-D_GNU_SOURCE", "-DSTRERROR_R_INT", "-DFRONTEND" };
+    lib_mod.addCSourceFiles(.{
         .root = b.path(root),
         .files = &.{
             "src/port/bsearch_arg.c",
@@ -523,18 +518,10 @@ fn createLibpqLibrary(
         },
         .flags = port_cflags,
     });
-    libpq_mod.addIncludePath(b.path(root ++ "/src/include"));
-    libpq_mod.addIncludePath(b.path(root ++ "/src/port"));
-    libpq_mod.addIncludePath(b.path(root ++ "/src/common"));
-    libpq_mod.addIncludePath(b.path(root ++ "/src/interfaces/libpq"));
-    libpq_mod.link_libc = true;
-    // libpq needs pthreads
-    libpq_mod.linkSystemLibrary("pthread", .{});
-
-    return b.addLibrary(.{
-        .name = "pq",
-        .root_module = libpq_mod,
-    });
+    lib_mod.addIncludePath(b.path(root ++ "/src/include"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/port"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/common"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/interfaces/libpq"));
 }
 
 fn createZypherModule(

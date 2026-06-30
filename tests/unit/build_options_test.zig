@@ -13,6 +13,7 @@ test "build_config has_* flags are accessible booleans" {
 }
 
 test "build_config has_postgres is false by default" {
+    if (build_config.has_postgres) return error.SkipZigTest;
     try std.testing.expect(!build_config.has_postgres);
 }
 

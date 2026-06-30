@@ -43,7 +43,7 @@ test "postgres driver — open/exec/prepare/bind/step/column/finalize roundtrip"
     const connstr = try getTestConnstr(gpa);
     defer gpa.free(connstr);
 
-    const pg_db = try postgres.PostgresDb.open(gpa, connstr);
+    var pg_db = try postgres.PostgresDb.open(gpa, connstr);
     defer pg_db.close();
 
     try pg_db.exec("DROP TABLE IF EXISTS zypher_pg_test");
@@ -53,13 +53,13 @@ test "postgres driver — open/exec/prepare/bind/step/column/finalize roundtrip"
     try pg_db.exec("INSERT INTO zypher_pg_test (label, score) VALUES ('beta', 200)");
     try testing.expect(pg_db.changes() >= 1);
 
-    const insert_stmt = try pg_db.prepare("INSERT INTO zypher_pg_test (label, score) VALUES (?, ?)");
+    var insert_stmt = try pg_db.prepare("INSERT INTO zypher_pg_test (label, score) VALUES (?, ?)");
     try insert_stmt.bind(.{ .text = "gamma" }, 1);
     try insert_stmt.bind(.{ .int = 300 }, 2);
     _ = try insert_stmt.step();
     insert_stmt.finalize();
 
-    const select_stmt = try pg_db.prepare("SELECT id, label, score FROM zypher_pg_test WHERE score > ? ORDER BY score");
+    var select_stmt = try pg_db.prepare("SELECT id, label, score FROM zypher_pg_test WHERE score > ? ORDER BY score");
     try select_stmt.bind(.{ .int = 150 }, 1);
 
     var row_count: usize = 0;
@@ -99,7 +99,7 @@ test "postgres driver — RelationalDb vtable dispatch" {
 
     try stmt.bind(.{ .text = "hello-vtable" }, 1);
     _ = try stmt.step();
-    stmt.reset();
+    try stmt.reset();
     try stmt.bind(.{ .text = "hello-vtable2" }, 1);
     _ = try stmt.step();
 
@@ -141,12 +141,10 @@ test "postgres driver — close is idempotent" {
     pg_db.close();
 }
 
-fn getTestConnstr(gpa: std.mem.Allocator) ![]const u8 {
-    const env = std.process.getEnvVarOwned(gpa, "ZYPHR_PG_TEST_CONNSTR") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => {
-            return gpa.dupe(u8, "host=localhost dbname=zypher_test user=zypher password=zypher");
-        },
-        else => |e| return e,
-    };
-    return env;
+fn getTestConnstr(gpa: std.mem.Allocator) ![:0]const u8 {
+    const connstr = "host=localhost dbname=zypher_test user=zypher password=zypher";
+    const buf = try gpa.alloc(u8, connstr.len + 1);
+    @memcpy(buf[0..connstr.len], connstr);
+    buf[connstr.len] = 0;
+    return buf[0..connstr.len :0];
 }

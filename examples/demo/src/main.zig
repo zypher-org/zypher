@@ -178,7 +178,7 @@ fn indexHandler(req: *Request, res: *Response) void {
         return;
     };
 
-    var rows = query.all(Post, d, gpa) catch {
+    var rows = query.all(Post, d.asRelationalDb(), gpa) catch {
         _ = res.status(500);
         res.text("query failed") catch {};
         return;
@@ -286,7 +286,7 @@ fn createPostHandler(req: *Request, res: *Response) void {
     const body = cleaned[1];
 
     const now = unixTimestamp();
-    const row_id = query.create(Post, d, &.{
+    const row_id = query.create(Post, d.asRelationalDb(), &.{
         sqlite.Value{ .text = title },
         sqlite.Value{ .text = body },
         sqlite.Value{ .text = user.username },
@@ -322,14 +322,14 @@ fn postDetailHandler(req: *Request, res: *Response) void {
         return;
     };
 
-    const post_row = query.getById(Post, d, gpa, post_id) catch {
+    const post_row = query.getById(Post, d.asRelationalDb(), gpa, post_id) catch {
         _ = res.status(404);
         res.text("Not Found") catch {};
         return;
     };
     defer query.freeRow(Post, gpa, @constCast(&post_row));
 
-    var comments = query.filter(Comment, d, gpa, "post_id = ?", &.{.{ .int = post_id }}) catch {
+    var comments = query.filter(Comment, d.asRelationalDb(), gpa, "post_id = ?", &.{.{ .int = post_id }}) catch {
         _ = res.status(500);
         res.text("query failed") catch {};
         return;
@@ -439,7 +439,7 @@ fn addCommentHandler(req: *Request, res: *Response) void {
     }
     const body = bound.cleanedData()[0];
 
-    _ = query.create(Comment, d, &.{
+    _ = query.create(Comment, d.asRelationalDb(), &.{
         sqlite.Value{ .int = post_id },
         sqlite.Value{ .text = user.username },
         sqlite.Value{ .text = body },
@@ -828,7 +828,7 @@ pub fn main(init: std.process.Init) !void {
     defer app.deinit();
     app.database(&db);
     app.middlewareHandler(mwHandler);
-    zypher.admin.setDb(&db);
+    zypher.admin.setDb(db.asRelationalDb());
 
     try app.listenAndServe(io);
 }
