@@ -10,6 +10,9 @@ const doc_iface = @import("../orm/document/interface.zig");
 const kv_iface = @import("../orm/kv/interface.zig");
 const log = std.log.scoped(.app);
 
+/// Re-export IoBackend from io_backend.zig for convenience.
+pub const IoBackend = @import("io_backend.zig").IoBackend;
+
 pub const App = struct {
     server: Server,
     allocator: std.mem.Allocator,

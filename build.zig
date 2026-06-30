@@ -53,7 +53,9 @@ pub fn build(b: *std.Build) void {
     lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
     lib_mod.link_libc = true;
     if (db_postgres) {
-        lib_mod.linkSystemLibrary("pq", .{});
+        const libpq_lib = createLibpqLibrary(b, target, optimize);
+        lib_mod.linkLibrary(libpq_lib);
+        lib_mod.addIncludePath(b.path("vendor/postgresql-17.4/src/interfaces/libpq"));
     }
     if (db_mysql) {
         lib_mod.linkSystemLibrary("mysqlclient", .{});
@@ -305,10 +307,13 @@ pub fn build(b: *std.Build) void {
     }
 
     // ── I/O Cleanliness Guard ──────────────────────────────────────
+    // Asserts that src/ (the library core) contains no direct POSIX syscalls,
+    // no std.Thread usage, and no synchronous I/O primitives.
+    // All I/O must flow through the injected std.Io vtable.
     const io_clean_step = b.step("test-io-clean", "Assert no forbidden OS primitives in src/");
     const io_clean_check = b.addSystemCommand(&.{
         "sh", "-c",
-        \\grep -rn 'std\.posix\|std\.net\.\|std\.os\.linux\|std\.time\.Instant\|std\.io\.GenericReader\|AnyReader\|FixedBufferStream\|std\.Thread\.Pool\|std\.io\.getStd' src/ \
+        \\grep -rn 'std\.posix\|std\.net\.\|std\.os\.linux\|std\.time\.Instant\|std\.io\.GenericReader\|AnyReader\|FixedBufferStream\|std\.Thread\|std\.io\.getStd' src/ \
         \\  --include='*.zig' \
         \\  --exclude-dir='orm/driver/' \
         \\  --exclude-dir='orm/document/' \
@@ -431,6 +436,104 @@ fn createHiredisLibrary(
     return b.addLibrary(.{
         .name = "hiredis",
         .root_module = hiredis_mod,
+    });
+}
+
+fn createLibpqLibrary(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.Compile {
+    const root = "vendor/postgresql-17.4";
+    const libpq_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+    // libpq core (14 files, excludes GSSAPI/OpenSSL/Windows variants)
+    libpq_mod.addCSourceFiles(.{
+        .root = b.path(root),
+        .files = &.{
+            "src/interfaces/libpq/fe-auth.c",
+            "src/interfaces/libpq/fe-auth-scram.c",
+            "src/interfaces/libpq/fe-cancel.c",
+            "src/interfaces/libpq/fe-connect.c",
+            "src/interfaces/libpq/fe-exec.c",
+            "src/interfaces/libpq/fe-lobj.c",
+            "src/interfaces/libpq/fe-misc.c",
+            "src/interfaces/libpq/fe-print.c",
+            "src/interfaces/libpq/fe-protocol3.c",
+            "src/interfaces/libpq/fe-secure.c",
+            "src/interfaces/libpq/fe-trace.c",
+            "src/interfaces/libpq/legacy-pqsignal.c",
+            "src/interfaces/libpq/libpq-events.c",
+            "src/interfaces/libpq/pqexpbuffer.c",
+        },
+        .flags = &.{ "-std=c11", "-D_GNU_SOURCE" },
+    });
+    // common support (needed by libpq)
+    libpq_mod.addCSourceFiles(.{
+        .root = b.path(root),
+        .files = &.{
+            "src/common/base64.c",
+            "src/common/cryptohash.c",
+            "src/common/encnames.c",
+            "src/common/hmac.c",
+            "src/common/ip.c",
+            "src/common/link-canary.c",
+            "src/common/md5.c",
+            "src/common/md5_common.c",
+            "src/common/pg_prng.c",
+            "src/common/saslprep.c",
+            "src/common/scram-common.c",
+            "src/common/sha1.c",
+            "src/common/sha2.c",
+            "src/common/string.c",
+            "src/common/username.c",
+            "src/common/wchar.c",
+        },
+        .flags = &.{ "-std=c11", "-D_GNU_SOURCE" },
+    });
+    // portability layer (needed by libpq)
+    // musl's strerror_r uses POSIX (returns int), not GNU (returns char*)
+    const port_cflags = &.{ "-std=c11", "-D_GNU_SOURCE", "-DSTRERROR_R_INT" };
+    libpq_mod.addCSourceFiles(.{
+        .root = b.path(root),
+        .files = &.{
+            "src/port/bsearch_arg.c",
+            "src/port/chklocale.c",
+            "src/port/getpeereid.c",
+            "src/port/inet_net_ntop.c",
+            "src/port/noblock.c",
+            "src/port/path.c",
+            "src/port/pg_bitutils.c",
+            "src/port/pgcheckdir.c",
+            "src/port/pgmkdirp.c",
+            "src/port/pgsleep.c",
+            "src/port/pgstrcasecmp.c",
+            "src/port/pg_strong_random.c",
+            "src/port/pgstrsignal.c",
+            "src/port/pqsignal.c",
+            "src/port/qsort.c",
+            "src/port/qsort_arg.c",
+            "src/port/quotes.c",
+            "src/port/snprintf.c",
+            "src/port/strerror.c",
+            "src/port/tar.c",
+            "src/port/user.c",
+        },
+        .flags = port_cflags,
+    });
+    libpq_mod.addIncludePath(b.path(root ++ "/src/include"));
+    libpq_mod.addIncludePath(b.path(root ++ "/src/port"));
+    libpq_mod.addIncludePath(b.path(root ++ "/src/common"));
+    libpq_mod.addIncludePath(b.path(root ++ "/src/interfaces/libpq"));
+    libpq_mod.link_libc = true;
+    // libpq needs pthreads
+    libpq_mod.linkSystemLibrary("pthread", .{});
+
+    return b.addLibrary(.{
+        .name = "pq",
+        .root_module = libpq_mod,
     });
 }
 
