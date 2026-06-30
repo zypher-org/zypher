@@ -17,10 +17,10 @@ pub fn build(b: *std.Build) void {
         break :blk zon[value_start..][0..end];
     };
     // ── Optional backend flags ───────────────────────────────────────
-    const db_postgres = b.option(bool, "db_postgres", "Enable PostgreSQL driver support (links libpq)") orelse false;
-    const db_mysql = b.option(bool, "db_mysql", "Enable MySQL/MariaDB driver support (links libmysqlclient)") orelse false;
-    const db_mongodb = b.option(bool, "db_mongodb", "Enable MongoDB document store (links libmongoc)") orelse false;
-    const db_redis = b.option(bool, "db_redis", "Enable Redis KV store (links hiredis)") orelse false;
+    const db_postgres = b.option(bool, "db_postgres", "Enable PostgreSQL driver support (vendored libpq)") orelse false;
+    const db_mysql = b.option(bool, "db_mysql", "Enable MySQL/MariaDB driver support (vendored libmariadb)") orelse false;
+    const db_mongodb = b.option(bool, "db_mongodb", "Enable MongoDB document store (vendored libmongoc)") orelse false;
+    const db_redis = b.option(bool, "db_redis", "Enable Redis KV store (vendored hiredis)") orelse false;
     const io_evented = b.option(bool, "io_evented", "Enable experimental std.Io.Evented backend (io_uring on Linux, GCD on macOS). " ++
         "Networking support is incomplete on some platforms. Not a release blocker.") orelse false;
 
@@ -57,10 +57,15 @@ pub fn build(b: *std.Build) void {
         lib_mod.linkSystemLibrary("pthread", .{});
     }
     if (db_mysql) {
-        lib_mod.linkSystemLibrary("mysqlclient", .{});
+        const mysql_lib = createMysqlClientLibrary(b, target, optimize);
+        lib_mod.linkLibrary(mysql_lib);
+        lib_mod.addIncludePath(b.path("vendor/mariadb-connector-c-3.4.2/include"));
+        if (!db_postgres) {
+            lib_mod.linkSystemLibrary("pthread", .{});
+        }
     }
     if (db_mongodb) {
-        lib_mod.linkSystemLibrary("mongoc-1.0", .{});
+        addMongocSources(lib_mod, b);
     }
     if (db_redis) {
         const hiredis_lib = createHiredisLibrary(b, target, optimize);
@@ -563,5 +568,228 @@ fn createCliExecutable(
                 .{ .name = "build_config", .module = build_config_mod },
             },
         }),
+    });
+}
+
+fn createMysqlClientLibrary(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.Compile {
+    const root = "vendor/mariadb-connector-c-3.4.2";
+    const cflags = &.{ "-std=c11", "-D_GNU_SOURCE" };
+    const mysql_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    mysql_mod.addCSourceFiles(.{
+        .root = b.path(root),
+        .files = &.{
+            "libmariadb/bmove_upp.c",
+            "libmariadb/get_password.c",
+            "libmariadb/ma_alloc.c",
+            "libmariadb/ma_array.c",
+            "libmariadb/ma_charset.c",
+            "libmariadb/ma_client_plugin.c",
+            "libmariadb/ma_compress.c",
+            "libmariadb/ma_context.c",
+            "libmariadb/ma_decimal.c",
+            "libmariadb/ma_default.c",
+            "libmariadb/ma_dtoa.c",
+            "libmariadb/ma_errmsg.c",
+            "libmariadb/ma_hashtbl.c",
+            "libmariadb/ma_init.c",
+            "libmariadb/ma_io.c",
+            "libmariadb/ma_list.c",
+            "libmariadb/ma_ll2str.c",
+            "libmariadb/ma_loaddata.c",
+            "libmariadb/ma_net.c",
+            "libmariadb/ma_password.c",
+            "libmariadb/ma_pvio.c",
+            "libmariadb/ma_string.c",
+            "libmariadb/ma_time.c",
+            "libmariadb/ma_tls.c",
+            "libmariadb/mariadb_async.c",
+            "libmariadb/mariadb_charset.c",
+            "libmariadb/mariadb_lib.c",
+            "libmariadb/mariadb_stmt.c",
+            "libmariadb/ma_stmt_codec.c",
+            "libmariadb/secure/fallback.c",
+        },
+        .flags = cflags,
+    });
+
+    mysql_mod.addCSourceFiles(.{
+        .root = b.path(root),
+        .files = &.{
+            "plugins/auth/dialog.c",
+            "plugins/auth/mariadb_cleartext.c",
+            "plugins/auth/my_auth.c",
+            "plugins/pvio/pvio_socket.c",
+        },
+        .flags = cflags,
+    });
+
+    mysql_mod.addIncludePath(b.path(root ++ "/include"));
+    mysql_mod.link_libc = true;
+    mysql_mod.linkSystemLibrary("pthread", .{});
+
+    return b.addLibrary(.{
+        .name = "mysqlclient",
+        .root_module = mysql_mod,
+    });
+}
+
+fn addMongocSources(lib_mod: *std.Build.Module, b: *std.Build) void {
+    const root = "vendor/mongo-c-driver-1.28.1";
+    const mongoc_cflags = &.{ "-std=c11", "-D_GNU_SOURCE", "-DBSON_COMPILATION", "-DMONGOC_COMPILATION" };
+
+    lib_mod.addIncludePath(b.path(root ++ "/src/libbson/src"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/libbson/src/bson"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/libmongoc/src"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/libmongoc/src/mongoc"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/common"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/libbson/src/jsonsl"));
+    lib_mod.addIncludePath(b.path(root ++ "/src/uthash"));
+
+    lib_mod.addCSourceFiles(.{
+        .root = b.path(root ++ "/src/libbson/src/bson"),
+        .files = &.{
+            "bcon.c",
+            "bson-atomic.c",
+            "bson.c",
+            "bson-clock.c",
+            "bson-context.c",
+            "bson-decimal128.c",
+            "bson-error.c",
+            "bson-iso8601.c",
+            "bson-iter.c",
+            "bson-json.c",
+            "bson-keys.c",
+            "bson-md5.c",
+            "bson-memory.c",
+            "bson-oid.c",
+            "bson-reader.c",
+            "bson-string.c",
+            "bson-timegm.c",
+            "bson-utf8.c",
+            "bson-value.c",
+            "bson-version-functions.c",
+            "bson-writer.c",
+        },
+        .flags = mongoc_cflags,
+    });
+
+    lib_mod.addCSourceFiles(.{
+        .root = b.path(root ++ "/src/libbson/src/jsonsl"),
+        .files = &.{"jsonsl.c"},
+        .flags = mongoc_cflags,
+    });
+
+    lib_mod.addCSourceFiles(.{
+        .root = b.path(root ++ "/src/common"),
+        .files = &.{
+            "common-b64.c",
+            "common-md5.c",
+            "common-thread.c",
+        },
+        .flags = mongoc_cflags,
+    });
+
+    lib_mod.addCSourceFiles(.{
+        .root = b.path(root ++ "/src/libmongoc/src/mongoc"),
+        .files = &.{
+            "mcd-nsinfo.c",
+            "mcd-rpc.c",
+            "mongoc-aggregate.c",
+            "mongoc-apm.c",
+            "mongoc-array.c",
+            "mongoc-async.c",
+            "mongoc-async-cmd.c",
+            "mongoc-buffer.c",
+            "mongoc-bulk-operation.c",
+            "mongoc-bulkwrite.c",
+            "mongoc-change-stream.c",
+            "mongoc-client.c",
+            "mongoc-client-side-encryption.c",
+            "mongoc-compression.c",
+            "mongoc-client-pool.c",
+            "mongoc-client-session.c",
+            "mongoc-cluster.c",
+            "mongoc-cluster-aws.c",
+            "mongoc-cluster-sasl.c",
+            "mongoc-cmd.c",
+            "mongoc-collection.c",
+            "mongoc-counters.c",
+            "mongoc-cursor-array.c",
+            "mongoc-cursor.c",
+            "mongoc-cursor-change-stream.c",
+            "mongoc-cursor-cmd.c",
+            "mongoc-cursor-cmd-deprecated.c",
+            "mongoc-cursor-find.c",
+            "mongoc-cursor-find-cmd.c",
+            "mongoc-cursor-find-opquery.c",
+            "mongoc-cursor-legacy.c",
+            "mongoc-database.c",
+            "mongoc-deprioritized-servers.c",
+            "mongoc-error.c",
+            "mongoc-find-and-modify.c",
+            "mongoc-flags.c",
+            "mongoc-generation-map.c",
+            "mongoc-gridfs-bucket.c",
+            "mongoc-gridfs-bucket-file.c",
+            "mongoc-gridfs.c",
+            "mongoc-gridfs-file.c",
+            "mongoc-gridfs-file-list.c",
+            "mongoc-gridfs-file-page.c",
+            "mongoc-handshake.c",
+            "mongoc-host-list.c",
+            "mongoc-http.c",
+            "mongoc-index.c",
+            "mongoc-init.c",
+            "mongoc-interrupt.c",
+            "mongoc-linux-distro-scanner.c",
+            "mongoc-list.c",
+            "mongoc-log.c",
+            "mongoc-matcher.c",
+            "mongoc-matcher-op.c",
+            "mongoc-memcmp.c",
+            "mongoc-opcode.c",
+            "mongoc-optional.c",
+            "mongoc-opts.c",
+            "mongoc-opts-helpers.c",
+            "mongoc-queue.c",
+            "mongoc-read-concern.c",
+            "mongoc-read-prefs.c",
+            "mongoc-rpc.c",
+            "mongoc-server-api.c",
+            "mongoc-server-description.c",
+            "mongoc-server-monitor.c",
+            "mongoc-server-stream.c",
+            "mongoc-set.c",
+            "mongoc-shared.c",
+            "mongoc-socket.c",
+            "mongoc-stream-buffered.c",
+            "mongoc-stream.c",
+            "mongoc-stream-file.c",
+            "mongoc-stream-gridfs.c",
+            "mongoc-stream-gridfs-download.c",
+            "mongoc-stream-gridfs-upload.c",
+            "mongoc-stream-socket.c",
+            "mongoc-timeout.c",
+            "mongoc-topology-background-monitoring.c",
+            "mongoc-topology.c",
+            "mongoc-topology-description-apm.c",
+            "mongoc-topology-description.c",
+            "mongoc-topology-scanner.c",
+            "mongoc-ts-pool.c",
+            "mongoc-uri.c",
+            "mongoc-util.c",
+            "mongoc-version-functions.c",
+            "mongoc-write-command.c",
+            "mongoc-write-concern.c",
+        },
+        .flags = mongoc_cflags,
     });
 }

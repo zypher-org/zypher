@@ -19,7 +19,7 @@ test "mysql driver — open/exec/prepare/bind/step/column roundtrip" {
     const cfg = try getTestConfig(gpa);
     defer if (!std.mem.eql(u8, cfg.user, "root")) gpa.free(cfg.user);
 
-    const my_db = try mysql.MysqlDb.open(gpa, .{
+    var my_db = try mysql.MysqlDb.open(gpa, .{
         .host = cfg.host,
         .user = cfg.user,
         .pass = cfg.pass,
@@ -34,13 +34,13 @@ test "mysql driver — open/exec/prepare/bind/step/column roundtrip" {
     try my_db.exec("INSERT INTO zypher_my_test (label, score) VALUES ('alpha', 100)");
     try my_db.exec("INSERT INTO zypher_my_test (label, score) VALUES ('beta', 200)");
 
-    const insert_stmt = try my_db.prepare("INSERT INTO zypher_my_test (label, score) VALUES (?, ?)");
+    var insert_stmt = try my_db.prepare("INSERT INTO zypher_my_test (label, score) VALUES (?, ?)");
     try insert_stmt.bind(.{ .text = "gamma" }, 1);
     try insert_stmt.bind(.{ .int = 300 }, 2);
     _ = try insert_stmt.step();
     insert_stmt.finalize();
 
-    const select_stmt = try my_db.prepare("SELECT id, label, score FROM zypher_my_test WHERE score > ? ORDER BY score");
+    var select_stmt = try my_db.prepare("SELECT id, label, score FROM zypher_my_test WHERE score > ? ORDER BY score");
     try select_stmt.bind(.{ .int = 150 }, 1);
 
     var row_count: usize = 0;
@@ -86,7 +86,7 @@ test "mysql driver — RelationalDb vtable dispatch" {
 
     try stmt.bind(.{ .text = "hello-vtable" }, 1);
     _ = try stmt.step();
-    stmt.reset();
+    try stmt.reset();
     try stmt.bind(.{ .text = "hello-vtable2" }, 1);
     _ = try stmt.step();
 
@@ -149,11 +149,8 @@ const TestConfig = struct {
 };
 
 fn getTestConfig(gpa: std.mem.Allocator) !TestConfig {
-    const env = std.process.getEnvVarOwned(gpa, "ZYPHR_MY_TEST_CONNSTR") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => return TestConfig{},
-        else => |e| return e,
-    };
-    defer gpa.free(env);
+    const env_val = std.c.getenv("ZYPHR_MY_TEST_CONNSTR") orelse return TestConfig{};
+    const env = std.mem.sliceTo(env_val, 0);
     // Format: "host=HOST user=USER pass=PASS db=DB port=PORT"
     var cfg = TestConfig{};
     var it = std.mem.splitScalar(u8, env, ' ');
@@ -162,13 +159,13 @@ fn getTestConfig(gpa: std.mem.Allocator) !TestConfig {
             const key = pair[0..eq];
             const val = pair[eq + 1 ..];
             if (std.mem.eql(u8, key, "host")) {
-                cfg.host = try gpa.dupeZ(u8, val);
+                cfg.host = try gpa.dupeSentinel(u8, val, 0);
             } else if (std.mem.eql(u8, key, "user")) {
-                cfg.user = try gpa.dupeZ(u8, val);
+                cfg.user = try gpa.dupeSentinel(u8, val, 0);
             } else if (std.mem.eql(u8, key, "pass")) {
-                cfg.pass = try gpa.dupeZ(u8, val);
+                cfg.pass = try gpa.dupeSentinel(u8, val, 0);
             } else if (std.mem.eql(u8, key, "db")) {
-                cfg.db = try gpa.dupeZ(u8, val);
+                cfg.db = try gpa.dupeSentinel(u8, val, 0);
             } else if (std.mem.eql(u8, key, "port")) {
                 cfg.port = try std.fmt.parseInt(u16, val, 10);
             }

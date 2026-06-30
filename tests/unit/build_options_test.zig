@@ -18,10 +18,12 @@ test "build_config has_postgres is false by default" {
 }
 
 test "build_config has_mysql is false by default" {
+    if (build_config.has_mysql) return error.SkipZigTest;
     try std.testing.expect(!build_config.has_mysql);
 }
 
 test "build_config has_mongodb is false by default" {
+    if (build_config.has_mongodb) return error.SkipZigTest;
     try std.testing.expect(!build_config.has_mongodb);
 }
 

@@ -86,6 +86,7 @@ pub const c = if (build_config.has_mysql) struct {
     pub extern fn mysql_stmt_store_result(stmt: ?*MYSQL_STMT) c_int;
     pub extern fn mysql_stmt_num_rows(stmt: ?*MYSQL_STMT) u64;
     pub extern fn mysql_stmt_close(stmt: ?*MYSQL_STMT) c_int;
+    pub extern fn mysql_stmt_reset(stmt: ?*MYSQL_STMT) c_int;
     pub extern fn mysql_stmt_error(stmt: *const MYSQL_STMT) [*:0]const u8;
     pub extern fn mysql_stmt_result_metadata(stmt: ?*MYSQL_STMT) ?*MYSQL_RES;
     pub extern fn mysql_num_fields(res: *const MYSQL_RES) c_uint;
@@ -104,7 +105,7 @@ pub const MysqlConfig = if (build_config.has_mysql) struct {
     port: u16 = 3306,
 } else void;
 
-const ParamBuf = if (build_config.has_mysql) union {
+const ParamBuf = if (build_config.has_mysql) union(enum) {
     int: i64,
     float: f64,
     text: []u8,
@@ -332,7 +333,7 @@ pub const MysqlStmt = if (build_config.has_mysql) struct {
                 }
             }
 
-            if (c.mysql_stmt_bind_param(self.stmt, binds.ptr) != 0) {
+            if (c.mysql_stmt_bind_param(self.stmt, &binds[0]) != 0) {
                 const msg = std.mem.sliceTo(c.mysql_stmt_error(self.stmt), 0);
                 log.err("mysql_stmt_bind_param failed: {s}", .{msg});
                 return error.BindFailed;
@@ -396,7 +397,7 @@ pub const MysqlStmt = if (build_config.has_mysql) struct {
                     return error.ColumnFailed;
                 }
                 if (is_null != 0) return .null;
-                return .{ .text = try self.gpa.dupe(u8, buf[0..@as(usize, @intCast(length))]) };
+                return .{ .text = self.gpa.dupe(u8, buf[0..@as(usize, @intCast(length))]) catch return error.AllocatorFailed };
             },
             else => return error.ColumnFailed,
         }
