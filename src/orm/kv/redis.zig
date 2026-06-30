@@ -2,6 +2,13 @@ const std = @import("std");
 const build_config = @import("build_config");
 const iface = @import("interface.zig");
 
+fn dupeZ(allocator: std.mem.Allocator, s: []const u8) KVError![:0]u8 {
+    const buf = allocator.alloc(u8, s.len + 1) catch return error.AllocatorFailed;
+    @memcpy(buf[0..s.len], s);
+    buf[s.len] = 0;
+    return buf[0..s.len :0];
+}
+
 pub const enabled = build_config.has_redis;
 
 pub const KVError = iface.KVError;
@@ -55,7 +62,7 @@ pub const RedisStore = if (build_config.has_redis) struct {
     gpa: std.mem.Allocator,
 
     pub fn open(gpa: std.mem.Allocator, config: RedisConfig) KVError!RedisStore {
-        const host_z = try gpa.dupeZ(u8, config.host);
+        const host_z = try dupeZ(gpa, config.host);
         defer gpa.free(host_z);
 
         const ctx = c.redisConnect(host_z.ptr, @intCast(config.port)) orelse {
@@ -73,7 +80,7 @@ pub const RedisStore = if (build_config.has_redis) struct {
         log.debug("connected to Redis {s}:{d}", .{ config.host, config.port });
 
         if (config.password) |pass| {
-            const pz = try gpa.dupeZ(u8, pass);
+            const pz = try dupeZ(gpa, pass);
             defer gpa.free(pz);
             const auth_reply = c.redisCommand(ctx, "AUTH %s", pz.ptr) orelse {
                 c.redisFree(ctx);
@@ -118,9 +125,9 @@ pub const RedisStore = if (build_config.has_redis) struct {
     }
 
     pub fn set(self: *RedisStore, key: []const u8, value: []const u8) KVError!void {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
-        const vz = try self.gpa.dupeZ(u8, value);
+        const vz = try dupeZ(self.gpa, value);
         defer self.gpa.free(vz);
         const reply = c.redisCommand(self.ctx, "SET %s %s", kz.ptr, vz.ptr) orelse return errorForOp("SET");
         defer c.freeReplyObject(reply);
@@ -128,7 +135,7 @@ pub const RedisStore = if (build_config.has_redis) struct {
     }
 
     pub fn get(self: *RedisStore, gpa: std.mem.Allocator, key: []const u8) KVError!?[]const u8 {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
         const reply = c.redisCommand(self.ctx, "GET %s", kz.ptr) orelse return errorForOp("GET");
         defer c.freeReplyObject(reply);
@@ -137,11 +144,11 @@ pub const RedisStore = if (build_config.has_redis) struct {
         if (reply.type != c.REDIS_REPLY_STRING) return error.GetFailed;
 
         const s = reply.str orelse return error.GetFailed;
-        return try gpa.dupe(u8, std.mem.sliceTo(s, 0));
+        return gpa.dupe(u8, std.mem.sliceTo(s, 0)) catch return error.AllocatorFailed;
     }
 
     pub fn del(self: *RedisStore, key: []const u8) KVError!void {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
         const reply = c.redisCommand(self.ctx, "DEL %s", kz.ptr) orelse return errorForOp("DEL");
         defer c.freeReplyObject(reply);
@@ -149,7 +156,7 @@ pub const RedisStore = if (build_config.has_redis) struct {
     }
 
     pub fn exists(self: *RedisStore, key: []const u8) KVError!bool {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
         const reply = c.redisCommand(self.ctx, "EXISTS %s", kz.ptr) orelse return errorForOp("EXISTS");
         defer c.freeReplyObject(reply);
@@ -158,7 +165,7 @@ pub const RedisStore = if (build_config.has_redis) struct {
     }
 
     pub fn expire(self: *RedisStore, key: []const u8, seconds: i64) KVError!void {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
         const reply = c.redisCommand(self.ctx, "EXPIRE %s %d", kz.ptr, @as(c_int, @intCast(seconds))) orelse return errorForOp("EXPIRE");
         defer c.freeReplyObject(reply);
@@ -166,11 +173,11 @@ pub const RedisStore = if (build_config.has_redis) struct {
     }
 
     pub fn hset(self: *RedisStore, key: []const u8, field: []const u8, value: []const u8) KVError!void {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
-        const fz = try self.gpa.dupeZ(u8, field);
+        const fz = try dupeZ(self.gpa, field);
         defer self.gpa.free(fz);
-        const vz = try self.gpa.dupeZ(u8, value);
+        const vz = try dupeZ(self.gpa, value);
         defer self.gpa.free(vz);
         const reply = c.redisCommand(self.ctx, "HSET %s %s %s", kz.ptr, fz.ptr, vz.ptr) orelse return errorForOp("HSET");
         defer c.freeReplyObject(reply);
@@ -178,9 +185,9 @@ pub const RedisStore = if (build_config.has_redis) struct {
     }
 
     pub fn hget(self: *RedisStore, gpa: std.mem.Allocator, key: []const u8, field: []const u8) KVError!?[]const u8 {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
-        const fz = try self.gpa.dupeZ(u8, field);
+        const fz = try dupeZ(self.gpa, field);
         defer self.gpa.free(fz);
         const reply = c.redisCommand(self.ctx, "HGET %s %s", kz.ptr, fz.ptr) orelse return errorForOp("HGET");
         defer c.freeReplyObject(reply);
@@ -189,13 +196,13 @@ pub const RedisStore = if (build_config.has_redis) struct {
         if (reply.type != c.REDIS_REPLY_STRING) return error.HashFailed;
 
         const s = reply.str orelse return error.HashFailed;
-        return try gpa.dupe(u8, std.mem.sliceTo(s, 0));
+        return gpa.dupe(u8, std.mem.sliceTo(s, 0)) catch return error.AllocatorFailed;
     }
 
     pub fn lpush(self: *RedisStore, key: []const u8, value: []const u8) KVError!void {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
-        const vz = try self.gpa.dupeZ(u8, value);
+        const vz = try dupeZ(self.gpa, value);
         defer self.gpa.free(vz);
         const reply = c.redisCommand(self.ctx, "LPUSH %s %s", kz.ptr, vz.ptr) orelse return errorForOp("LPUSH");
         defer c.freeReplyObject(reply);
@@ -203,7 +210,7 @@ pub const RedisStore = if (build_config.has_redis) struct {
     }
 
     pub fn lrange(self: *RedisStore, gpa: std.mem.Allocator, key: []const u8, start: i64, stop: i64) KVError![]const []const u8 {
-        const kz = try self.gpa.dupeZ(u8, key);
+        const kz = try dupeZ(self.gpa, key);
         defer self.gpa.free(kz);
         const reply = c.redisCommand(self.ctx, "LRANGE %s %d %d", kz.ptr, @as(c_int, @intCast(start)), @as(c_int, @intCast(stop))) orelse return errorForOp("LRANGE");
         defer c.freeReplyObject(reply);
@@ -213,19 +220,19 @@ pub const RedisStore = if (build_config.has_redis) struct {
         const elements = reply.elements;
         const items = reply.element orelse return error.ListFailed;
 
-        var result = std.ArrayList([]const u8).init(gpa);
-        errdefer result.deinit();
+        var result = std.ArrayList([]const u8).empty;
+        errdefer result.deinit(gpa);
 
         for (0..elements) |i| {
             const elem = items[i] orelse continue;
             if (elem.type == c.REDIS_REPLY_STRING) {
                 const s = elem.str orelse continue;
-                const val = try gpa.dupe(u8, std.mem.sliceTo(s, 0));
-                try result.append(val);
+                const val = gpa.dupe(u8, std.mem.sliceTo(s, 0)) catch return error.AllocatorFailed;
+                result.append(gpa, val) catch return error.AllocatorFailed;
             }
         }
 
-        return result.toOwnedSlice();
+        return result.toOwnedSlice(gpa) catch return error.AllocatorFailed;
     }
 
     pub fn close(self: *RedisStore) void {

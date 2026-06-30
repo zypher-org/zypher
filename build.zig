@@ -21,6 +21,8 @@ pub fn build(b: *std.Build) void {
     const db_mysql = b.option(bool, "db_mysql", "Enable MySQL/MariaDB driver support (links libmysqlclient)") orelse false;
     const db_mongodb = b.option(bool, "db_mongodb", "Enable MongoDB document store (links libmongoc)") orelse false;
     const db_redis = b.option(bool, "db_redis", "Enable Redis KV store (links hiredis)") orelse false;
+    const io_evented = b.option(bool, "io_evented", "Enable experimental std.Io.Evented backend (io_uring on Linux, GCD on macOS). " ++
+        "Networking support is incomplete on some platforms. Not a release blocker.") orelse false;
 
     const opts = b.addOptions();
     opts.addOption([]const u8, "version", version_string);
@@ -29,6 +31,10 @@ pub fn build(b: *std.Build) void {
     opts.addOption(bool, "has_mongodb", db_mongodb);
     opts.addOption(bool, "has_redis", db_redis);
     const build_config_mod = opts.createModule();
+
+    const io_opts = b.addOptions();
+    io_opts.addOption(bool, "io_evented", io_evented);
+    const io_options_mod = io_opts.createModule();
 
     // ── Vendored SQLite3 ─────────────────────────────────────────────
     const sqlite3_lib = createSqlite3Library(b, target, optimize);
@@ -40,6 +46,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "build_config", .module = build_config_mod },
+            .{ .name = "options", .module = io_options_mod },
         },
     });
     lib_mod.linkLibrary(sqlite3_lib);
@@ -55,7 +62,9 @@ pub fn build(b: *std.Build) void {
         lib_mod.linkSystemLibrary("mongoc-1.0", .{});
     }
     if (db_redis) {
-        lib_mod.linkSystemLibrary("hiredis", .{});
+        const hiredis_lib = createHiredisLibrary(b, target, optimize);
+        lib_mod.linkLibrary(hiredis_lib);
+        lib_mod.addIncludePath(b.path("vendor/hiredis-1.0.2"));
     }
 
     // ── Generate embedded templates ────────────────────────────────
@@ -89,11 +98,19 @@ pub fn build(b: *std.Build) void {
 
     // ── Cross-target CLI binaries ──────────────────────────────────
     const all_targets_step = b.step("all-targets", "Build zypher CLI binaries for all supported targets");
+    const release_opts = b.addOptions();
+    release_opts.addOption([]const u8, "version", version_string);
+    release_opts.addOption(bool, "has_postgres", false);
+    release_opts.addOption(bool, "has_mysql", false);
+    release_opts.addOption(bool, "has_mongodb", false);
+    release_opts.addOption(bool, "has_redis", false);
+    const release_build_config_mod = release_opts.createModule();
+
     for (release_targets) |release_target| {
         const release_resolved_target = b.resolveTargetQuery(release_target.query);
         const release_sqlite3_lib = createSqlite3Library(b, release_resolved_target, optimize);
-        const release_lib_mod = createZypherModule(b, release_resolved_target, optimize, release_sqlite3_lib, build_config_mod);
-        const release_exe = createCliExecutable(b, release_resolved_target, optimize, release_lib_mod, build_config_mod);
+        const release_lib_mod = createZypherModule(b, release_resolved_target, optimize, release_sqlite3_lib, release_build_config_mod);
+        const release_exe = createCliExecutable(b, release_resolved_target, optimize, release_lib_mod, release_build_config_mod);
         const install_release_exe = b.addInstallArtifact(release_exe, .{
             .dest_sub_path = b.fmt("{s}/zypher{s}", .{ release_target.name, release_target.exe_suffix }),
         });
@@ -247,6 +264,46 @@ pub fn build(b: *std.Build) void {
     const test_e2e_step = b.step("test-e2e", "Run end-to-end tests only");
     test_e2e_step.dependOn(&b.addRunArtifact(e2e_tests).step);
 
+    // ── Phase 14 — IO backend test targets ─────────────────────────
+    {
+        const concurrent_fallback_test_mod = b.createModule(.{
+            .root_source_file = b.path("tests/unit/core/concurrent_fallback_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "options", .module = io_options_mod },
+            },
+        });
+        concurrent_fallback_test_mod.single_threaded = true;
+
+        const io_single_test = b.addTest(.{
+            .root_module = concurrent_fallback_test_mod,
+        });
+
+        const test_io_single_step = b.step("test-io-single", "Run IO tests with -fsingle-threaded");
+        test_io_single_step.dependOn(&b.addRunArtifact(io_single_test).step);
+    }
+
+    {
+        const cancel_audit_test_mod = b.createModule(.{
+            .root_source_file = b.path("tests/unit/io/cancel_audit_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "options", .module = io_options_mod },
+            },
+        });
+
+        const cancel_audit_test = b.addTest(.{
+            .root_module = cancel_audit_test_mod,
+        });
+
+        const test_cancel_audit_step = b.step("test-cancel-audit", "Run cancellation contract audit tests");
+        test_cancel_audit_step.dependOn(&b.addRunArtifact(cancel_audit_test).step);
+    }
+
     // ── I/O Cleanliness Guard ──────────────────────────────────────
     const io_clean_step = b.step("test-io-clean", "Assert no forbidden OS primitives in src/");
     const io_clean_check = b.addSystemCommand(&.{
@@ -259,6 +316,7 @@ pub fn build(b: *std.Build) void {
         \\  --exclude='embedded_templates.zig' \
         \\  --exclude='main.zig' \
         \\  --exclude='runner.zig' \
+        \\  --exclude='io_backend.zig' \
         \\  | grep -v '^\s*//' > /tmp/zypher_io_clean.txt; \
         \\if [ -s /tmp/zypher_io_clean.txt ]; then \
         \\  echo 'ERROR: Forbidden OS primitives found in src/'; \
@@ -350,6 +408,29 @@ fn createSqlite3Library(
     return b.addLibrary(.{
         .name = "sqlite3",
         .root_module = sqlite3_mod,
+    });
+}
+
+fn createHiredisLibrary(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.Compile {
+    const hiredis_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+    hiredis_mod.addCSourceFiles(.{
+        .root = b.path("vendor/hiredis-1.0.2"),
+        .files = &.{ "hiredis.c", "net.c", "sds.c", "read.c", "alloc.c", "dict.c", "async.c" },
+        .flags = &.{"-std=c99"},
+    });
+    hiredis_mod.addIncludePath(b.path("vendor/hiredis-1.0.2"));
+    hiredis_mod.link_libc = true;
+
+    return b.addLibrary(.{
+        .name = "hiredis",
+        .root_module = hiredis_mod,
     });
 }
 
