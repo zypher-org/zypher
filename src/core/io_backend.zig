@@ -12,7 +12,7 @@ pub const ZypherIo = union(IoBackend) {
     threaded: std.Io.Threaded,
     evented: if (options.io_evented) std.Io.Evented else @compileError(
         "IoBackend.evented requires rebuilding with -Dio_evented=true.\n" ++
-        "std.Io.Evented is experimental: networking may fail on some platforms.",
+            "std.Io.Evented is experimental: networking may fail on some platforms.",
     ),
 
     pub fn init(gpa: std.mem.Allocator, backend: IoBackend, thread_count: ?u32) !ZypherIo {
@@ -32,7 +32,7 @@ pub const ZypherIo = union(IoBackend) {
             .evented => {
                 if (!options.io_evented) @compileError(
                     "IoBackend.evented requires rebuilding with -Dio_evented=true.\n" ++
-                    "std.Io.Evented is experimental: networking may fail on some platforms.",
+                        "std.Io.Evented is experimental: networking may fail on some platforms.",
                 );
                 var ev: std.Io.Evented = undefined;
                 try ev.init(gpa, .{});

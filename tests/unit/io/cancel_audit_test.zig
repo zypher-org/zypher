@@ -3,15 +3,25 @@ const zypher = @import("zypher");
 
 test "spawn 5 io.async futures with defer cancel guards, zero leaks" {
     const io = std.testing.io;
-    var f1 = io.async(struct { fn work() void {} }.work, .{});
+    var f1 = io.async(struct {
+        fn work() void {}
+    }.work, .{});
     defer f1.cancel(io);
-    var f2 = io.async(struct { fn work() void {} }.work, .{});
+    var f2 = io.async(struct {
+        fn work() void {}
+    }.work, .{});
     defer f2.cancel(io);
-    var f3 = io.async(struct { fn work() void {} }.work, .{});
+    var f3 = io.async(struct {
+        fn work() void {}
+    }.work, .{});
     defer f3.cancel(io);
-    var f4 = io.async(struct { fn work() void {} }.work, .{});
+    var f4 = io.async(struct {
+        fn work() void {}
+    }.work, .{});
     defer f4.cancel(io);
-    var f5 = io.async(struct { fn work() void {} }.work, .{});
+    var f5 = io.async(struct {
+        fn work() void {}
+    }.work, .{});
     defer f5.cancel(io);
 
     _ = f1.await(io);
