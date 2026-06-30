@@ -645,6 +645,124 @@ fn addMongocSources(lib_mod: *std.Build.Module, b: *std.Build) void {
     const root = "vendor/mongo-c-driver-1.28.1";
     const mongoc_cflags = &.{ "-std=c11", "-D_GNU_SOURCE", "-DBSON_COMPILATION", "-DMONGOC_COMPILATION" };
 
+    const V = struct {
+        const bson_config =
+            \\#ifndef BSON_CONFIG_H
+            \\#define BSON_CONFIG_H
+            \\#define BSON_BYTE_ORDER 1234
+            \\#define BSON_HAVE_STDBOOL_H 1
+            \\#define BSON_OS 1
+            \\#define BSON_HAVE_CLOCK_GETTIME 1
+            \\#define BSON_HAVE_STRINGS_H 1
+            \\#define BSON_HAVE_STRNLEN 1
+            \\#define BSON_HAVE_SNPRINTF 1
+            \\#define BSON_HAVE_GMTIME_R 1
+            \\#define BSON_HAVE_TIMESPEC 1
+            \\#define BSON_EXTRA_ALIGN 0
+            \\#define BSON_HAVE_RAND_R 1
+            \\#define BSON_HAVE_STRLCPY 1
+            \\#endif
+        ;
+        const bson_version =
+            \\#ifndef BSON_VERSION_H
+            \\#define BSON_VERSION_H
+            \\#define BSON_MAJOR_VERSION 1
+            \\#define BSON_MINOR_VERSION 28
+            \\#define BSON_MICRO_VERSION 1
+            \\#define BSON_PRERELEASE_VERSION ""
+            \\#define BSON_VERSION 1028001
+            \\#define BSON_VERSION_S "1.28.1"
+            \\#define BSON_VERSION_HEX (BSON_MAJOR_VERSION << 24 | BSON_MINOR_VERSION << 16 | BSON_MICRO_VERSION << 8)
+            \\#define BSON_CHECK_VERSION(major,minor,micro) \
+            \\        (BSON_MAJOR_VERSION > (major) || \
+            \\         (BSON_MAJOR_VERSION == (major) && BSON_MINOR_VERSION > (minor)) || \
+            \\         (BSON_MAJOR_VERSION == (major) && BSON_MINOR_VERSION == (minor) && \
+            \\          BSON_MICRO_VERSION >= (micro)))
+            \\#endif
+        ;
+        const mongoc_config =
+            \\#ifndef MONGOC_CONFIG_H
+            \\#define MONGOC_CONFIG_H
+            \\#define MONGOC_USER_SET_CFLAGS ""
+            \\#define MONGOC_USER_SET_LDFLAGS ""
+            \\#define MONGOC_CC "zig cc"
+            \\#undef MONGOC_ENABLE_SSL_SECURE_CHANNEL
+            \\#undef MONGOC_ENABLE_CRYPTO_CNG
+            \\#undef MONGOC_HAVE_BCRYPT_PBKDF2
+            \\#undef MONGOC_ENABLE_SSL_SECURE_TRANSPORT
+            \\#undef MONGOC_ENABLE_CRYPTO_COMMON_CRYPTO
+            \\#undef MONGOC_ENABLE_SSL_LIBRESSL
+            \\#undef MONGOC_ENABLE_SSL_OPENSSL
+            \\#undef MONGOC_ENABLE_CRYPTO_LIBCRYPTO
+            \\#undef MONGOC_ENABLE_SSL
+            \\#undef MONGOC_ENABLE_CRYPTO
+            \\#undef MONGOC_ENABLE_CRYPTO_SYSTEM_PROFILE
+            \\#undef MONGOC_HAVE_ASN1_STRING_GET0_DATA
+            \\#undef MONGOC_ENABLE_SASL
+            \\#undef MONGOC_ENABLE_SASL_CYRUS
+            \\#undef MONGOC_ENABLE_SASL_SSPI
+            \\#undef MONGOC_HAVE_SASL_CLIENT_DONE
+            \\#undef MONGOC_NO_AUTOMATIC_GLOBALS
+            \\#define MONGOC_HAVE_SOCKLEN 1
+            \\#define MONGOC_ENABLE_SRV 0
+            \\#undef MONGOC_HAVE_DNSAPI
+            \\#define MONGOC_HAVE_RES_NSEARCH 1
+            \\#undef MONGOC_HAVE_RES_NDESTROY
+            \\#define MONGOC_HAVE_RES_NCLOSE 1
+            \\#undef MONGOC_HAVE_RES_SEARCH
+            \\#define MONGOC_SOCKET_ARG2 struct sockaddr
+            \\#define MONGOC_SOCKET_ARG3 socklen_t
+            \\#define MONGOC_ENABLE_COMPRESSION 0
+            \\#undef MONGOC_ENABLE_COMPRESSION_SNAPPY
+            \\#undef MONGOC_ENABLE_COMPRESSION_ZLIB
+            \\#undef MONGOC_ENABLE_COMPRESSION_ZSTD
+            \\#undef MONGOC_ENABLE_SHM_COUNTERS
+            \\#undef MONGOC_ENABLE_RDTSCP
+            \\#undef MONGOC_HAVE_SCHED_GETCPU
+            \\#define MONGOC_TRACE 0
+            \\#undef MONGOC_ENABLE_CLIENT_SIDE_ENCRYPTION
+            \\#define MONGOC_HAVE_SS_FAMILY 1
+            \\#undef MONGOC_ENABLE_MONGODB_AWS_AUTH
+            \\enum {
+            \\   MONGOC_TRACE_ENABLED = MONGOC_TRACE,
+            \\   MONGOC_SRV_ENABLED = MONGOC_ENABLE_SRV,
+            \\};
+            \\#endif
+        ;
+        const mongoc_version =
+            \\#ifndef MONGOC_VERSION_H
+            \\#define MONGOC_VERSION_H
+            \\#define MONGOC_MAJOR_VERSION 1
+            \\#define MONGOC_MINOR_VERSION 28
+            \\#define MONGOC_MICRO_VERSION 1
+            \\#define MONGOC_PRERELEASE_VERSION ""
+            \\#define MONGOC_VERSION 1028001
+            \\#define MONGOC_VERSION_S "1.28.1"
+            \\#define MONGOC_VERSION_HEX (MONGOC_MAJOR_VERSION << 24 | MONGOC_MINOR_VERSION << 16 | MONGOC_MICRO_VERSION << 8)
+            \\#define MONGOC_CHECK_VERSION(major,minor,micro) \
+            \\        (MONGOC_MAJOR_VERSION > (major) || \
+            \\         (MONGOC_MAJOR_VERSION == (major) && MONGOC_MINOR_VERSION > (minor)) || \
+            \\         (MONGOC_MAJOR_VERSION == (major) && MONGOC_MINOR_VERSION == (minor) && \
+            \\          MONGOC_MICRO_VERSION >= (micro)))
+            \\#endif
+        ;
+        const common_config =
+            \\#ifndef COMMON_CONFIG_H
+            \\#define COMMON_CONFIG_H
+            \\#undef MONGOC_ENABLE_DEBUG_ASSERTIONS
+            \\#endif
+        ;
+    };
+
+    const gen = b.addWriteFiles();
+    _ = gen.add("bson/bson-config.h", V.bson_config);
+    _ = gen.add("bson/bson-version.h", V.bson_version);
+    _ = gen.add("mongoc-config.h", V.mongoc_config);
+    _ = gen.add("mongoc-version.h", V.mongoc_version);
+    _ = gen.add("common-config.h", V.common_config);
+    const gen_dir = gen.getDirectory();
+
+    lib_mod.addIncludePath(gen_dir);
     lib_mod.addIncludePath(b.path(root ++ "/src/libbson/src"));
     lib_mod.addIncludePath(b.path(root ++ "/src/libbson/src/bson"));
     lib_mod.addIncludePath(b.path(root ++ "/src/libmongoc/src"));
