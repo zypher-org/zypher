@@ -203,6 +203,7 @@ fn openMongo(gpa: std.mem.Allocator, cfg: MongoConfig) (ConfigError || std.mem.A
             error.UpdateFailed => error.OpenFailed,
             error.DeleteFailed => error.OpenFailed,
             error.CursorFailed => error.OpenFailed,
+            error.OutOfMemory => error.OutOfMemory,
         };
     };
     const document = store.asDocumentStore();

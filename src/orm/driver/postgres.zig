@@ -19,15 +19,18 @@ pub const PostgresDb = if (build_config.has_postgres) struct {
     stmt_counter: u32,
 
     pub fn open(gpa: std.mem.Allocator, connstr: [:0]const u8) DbError!Self {
-        const raw = c.PQconnectdb(connstr.ptr);
-        if (raw == null or c.PQstatus(raw) != c.CONNECTION_OK) {
-            const msg = if (raw) |r| std.mem.sliceTo(c.PQerrorMessage(r), 0) else "PQconnectdb returned null";
+        const h = c.PQconnectdb(connstr.ptr) orelse {
+            log.err("PQconnectdb returned null", .{});
+            return error.OpenFailed;
+        };
+        if (c.PQstatus(h) != c.CONNECTION_OK) {
+            const msg = std.mem.sliceTo(c.PQerrorMessage(h), 0);
             log.err("PQconnectdb failed: {s}", .{msg});
-            if (raw) |r| c.PQfinish(r);
+            c.PQfinish(h);
             return error.OpenFailed;
         }
         log.debug("connected to PostgreSQL", .{});
-        return .{ .handle = raw, .gpa = gpa, .stmt_counter = 0 };
+        return .{ .handle = h, .gpa = gpa, .stmt_counter = 0 };
     }
 
     pub fn close(self: *Self) void {
@@ -57,10 +60,12 @@ pub const PostgresDb = if (build_config.has_postgres) struct {
         const translated = translatePlaceholders(std.mem.sliceTo(sql, 0), self.gpa) catch return error.PrepareFailed;
         defer self.gpa.free(translated);
 
-        const name = allocStmtName(self.gpa, &self.stmt_counter) catch return error.PrepareFailed;
+        const name = allocStmtName(self.gpa, &self.stmt_counter) catch return error.AllocatorFailed;
         defer self.gpa.free(name);
 
-        const res = c.PQprepare(h, name.ptr, translated.ptr, 0, null) orelse {
+        const name_z: [:0]u8 = name.ptr[0..name.len :0];
+        const query_z: [:0]u8 = translated.ptr[0..translated.len :0];
+        const res = c.PQprepare(h, name_z, query_z, 0, null) orelse {
             log.err("PQprepare returned null", .{});
             return error.PrepareFailed;
         };
@@ -196,29 +201,30 @@ pub const PostgresStmt = if (build_config.has_postgres) struct {
                         lengths_buf[i] = 0;
                     },
                     .text => |s| {
-                        values_buf[i] = s.ptr;
+                        values_buf[i] = @ptrCast(s.ptr);
                         lengths_buf[i] = @intCast(s.len);
                     },
                     .int => |n_val| {
                         const formatted = std.fmt.bufPrint(&fmt_buf, "{d}", .{n_val}) catch return error.BindFailed;
-                        values_buf[i] = formatted.ptr;
+                        values_buf[i] = @ptrCast(formatted.ptr);
                         lengths_buf[i] = @intCast(formatted.len);
                     },
                     .float => |f| {
                         const formatted = std.fmt.bufPrint(&fmt_buf, "{d}", .{f}) catch return error.BindFailed;
-                        values_buf[i] = formatted.ptr;
+                        values_buf[i] = @ptrCast(formatted.ptr);
                         lengths_buf[i] = @intCast(formatted.len);
                     },
                 }
             }
 
+            const stmt_name_z: [:0]const u8 = self.stmt_name.ptr[0..self.stmt_name.len :0];
             const res = c.PQexecPrepared(
                 self.conn,
-                self.stmt_name.ptr,
+                stmt_name_z,
                 self.param_count,
-                if (n > 0) values_buf.ptr else null,
-                if (n > 0) lengths_buf.ptr else null,
-                if (n > 0) formats_buf.ptr else null,
+                if (n > 0) @as(?*const ?[*:0]const u8, @ptrCast(values_buf.ptr)) else null,
+                if (n > 0) @as(?*const c_int, @ptrCast(lengths_buf.ptr)) else null,
+                if (n > 0) @as(?*const c_int, @ptrCast(formats_buf.ptr)) else null,
                 0,
             ) orelse return error.StepFailed;
             self.result = res;
@@ -258,7 +264,7 @@ pub const PostgresStmt = if (build_config.has_postgres) struct {
                 .float = std.fmt.parseFloat(f64, slice) catch return error.ColumnFailed,
             },
             .text => .{
-                .text = try self.gpa.dupe(u8, slice),
+                .text = self.gpa.dupe(u8, slice) catch return error.AllocatorFailed,
             },
             else => return error.ColumnFailed,
         };
@@ -293,7 +299,8 @@ pub const PostgresStmt = if (build_config.has_postgres) struct {
         const h = self.conn;
         const dealloc_sql = std.fmt.allocPrint(self.gpa, "DEALLOCATE \"{s}\"", .{self.stmt_name}) catch null;
         if (dealloc_sql) |sql| {
-            const dealloc_res = c.PQexec(h, sql.ptr);
+            const sql_z: [:0]const u8 = sql.ptr[0..sql.len :0];
+            const dealloc_res = c.PQexec(h, sql_z);
             if (dealloc_res) |dr| c.PQclear(dr);
             self.gpa.free(sql);
         }
@@ -400,7 +407,7 @@ pub const c_types = if (build_config.has_postgres) struct {
     pub const BPCHAR_OID = 1042;
 } else struct {};
 
-fn countParams(sql: [:0]const u8) c_int {
+fn countParams(sql: []const u8) c_int {
     var count: c_int = 0;
     for (std.mem.sliceTo(sql, 0)) |ch| {
         if (ch == '?') count += 1;
@@ -415,23 +422,23 @@ fn allocStmtName(gpa: std.mem.Allocator, counter: *u32) ![]u8 {
 
 pub fn translatePlaceholders(input: []const u8, gpa: std.mem.Allocator) (error{AllocatorFailed}![]u8) {
     const count = countParams(input);
-    if (count == 0) return gpa.dupe(u8, input);
+    if (count == 0) return gpa.dupe(u8, input) catch return error.AllocatorFailed;
 
-    var result = std.ArrayList(u8).init(gpa);
-    errdefer result.deinit();
+    var result = std.ArrayList(u8).empty;
+    errdefer result.deinit(gpa);
 
     var param_idx: usize = 1;
     for (input) |ch| {
         if (ch == '?') {
             var ph_buf: [16]u8 = undefined;
             const placeholder = std.fmt.bufPrint(&ph_buf, "${d}", .{param_idx}) catch unreachable;
-            try result.appendSlice(placeholder);
+            result.appendSlice(gpa, placeholder) catch return error.AllocatorFailed;
             param_idx += 1;
         } else {
-            try result.append(ch);
+            result.append(gpa, ch) catch return error.AllocatorFailed;
         }
     }
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(gpa) catch return error.AllocatorFailed;
 }
 
 test {

@@ -179,7 +179,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
         }
     }
 
-    fn documentToBson(doc: *const Document, gpa: std.mem.Allocator) !*c.bson_t {
+    fn documentToBson(doc: *const Document, gpa: std.mem.Allocator) (error{AllocatorFailed} || std.mem.Allocator.Error)!*c.bson_t {
         const bson = c.bson_new() orelse return error.AllocatorFailed;
         errdefer c.bson_destroy(bson);
 
@@ -187,7 +187,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
         while (it.next()) |entry| {
             const key = entry.key_ptr.*;
             const val = entry.value_ptr.*;
-            const key_z = try gpa.dupeZ(u8, key);
+            const key_z = try gpa.dupeSentinel(u8, key, 0);
             defer gpa.free(key_z);
 
             switch (val) {
@@ -226,14 +226,14 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
         return bson;
     }
 
-    fn arrayToBson(arr: *const std.ArrayList(iface.BsonValue), gpa: std.mem.Allocator) !*c.bson_t {
+    fn arrayToBson(arr: *const std.ArrayList(iface.BsonValue), gpa: std.mem.Allocator) (error{AllocatorFailed} || std.mem.Allocator.Error)!*c.bson_t {
         const bson = c.bson_new() orelse return error.AllocatorFailed;
         errdefer c.bson_destroy(bson);
 
         for (arr.items, 0..) |item, i| {
             var idx_buf: [32]u8 = undefined;
             const idx_str = std.fmt.bufPrint(&idx_buf, "{d}", .{i}) catch "0";
-            const idx_z = try gpa.dupeZ(u8, idx_str);
+            const idx_z = try gpa.dupeSentinel(u8, idx_str, 0);
             defer gpa.free(idx_z);
 
             switch (item) {
@@ -331,9 +331,9 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
         return doc;
     }
 
-    pub fn open(gpa: std.mem.Allocator, uri: []const u8, default_db: []const u8) DocumentError!MongoStore {
+    pub fn open(gpa: std.mem.Allocator, uri: []const u8, default_db: []const u8) (DocumentError || std.mem.Allocator.Error)!MongoStore {
         ensureInit();
-        const uri_z = try std.fmt.allocPrintZ(gpa, "{s}", .{uri});
+        const uri_z = try gpa.dupeSentinel(u8, uri, 0);
         defer gpa.free(uri_z);
 
         const client = c.mongoc_client_new(uri_z.ptr) orelse {
@@ -341,7 +341,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
             return error.OpenFailed;
         };
 
-        const db_z = try gpa.dupeZ(u8, default_db);
+        const db_z = try gpa.dupeSentinel(u8, default_db, 0);
         errdefer gpa.free(db_z);
 
         log.debug("opened MongoDB connection: db={s}", .{default_db});
@@ -349,7 +349,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
     }
 
     pub fn collection(self: *MongoStore, name: []const u8) iface.Collection {
-        const name_z = std.fmt.allocPrintZ(self.gpa, "{s}", .{name}) catch @panic("OOM");
+        const name_z = self.gpa.dupeSentinel(u8, name, 0) catch @panic("OOM");
         const raw = c.mongoc_client_get_collection(self.client, self.db_name.ptr, name_z.ptr);
         self.gpa.free(name_z);
         const col_handle = raw orelse @panic("mongoc_client_get_collection returned null");
@@ -444,7 +444,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
             var error_obj: c.bson_error_t = undefined;
             if (!c.mongoc_collection_insert_one(self.handle, bson_doc, null, reply, &error_obj)) {
                 log.err("insert_one failed: domain={d} code={d} msg={s}", .{
-                    error_obj.domain, error_obj.code, @as([*:0]const u8, &error_obj.message),
+                    error_obj.domain, error_obj.code, error_obj.message[0..],
                 });
                 return error.InsertFailed;
             }
@@ -464,7 +464,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
                 var error_obj: c.bson_error_t = undefined;
                 if (c.mongoc_cursor_error(cursor, &error_obj)) {
                     log.err("cursor error: domain={d} code={d} msg={s}", .{
-                        error_obj.domain, error_obj.code, @as([*:0]const u8, &error_obj.message),
+                        error_obj.domain, error_obj.code, error_obj.message[0..],
                     });
                     return error.FindFailed;
                 }
@@ -485,7 +485,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
             var error_obj: c.bson_error_t = undefined;
             if (!c.mongoc_collection_update_one(self.handle, bson_filter, bson_update, null, null, &error_obj)) {
                 log.err("update_one failed: domain={d} code={d} msg={s}", .{
-                    error_obj.domain, error_obj.code, @as([*:0]const u8, &error_obj.message),
+                    error_obj.domain, error_obj.code, error_obj.message[0..],
                 });
                 return error.UpdateFailed;
             }
@@ -499,7 +499,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
             var error_obj: c.bson_error_t = undefined;
             if (!c.mongoc_collection_delete_one(self.handle, bson_filter, null, null, &error_obj)) {
                 log.err("delete_one failed: domain={d} code={d} msg={s}", .{
-                    error_obj.domain, error_obj.code, @as([*:0]const u8, &error_obj.message),
+                    error_obj.domain, error_obj.code, error_obj.message[0..],
                 });
                 return error.DeleteFailed;
             }
@@ -514,7 +514,7 @@ pub const MongoStore = if (build_config.has_mongodb) struct {
             const count = c.mongoc_collection_count_documents(self.handle, bson_filter, null, null, &error_obj);
             if (count < 0) {
                 log.err("count_documents failed: domain={d} code={d} msg={s}", .{
-                    error_obj.domain, error_obj.code, @as([*:0]const u8, &error_obj.message),
+                    error_obj.domain, error_obj.code, error_obj.message[0..],
                 });
                 return error.FindFailed;
             }

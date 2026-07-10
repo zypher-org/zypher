@@ -3,6 +3,7 @@ const std = @import("std");
 const Method = @import("method.zig").Method;
 const Request = @import("request.zig").Request;
 const Response = @import("response.zig").Response;
+const IoBackend = @import("io_backend.zig").IoBackend;
 const log = std.log.scoped(.server);
 
 pub const Server = struct {
@@ -24,6 +25,10 @@ pub const Server = struct {
         max_inline_body_size: usize = 1_048_576, // 1 MiB
         /// Optional lifecycle bound used by tests and controlled shutdown flows.
         max_requests: ?usize = null,
+        /// IO backend selection.
+        io_backend: IoBackend = .threaded,
+        /// Thread count for threaded backend (null = auto-detect via CPU count).
+        thread_count: ?u32 = null,
     };
 
     /// Create a Server with the given configuration.
@@ -116,18 +121,16 @@ pub const Server = struct {
     }
 
     /// Start listening and serving requests. Blocks until shutdown.
+    /// Phase 14 TODO: Replace inline serving with io.concurrent() once Future
+    /// memory management is properly integrated (requires non-blocking cancel).
     pub fn listenAndServe(self: *Server, io: std.Io, gpa: std.mem.Allocator, handler: HandlerFn) !void {
         const addr = try listenAddress(self.config.host, self.config.port);
         var net_server = try std.Io.net.IpAddress.listen(&addr, io, .{});
-        defer {
-            if (!self.shutdown_requested.load(.acquire)) {
-                net_server.deinit(io);
-            }
-        }
+        defer net_server.deinit(io);
         self.listener = net_server;
         self.shutdown_requested.store(false, .release);
 
-        log.info("listening on {s}:{d}", .{ self.config.host, self.config.port });
+        log.info("listening on {s}:{d} (io={s})", .{ self.config.host, self.config.port, @typeName(@TypeOf(io)) });
 
         var served_requests: usize = 0;
         while (!self.shutdown_requested.load(.acquire)) {
@@ -138,7 +141,7 @@ pub const Server = struct {
                 },
             };
             const stream = net_server.accept(io) catch |err| {
-                if (err == error.SocketNotListening and self.shutdown_requested.load(.acquire)) {
+                if (self.shutdown_requested.load(.acquire) or err == error.SocketNotListening) {
                     log.info("server shutdown requested", .{});
                     break;
                 }
@@ -149,11 +152,12 @@ pub const Server = struct {
                 log.warn("accept failed: {t}", .{err});
                 continue;
             };
-            self.handleConnection(io, gpa, stream, handler) catch |err| {
-                log.warn("connection handler failed: {t}", .{err});
-            };
-            stream.close(io);
             served_requests += 1;
+
+            // Phase 14 TODO: Replace with io.concurrent() once Future memory
+            // management is integrated. Inline serving for now.
+            handleConnection(io, stream, gpa, handler, self.config.max_body_size, self.config.max_inline_body_size);
+
             if (self.config.max_requests) |max_requests| {
                 if (served_requests >= max_requests) {
                     log.info("request limit reached ({d}), stopping server", .{max_requests});
@@ -165,14 +169,17 @@ pub const Server = struct {
         self.listener = null;
     }
 
-    /// Handle a single HTTP connection.
+    /// Handle a single HTTP connection. Signature compatible with io.concurrent/Future.
     fn handleConnection(
-        self: *Server,
         io: std.Io,
-        gpa: std.mem.Allocator,
         stream: std.Io.net.Stream,
+        gpa: std.mem.Allocator,
         handler: HandlerFn,
-    ) !void {
+        max_body_size: usize,
+        max_inline_body_size: usize,
+    ) void {
+        defer stream.close(io);
+
         var read_buf: [8192]u8 = undefined;
         var write_buf: [8192]u8 = undefined;
 
@@ -182,6 +189,10 @@ pub const Server = struct {
         var http_server = std.http.Server.init(&stream_reader.interface, &stream_writer.interface);
 
         while (true) {
+            io.checkCancel() catch {
+                log.info("connection handler cancelled", .{});
+                return;
+            };
             var server_req = http_server.receiveHead() catch |err| switch (err) {
                 error.HttpConnectionClosing => return,
                 error.HttpHeadersOversize => {
@@ -202,14 +213,14 @@ pub const Server = struct {
                 },
             };
 
-            var req = buildRequest(gpa, server_req.head_buffer, self.config.max_body_size) catch |err| {
+            var req = buildRequest(gpa, server_req.head_buffer, max_body_size) catch |err| {
                 log.warn("failed to build request: {t}", .{err});
                 var err_res = Response.init(gpa);
                 defer err_res.deinit();
                 _ = err_res.status(400);
-                try err_res.text("Bad Request");
-                try err_res.send(io, &stream_writer.interface);
-                try stream_writer.interface.flush();
+                err_res.text("Bad Request") catch {};
+                err_res.send(io, &stream_writer.interface) catch {};
+                stream_writer.interface.flush() catch {};
                 return;
             };
             defer req.deinit();
@@ -228,14 +239,14 @@ pub const Server = struct {
                 const is_streaming = stream: {
                     const cl_str = Request.getHeaderCI(&req.headers, "content-length") orelse break :stream false;
                     const cl = std.fmt.parseInt(usize, cl_str, 10) catch break :stream false;
-                    break :stream cl > self.config.max_inline_body_size;
+                    break :stream cl > max_inline_body_size;
                 };
 
                 if (is_streaming) {
                     req.body_stream = Request.BodyStream{ .reader = body_reader.? };
                     body_stream_active = true;
                 } else {
-                    const body = br.allocRemaining(gpa, std.Io.Limit.limited(self.config.max_body_size)) catch |read_err| {
+                    const body = br.allocRemaining(gpa, std.Io.Limit.limited(max_body_size)) catch |read_err| {
                         log.warn("body read failed: {t}", .{read_err});
                         return;
                     };
@@ -262,10 +273,12 @@ pub const Server = struct {
 
                             var field_iter = multipart.fields.iterator();
                             while (field_iter.next()) |entry| {
-                                if (try req.query.fetchPut(entry.key_ptr.*, entry.value_ptr.*)) |old| {
-                                    req.allocator.free(old.key);
-                                    if (old.value.len > 0) req.allocator.free(old.value);
-                                }
+                                if (req.query.fetchPut(entry.key_ptr.*, entry.value_ptr.*)) |maybe_old| {
+                                    if (maybe_old) |old| {
+                                        req.allocator.free(old.key);
+                                        if (old.value.len > 0) req.allocator.free(old.value);
+                                    }
+                                } else |_| {}
                             }
                             multipart.fields.deinit();
 
@@ -291,17 +304,34 @@ pub const Server = struct {
                 }
             }
 
-            try res.send(io, &stream_writer.interface);
-            try stream_writer.interface.flush();
+            res.send(io, &stream_writer.interface) catch {
+                log.warn("response send failed", .{});
+                return;
+            };
+            stream_writer.interface.flush() catch {
+                log.warn("response flush failed", .{});
+                return;
+            };
         }
     }
 
-    /// Graceful shutdown placeholder.
+    /// Graceful shutdown — sets the shutdown flag and makes a self-connection
+    /// to unblock any in-progress accept(). The listener is left open until
+    /// listenAndServe() exits (its defer block handles final cleanup).
+    ///
+    /// We self-connect rather than close() the listener to avoid triggering
+    /// zig's EBADF assertion (the threaded IO backend treats closing an fd
+    /// that another thread is blocked on as a programmer bug).
+    /// In-flight connections drain naturally as clients close their streams.
     pub fn shutdown(self: *Server, io: std.Io) void {
         self.shutdown_requested.store(true, .release);
-        if (self.listener) |*l| {
-            l.deinit(io);
-            self.listener = null;
+        if (self.listener != null) {
+            const addr = listenAddress(self.config.host, self.config.port) catch return;
+            // Make a connection to our own address so the blocking accept()
+            // in the server thread returns and the loop can observe the flag.
+            if (std.Io.net.IpAddress.connect(&addr, io, .{ .mode = .stream })) |conn| {
+                conn.close(io);
+            } else |_| {}
         }
     }
 };

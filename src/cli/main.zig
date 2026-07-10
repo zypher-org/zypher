@@ -9,45 +9,46 @@ const supports_posix_signals = builtin.os.tag != .windows and builtin.os.tag != 
 
 var sigint_io: ?std.Io = null;
 
-fn sigintHandler(
-    sig: std.posix.SIG,
-    info: *const std.posix.siginfo_t,
-    context: ?*anyopaque,
-) callconv(.c) void {
-    _ = sig;
-    _ = info;
-    _ = context;
-    // Close the listener to unblock accept(), then clear the app ref so a
-    // second SIGINT falls through to the default (process termination).
-    if (zypher.cli_runner.sigint_app) |app| {
-        if (sigint_io) |io| app.shutdown(io);
-        zypher.cli_runner.sigint_app = null;
+/// Posix SIGINT handler — only defined when on a POSIX platform.
+const sigint = if (supports_posix_signals) struct {
+    fn handler(
+        sig: std.posix.SIG,
+        info: *const std.posix.siginfo_t,
+        context: ?*anyopaque,
+    ) callconv(.c) void {
+        _ = sig;
+        _ = info;
+        _ = context;
+        if (zypher.cli_runner.sigint_app) |app| {
+            if (sigint_io) |io| app.shutdown(io);
+            zypher.cli_runner.sigint_app = null;
+        }
     }
-}
 
-var saved_sigint: if (supports_posix_signals) std.posix.Sigaction else void =
-    if (!supports_posix_signals) {} else undefined;
+    var saved: std.posix.Sigaction = undefined;
 
-fn installSigint(io: std.Io) void {
-    sigint_io = io;
-    if (!supports_posix_signals) return;
-    const act: std.posix.Sigaction = .{
-        .handler = .{ .sigaction = sigintHandler },
-        .mask = std.posix.sigemptyset(),
-        .flags = std.posix.SA.SIGINFO,
-    };
-    std.posix.sigaction(.INT, &act, &saved_sigint);
-}
+    fn install(io: std.Io) void {
+        sigint_io = io;
+        const act: std.posix.Sigaction = .{
+            .handler = .{ .sigaction = handler },
+            .mask = std.posix.sigemptyset(),
+            .flags = std.posix.SA.SIGINFO,
+        };
+        std.posix.sigaction(.INT, &act, &saved);
+    }
 
-fn restoreSigint() void {
-    if (!supports_posix_signals) return;
-    std.posix.sigaction(.INT, &saved_sigint, null);
-    sigint_io = null;
-}
+    fn restore() void {
+        std.posix.sigaction(.INT, &saved, null);
+        sigint_io = null;
+    }
+} else struct {
+    fn install(_: std.Io) void {}
+    fn restore() void {}
+};
 
 pub fn main(init: std.process.Init) !void {
-    installSigint(init.io);
-    defer restoreSigint();
+    sigint.install(init.io);
+    defer sigint.restore();
 
     const args = try std.process.Args.toSlice(init.minimal.args, init.arena.allocator());
     try dispatch(init, args);

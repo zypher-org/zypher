@@ -56,20 +56,27 @@ test "database config: open sqlite with custom path and exec multiple" {
 
 test "database config: driver not enabled for postgres" {
     const gpa = std.testing.allocator;
-    try std.testing.expectError(error.DriverNotEnabled, config.openDatabase(gpa, .{ .postgres = .{ .connstr = "postgresql://localhost/test" } }));
+    // When the driver IS enabled, openDatabase will try to connect
+    // (and fail with OpenFailed since no postgres server is running here).
+    // When the driver is NOT enabled, it returns DriverNotEnabled.
+    const expected_err = if (comptime zypher.orm.driver.postgres.enabled) error.OpenFailed else error.DriverNotEnabled;
+    try std.testing.expectError(expected_err, config.openDatabase(gpa, .{ .postgres = .{ .connstr = "postgresql://localhost/test" } }));
 }
 
 test "database config: driver not enabled for mysql" {
     const gpa = std.testing.allocator;
-    try std.testing.expectError(error.DriverNotEnabled, config.openDatabase(gpa, .{ .mysql = .{ .db = "test" } }));
+    const expected_err = if (comptime zypher.orm.driver.mysql.enabled) error.OpenFailed else error.DriverNotEnabled;
+    try std.testing.expectError(expected_err, config.openDatabase(gpa, .{ .mysql = .{ .db = "test" } }));
 }
 
 test "database config: driver not enabled for mongodb" {
     const gpa = std.testing.allocator;
-    try std.testing.expectError(error.DriverNotEnabled, config.openDatabase(gpa, .{ .mongo = .{ .uri = "mongodb://localhost:27017", .default_db = "test" } }));
+    const expected_err = if (comptime zypher.orm.document.mongodb.enabled) error.OpenFailed else error.DriverNotEnabled;
+    try std.testing.expectError(expected_err, config.openDatabase(gpa, .{ .mongo = .{ .uri = "mongodb://localhost:27017", .default_db = "test" } }));
 }
 
 test "database config: driver not enabled for redis" {
     const gpa = std.testing.allocator;
-    try std.testing.expectError(error.DriverNotEnabled, config.openDatabase(gpa, .{ .redis = .{ .host = "127.0.0.1" } }));
+    const expected_err = if (comptime zypher.orm.kv.redis.enabled) error.OpenFailed else error.DriverNotEnabled;
+    try std.testing.expectError(expected_err, config.openDatabase(gpa, .{ .redis = .{ .host = "127.0.0.1" } }));
 }
