@@ -4,50 +4,86 @@ const Server = @import("server.zig").Server;
 const Request = @import("request.zig").Request;
 const Response = @import("response.zig").Response;
 const sqlite = @import("../orm/sqlite.zig");
+const orm_config = @import("../orm/config.zig");
+const driver_iface = @import("../orm/driver/interface.zig");
+const doc_iface = @import("../orm/document/interface.zig");
+const kv_iface = @import("../orm/kv/interface.zig");
 const log = std.log.scoped(.app);
 
 pub const App = struct {
     server: Server,
     allocator: std.mem.Allocator,
     handler_fn: ?Server.HandlerFn = null,
-    /// When set, this handler takes priority over handler_fn.
-    /// Use with Router.dispatch as the handler for routed apps.
     router_handler: ?Server.HandlerFn = null,
-    /// When set, middleware runs before the router/handler dispatch.
-    /// The middleware handler is responsible for calling the terminal
-    /// handler (router_handler or handler_fn) at the end of the chain.
     middleware_handler: ?Server.HandlerFn = null,
-    /// Optional database connection for ORM-enabled apps.
-    db: ?*sqlite.Db = null,
+    /// Legacy database connection (via *sqlite.Db).
+    _legacy_db: ?*sqlite.Db = null,
+    /// Owned open-db handle (for lifecycle).
+    _open_db: ?orm_config.OpenDb = null,
+    /// Cached vtable references extracted from _open_db.
+    _relational_db: ?driver_iface.RelationalDb = null,
+    _document_store: ?doc_iface.DocumentStore = null,
+    _kv_store: ?kv_iface.KVStore = null,
 
-    /// Create a new App with the given allocator and optional config overrides.
-    pub fn init(gpa: std.mem.Allocator, config: Server.Config) App {
+    pub fn init(gpa: std.mem.Allocator, server_config: Server.Config) App {
         return .{
-            .server = Server.init(config),
+            .server = Server.init(server_config),
             .allocator = gpa,
         };
     }
 
     /// Free all owned resources.
     pub fn deinit(self: *App) void {
-        if (self.db) |db| {
-            db.close();
+        if (self._legacy_db) |legacy| {
+            legacy.close();
+        }
+        if (self._open_db) |*odb| {
+            odb.close(self.allocator);
         }
     }
 
-    /// Register a request handler function.
     pub fn handler(self: *App, fn_ptr: Server.HandlerFn) void {
         self.handler_fn = fn_ptr;
     }
 
-    /// Register a router-based handler (takes priority over plain handler).
     pub fn routerHandler(self: *App, fn_ptr: Server.HandlerFn) void {
         self.router_handler = fn_ptr;
     }
 
-    /// Attach a database connection for ORM usage.
-    pub fn database(self: *App, db: *sqlite.Db) void {
-        self.db = db;
+    /// Legacy: attach a pre-opened sqlite database.
+    pub fn database(self: *App, handle: *sqlite.Db) void {
+        self._legacy_db = handle;
+    }
+
+    /// Open and attach a database via the config API. Owns the connection.
+    /// Extracts the appropriate vtable wrapper from the open result.
+    pub fn useDatabase(self: *App, gpa: std.mem.Allocator, cfg: orm_config.DatabaseConfig) (orm_config.ConfigError || std.mem.Allocator.Error)!void {
+        const result = try orm_config.openDatabase(gpa, cfg);
+        self._open_db = result.open_db;
+        self._relational_db = result.relational;
+        self._document_store = result.document;
+        self._kv_store = result.kv;
+    }
+
+    /// Return the relational database handle, or an error.
+    pub fn db(self: *App) orm_config.ConfigError!driver_iface.RelationalDb {
+        if (self._relational_db) |d| return d;
+        if (self._open_db != null) return error.WrongStoreType;
+        return error.NoDatabaseConfigured;
+    }
+
+    /// Return the document store handle, or an error.
+    pub fn documentStore(self: *App) orm_config.ConfigError!doc_iface.DocumentStore {
+        if (self._document_store) |s| return s;
+        if (self._open_db != null) return error.WrongStoreType;
+        return error.NoDatabaseConfigured;
+    }
+
+    /// Return the KV store handle, or an error.
+    pub fn kvStore(self: *App) orm_config.ConfigError!kv_iface.KVStore {
+        if (self._kv_store) |s| return s;
+        if (self._open_db != null) return error.WrongStoreType;
+        return error.NoDatabaseConfigured;
     }
 
     /// Register a middleware handler (takes priority over router and handler).

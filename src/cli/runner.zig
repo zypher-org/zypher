@@ -4,7 +4,9 @@ const builtin = @import("builtin");
 const App = @import("../core/app.zig").App;
 const Request = @import("../core/request.zig").Request;
 const Response = @import("../core/response.zig").Response;
-const sqlite = @import("../orm/sqlite.zig");
+const SqliteDb = @import("../orm/driver/sqlite.zig").SqliteDb;
+const RelationalDb = @import("../orm/driver/interface.zig").RelationalDb;
+const db_config = @import("../orm/config.zig");
 const migration = @import("../orm/migration.zig");
 const password = @import("../auth/password.zig");
 const validators = @import("../forms/validators.zig");
@@ -746,7 +748,7 @@ fn readHiddenPromptLine(gpa: std.mem.Allocator, reader: *std.Io.Reader, out_writ
 
 const supports_posix_terminal = builtin.os.tag != .windows and builtin.os.tag != .wasi;
 
-fn ensureUserSchema(db: *sqlite.Db) !void {
+fn ensureUserSchema(db: RelationalDb) !void {
     db.exec(
         \\CREATE TABLE IF NOT EXISTS users (
         \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -767,12 +769,12 @@ fn ensureUserSchema(db: *sqlite.Db) !void {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email)") catch {};
 }
 
-fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
+fn userColumnExists(db: RelationalDb, name: []const u8) bool {
     var stmt = db.prepare("PRAGMA table_info(users)") catch return false;
     defer stmt.finalize();
     while (stmt.step() catch false) {
-        const column_name = stmt.column(.text, 1) catch continue;
-        if (std.mem.eql(u8, column_name.text, name)) return true;
+        const val = stmt.column(.text, 1) catch continue;
+        if (std.mem.eql(u8, val.text, name)) return true;
     }
     return false;
 }
@@ -780,12 +782,11 @@ fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
 fn createSuperuser(io: std.Io, gpa: std.mem.Allocator, db_path: [:0]const u8, input: SuperuserInput) !i64 {
     try validateSuperuserCredentials(input);
 
-    var db = sqlite.Db.open(gpa, db_path) catch {
-        return error.OpenDatabaseFailed;
-    };
-    defer db.close();
+    var sdb = try SqliteDb.open(gpa, db_path);
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    try ensureUserSchema(&db);
+    try ensureUserSchema(db);
 
     const hash_str = password.hash(io, gpa, input.password) catch return error.HashPasswordFailed;
     defer gpa.free(hash_str);
@@ -809,7 +810,7 @@ fn createSuperuser(io: std.Io, gpa: std.mem.Allocator, db_path: [:0]const u8, in
         return error.CreateUserFailed;
     };
 
-    const row_id = db.lastInsertRowId();
+    const row_id = db.lastInsertId();
     log.info("created superuser '{s}' (id={d}, role=admin)", .{ input.username, row_id });
     return row_id;
 }
@@ -843,6 +844,7 @@ fn cmdMigrate(
     const io = init.io;
     var db_path: [:0]const u8 = "db.sqlite";
     var migrations_dir: []const u8 = "migrations";
+    var driver_name: []const u8 = "sqlite";
 
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
@@ -860,25 +862,48 @@ fn cmdMigrate(
                 std.process.exit(1);
             }
             migrations_dir = args[i];
+        } else if (std.mem.eql(u8, args[i], "--driver")) {
+            i += 1;
+            if (i >= args.len) {
+                try err_writer.print("zypher: --driver requires a value (sqlite, postgres, mysql)\n", .{});
+                std.process.exit(1);
+            }
+            driver_name = args[i];
         } else {
             try err_writer.print("zypher: unknown option '{s}'\n", .{args[i]});
             std.process.exit(1);
         }
     }
 
-    var db = sqlite.Db.open(gpa, db_path) catch {
-        try err_writer.print("zypher: failed to open database '{s}'\n", .{db_path});
-        std.process.exit(1);
+    const db_cfg: db_config.DatabaseConfig = if (std.mem.eql(u8, driver_name, "sqlite"))
+        .{ .sqlite = .{ .path = db_path } }
+    else if (std.mem.eql(u8, driver_name, "postgres"))
+        .{ .postgres = .{ .connstr = db_path } }
+    else if (std.mem.eql(u8, driver_name, "mysql"))
+        .{ .mysql = .{ .db = db_path } }
+    else {
+        try err_writer.print("zypher: unsupported driver '{s}' (use sqlite, postgres, or mysql)\n", .{driver_name});
+        return error.UnsupportedDriver;
     };
-    defer db.close();
 
-    var runner = migration.MigrationRunner.init(&db);
+    var open_result = db_config.openDatabase(gpa, db_cfg) catch |err| {
+        try err_writer.print("zypher: failed to open {s} database: {}\n", .{ driver_name, err });
+        return error.DatabaseOpenFailed;
+    };
+    defer open_result.open_db.close(gpa);
+
+    const db = open_result.relational orelse {
+        try err_writer.print("zypher: {s} driver did not provide a relational database handle\n", .{driver_name});
+        return error.NoRelationalDb;
+    };
+
+    var runner = migration.MigrationRunner.init(db);
     runner.ensureHistoryTable() catch {
         try err_writer.print("zypher: failed to create migration history table\n", .{});
         std.process.exit(1);
     };
 
-    const result = applyMigrationDirectory(gpa, io, &db, migrations_dir) catch {
+    const result = applyMigrationDirectory(gpa, io, db, migrations_dir) catch {
         try err_writer.print("zypher: failed to apply migrations from '{s}'\n", .{migrations_dir});
         std.process.exit(1);
     };
@@ -894,7 +919,7 @@ const MigrateResult = struct {
     skipped: usize = 0,
 };
 
-fn applyMigrationDirectory(gpa: std.mem.Allocator, io: std.Io, db: *sqlite.Db, migrations_dir: []const u8) !MigrateResult {
+fn applyMigrationDirectory(gpa: std.mem.Allocator, io: std.Io, db: RelationalDb, migrations_dir: []const u8) !MigrateResult {
     var files = try collectMigrationFiles(gpa, io, migrations_dir);
     defer {
         for (files.items) |name| gpa.free(name);
@@ -962,14 +987,14 @@ fn migrationIdFromFilename(name: []const u8) !i64 {
     return std.fmt.parseInt(i64, name[0..end], 10);
 }
 
-fn cliMigrationApplied(db: *sqlite.Db, id: i64) !bool {
+fn cliMigrationApplied(db: RelationalDb, id: i64) !bool {
     var stmt = try db.prepare("SELECT id FROM zypher_migrations WHERE id = ?");
     defer stmt.finalize();
     try stmt.bind(.{ .int = id }, 1);
     return try stmt.step();
 }
 
-fn recordCliMigration(db: *sqlite.Db, id: i64, name: []const u8) !void {
+fn recordCliMigration(db: RelationalDb, id: i64, name: []const u8) !void {
     var stmt = try db.prepare("INSERT INTO zypher_migrations (id, name) VALUES (?, ?)");
     defer stmt.finalize();
     try stmt.bind(.{ .int = id }, 1);

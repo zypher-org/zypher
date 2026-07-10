@@ -93,6 +93,7 @@ pub fn superuserRequired(req: *Request, res: *Response, next: *const fn (*Reques
         _ = res.header("Location", "/login");
         return;
     }
+    // Safe: req.user is set by SessionMiddleware to *Session; only session-aware code reads it
     const session: *Session = @ptrCast(@alignCast(req.user.?));
     const user_role = session.get("user_role") orelse "";
     if (!std.mem.eql(u8, user_role, "admin")) {

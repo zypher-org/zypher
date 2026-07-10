@@ -1,6 +1,8 @@
 const std = @import("std");
 const demo = @import("demo");
 const zypher = @import("zypher");
+const SqliteDb = zypher.orm.driver.sqlite.SqliteDb;
+const RelationalDb = zypher.orm.driver.interface.RelationalDb;
 const sqlite = zypher.orm.sqlite;
 const query = zypher.orm.query;
 const password = zypher.auth.password;
@@ -54,10 +56,10 @@ test "demo forms validate required post and comment input" {
 }
 
 test "register user via ORM: create user, hash password, authenticate" {
-    var db = try sqlite.Db.open(std.testing.allocator, ":memory:");
-    defer db.close();
+    var sdb = try SqliteDb.open(std.testing.allocator, ":memory:");
+    defer sdb.close();
 
-    try db.exec(
+    try sdb.exec(
         \\CREATE TABLE IF NOT EXISTS users (
         \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
         \\  username TEXT NOT NULL UNIQUE,
@@ -71,13 +73,13 @@ test "register user via ORM: create user, hash password, authenticate" {
     defer std.testing.allocator.free(hash);
 
     const insert_sql = "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, 'user', 1)";
-    var stmt = try db.prepare(insert_sql);
+    var stmt = try sdb.prepare(insert_sql);
     defer stmt.finalize();
     try stmt.bind(.{ .text = "testuser" }, 1);
     try stmt.bind(.{ .text = hash }, 2);
     _ = try stmt.step();
 
-    var lookup = try db.prepare("SELECT password_hash, role FROM users WHERE username = ?");
+    var lookup = try sdb.prepare("SELECT password_hash, role FROM users WHERE username = ?");
     defer lookup.finalize();
     try lookup.bind(.{ .text = "testuser" }, 1);
     try std.testing.expect(try lookup.step());
@@ -90,22 +92,23 @@ test "register user via ORM: create user, hash password, authenticate" {
 }
 
 test "create post and comment, verify data flow end-to-end" {
-    var db = try sqlite.Db.open(std.testing.allocator, ":memory:");
-    defer db.close();
+    var sdb = try SqliteDb.open(std.testing.allocator, ":memory:");
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    try db.exec(demo.Post.create_table_sql);
-    try db.exec(demo.Comment.create_table_sql);
+    try sdb.exec(demo.Post.create_table_sql);
+    try sdb.exec(demo.Comment.create_table_sql);
 
     const gpa = std.testing.allocator;
 
-    const post_id = try query.create(demo.Post, &db, &.{
+    const post_id = try query.create(demo.Post, db, &.{
         sqlite.Value{ .text = "Test Post" },
         sqlite.Value{ .text = "This is the body of the test post." },
         sqlite.Value{ .text = "alice" },
         sqlite.Value{ .int = 1000000 },
     });
 
-    var posts = try query.all(demo.Post, &db, gpa);
+    var posts = try query.all(demo.Post, db, gpa);
     defer {
         for (posts.items) |*r| query.freeRow(demo.Post, gpa, r);
         posts.deinit(gpa);
@@ -113,14 +116,14 @@ test "create post and comment, verify data flow end-to-end" {
     try std.testing.expectEqual(@as(usize, 1), posts.items.len);
     try std.testing.expectEqualStrings("Test Post", posts.items[0][1]);
 
-    _ = try query.create(demo.Comment, &db, &.{
+    _ = try query.create(demo.Comment, db, &.{
         sqlite.Value{ .int = post_id },
         sqlite.Value{ .text = "bob" },
         sqlite.Value{ .text = "Great post!" },
         sqlite.Value{ .int = 1000001 },
     });
 
-    var comments = try query.filter(demo.Comment, &db, gpa, "post_id = ?", &.{.{ .int = post_id }});
+    var comments = try query.filter(demo.Comment, db, gpa, "post_id = ?", &.{.{ .int = post_id }});
     defer {
         for (comments.items) |*r| query.freeRow(demo.Comment, gpa, r);
         comments.deinit(gpa);
@@ -129,7 +132,7 @@ test "create post and comment, verify data flow end-to-end" {
     try std.testing.expectEqualStrings("bob", comments.items[0][2]);
     try std.testing.expectEqualStrings("Great post!", comments.items[0][3]);
 
-    var all_comments = try query.all(demo.Comment, &db, gpa);
+    var all_comments = try query.all(demo.Comment, db, gpa);
     defer {
         for (all_comments.items) |*r| query.freeRow(demo.Comment, gpa, r);
         all_comments.deinit(gpa);

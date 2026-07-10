@@ -49,6 +49,7 @@ pub fn Chain(comptime mws: anytype) type {
         /// Thread-local storage for the terminal handler.
         /// This is needed because Zig inner functions cannot capture
         /// outer parameters, so we pass the handler through a module-level var.
+        /// Set during Chain.run() before handler dispatch; must not be read before then.
         threadlocal var terminal_handler: HandlerFn = undefined;
 
         /// Run the middleware chain, ending with `handler`.

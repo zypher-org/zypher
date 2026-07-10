@@ -240,7 +240,8 @@ test "Response.send with file_body streams file content" {
         tmp_path,
         .{},
     );
-    defer file.close(std.testing.io);
+    // File handle ownership is transferred to Response via setFileBody;
+    // Response.deinit() will close it.
 
     var res = Response.init(gpa);
     defer res.deinit();

@@ -56,6 +56,7 @@ pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (st
     }
 
     // Attach session to request (cast to *anyopaque for the user field)
+    // Safe: req.user is only written by this middleware and only read by session-aware code
     if (loaded_session) |s| {
         req.user = @ptrCast(s);
         log.debug("loaded session for {s}", .{req.path});
@@ -73,7 +74,7 @@ pub fn middleware(io: std.Io, req: *Request, res: *Response, next: *const fn (st
         // Re-fetch the stored session as a pointer
         const retrieved = store.get(new_session.id, io) catch null;
         if (retrieved) |s| {
-            req.user = @ptrCast(s);
+            req.user = @ptrCast(s); // Safe: same invariant as above
         }
 
         // Set session cookie

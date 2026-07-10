@@ -45,9 +45,11 @@ CLI command dispatcher with subcommands for project scaffolding, running, docume
 - `zypher doc-user [path] [--host <host>] [--port <port>] [--max-requests <n>]` — build and serve documentation for user code
 
 ### Database
-- `zypher migrate [--db <path>] [--dir <dir>]` — run pending SQL migrations from a directory
+- `zypher migrate [--db <path>] [--dir <dir>] [--driver <name>]` — run pending SQL migrations from a directory
   - Collects `.sql` files, sorts by name, applies unapplied ones
   - Tracks applied migrations in `zypher_migrations` table
+  - `--driver` selects the backend: `sqlite` (default), `postgres`, or `mysql`
+  - `--db` is the connection string/path (file path for SQLite, connstr for PostgreSQL, db name for MySQL)
 - `zypher makemigrations [--schema <path>] [--state <path>] [--dir <dir>]` — generate migration files by comparing schema manifest to previous state
 
 ### Admin

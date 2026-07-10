@@ -31,6 +31,26 @@ fn runCli(args: []const [:0]const u8) ![]u8 {
     return try std.testing.allocator.dupe(u8, out.written());
 }
 
+fn runCliCapture(args: []const [:0]const u8) !struct { out: []u8, err: []u8 } {
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var err = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer err.deinit();
+
+    const cmd = if (args.len > 1) args[1] else "help";
+    cli.dispatchInner(&out.writer, &err.writer, testInit(), cmd, args, "0.0.0-test") catch {
+        return .{
+            .out = try std.testing.allocator.dupe(u8, out.written()),
+            .err = try std.testing.allocator.dupe(u8, err.written()),
+        };
+    };
+
+    return .{
+        .out = try std.testing.allocator.dupe(u8, out.written()),
+        .err = try std.testing.allocator.dupe(u8, err.written()),
+    };
+}
+
 test "cli: makemigrations detects added field and writes ALTER TABLE migration" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -286,6 +306,79 @@ test "cli: migrate applies SQL files in order and skips applied migrations" {
     try std.testing.expect(try stmt.step());
     const count = try stmt.column(.integer, 0);
     try std.testing.expectEqual(@as(i64, 2), count.int);
+}
+
+test "cli: migrate --driver sqlite works the same as default" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = std.Io.Dir.cwd();
+    const db_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/migrate_driver.sqlite", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(db_path);
+    const migrations_dir = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/migrations_driver", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(migrations_dir);
+    try cwd.createDirPath(std.testing.io, migrations_dir);
+
+    const sql_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/0001_create_table.sql", .{migrations_dir});
+    defer std.testing.allocator.free(sql_path);
+    try cwd.writeFile(std.testing.io, .{ .sub_path = sql_path, .data = "CREATE TABLE items (id INTEGER PRIMARY KEY, val TEXT);" });
+
+    const args = [_][:0]const u8{ "zypher", "migrate", "--db", db_path, "--dir", migrations_dir, "--driver", "sqlite" };
+    const output = try runCli(&args);
+    defer std.testing.allocator.free(output);
+    try std.testing.expect(std.mem.indexOf(u8, output, "applied 1 migration(s)") != null);
+}
+
+test "cli: migrate --driver postgres fails with DriverNotEnabled" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = std.Io.Dir.cwd();
+    const db_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/pg_fail", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(db_path);
+    const migrations_dir = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/pg_migrations", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(migrations_dir);
+    try cwd.createDirPath(std.testing.io, migrations_dir);
+
+    const sql_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/0001_x.sql", .{migrations_dir});
+    defer std.testing.allocator.free(sql_path);
+    try cwd.writeFile(std.testing.io, .{ .sub_path = sql_path, .data = "SELECT 1;" });
+
+    const args = [_][:0]const u8{ "zypher", "migrate", "--db", db_path, "--dir", migrations_dir, "--driver", "postgres" };
+    const cap = try runCliCapture(&args);
+    defer std.testing.allocator.free(cap.out);
+    defer std.testing.allocator.free(cap.err);
+    try std.testing.expect(std.mem.indexOf(u8, cap.err, "failed to open postgres database") != null);
+}
+
+test "cli: migrate --driver mysql fails with DriverNotEnabled" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = std.Io.Dir.cwd();
+    const db_path = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/mysql_fail", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(db_path);
+    const migrations_dir = try std.fmt.allocPrintSentinel(std.testing.allocator, ".zig-cache/tmp/{s}/mysql_migrations", .{tmp.sub_path}, 0);
+    defer std.testing.allocator.free(migrations_dir);
+    try cwd.createDirPath(std.testing.io, migrations_dir);
+
+    const sql_path = try std.fmt.allocPrint(std.testing.allocator, "{s}/0001_x.sql", .{migrations_dir});
+    defer std.testing.allocator.free(sql_path);
+    try cwd.writeFile(std.testing.io, .{ .sub_path = sql_path, .data = "SELECT 1;" });
+
+    const args = [_][:0]const u8{ "zypher", "migrate", "--db", db_path, "--dir", migrations_dir, "--driver", "mysql" };
+    const cap = try runCliCapture(&args);
+    defer std.testing.allocator.free(cap.out);
+    defer std.testing.allocator.free(cap.err);
+    try std.testing.expect(std.mem.indexOf(u8, cap.err, "failed to open mysql database") != null);
+}
+
+test "cli: migrate with unsupported driver shows error" {
+    const args = [_][:0]const u8{ "zypher", "migrate", "--driver", "oracle" };
+    const cap = try runCliCapture(&args);
+    defer std.testing.allocator.free(cap.out);
+    defer std.testing.allocator.free(cap.err);
+    try std.testing.expect(std.mem.indexOf(u8, cap.err, "unsupported driver") != null);
 }
 
 test "cli: createsuperuser prompt creates active admin with hashed password" {

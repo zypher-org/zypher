@@ -118,6 +118,7 @@ pub const Template = struct {
         // Handle {% extends %} as the first node
         if (self.nodes.items.len > 0 and self.nodes.items[0].type == .extends_) {
             if (self.engine) |eng| {
+                // Safe: eng is always *TemplateEngine — set by TemplateEngine.load/loadFromSource
                 const engine: *TemplateEngine = @ptrCast(@alignCast(eng));
                 return self.renderExtended(engine, ctx, writer);
             } else {
@@ -143,6 +144,7 @@ pub const Template = struct {
             .extends_ => {},
             .include => {
                 if (self.engine) |eng| {
+                    // Safe: eng is always *TemplateEngine
                     const engine: *TemplateEngine = @ptrCast(@alignCast(eng));
                     const included = engine.getTemplate(node.value) orelse {
                         log.warn("template not found: {s}", .{node.value});
@@ -379,7 +381,7 @@ pub const TemplateEngine = struct {
         const source = try std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(1024 * 1024));
         defer gpa.free(source);
         var tmpl = try Template.fromSource(gpa, source);
-        tmpl.engine = @ptrCast(self);
+        tmpl.engine = @ptrCast(self); // Safe: reverse of the @ptrCast in render(); self.outlives tmpl
         try self.cache.put(path, tmpl);
         log.debug("loaded and cached template '{s}'", .{path});
         return self.cache.getPtr(path).?;
@@ -391,7 +393,7 @@ pub const TemplateEngine = struct {
             return tmpl;
         }
         var tmpl = try Template.fromSource(self.allocator, source);
-        tmpl.engine = @ptrCast(self);
+        tmpl.engine = @ptrCast(self); // Safe: reverse of the ptrCast in render(); self.outlives tmpl
         try self.cache.put(name, tmpl);
         log.debug("loaded and cached template '{s}'", .{name});
         return self.cache.getPtr(name).?;

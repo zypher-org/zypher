@@ -13,6 +13,7 @@ const Session = zypher.auth.session.Session;
 const SessionStore = zypher.auth.session.SessionStore;
 const TemplateEngine = zypher.template.renderer.TemplateEngine;
 const sqlite = zypher.orm.sqlite;
+const RelationalDb = zypher.orm.query.RelationalDb;
 const password = zypher.auth.password;
 const AdminSite = zypher.admin.AdminSite;
 const Registration = zypher.admin.Registration;
@@ -62,13 +63,13 @@ fn login(req: *Request, res: *Response) void {
     res.json(.{ .ok = true, .redirect = "/admin/" }) catch {};
 }
 
-fn ensureAuthRecoverySchema(db: *sqlite.Db) void {
+fn ensureAuthRecoverySchema(db: RelationalDb) void {
     if (!userColumnExists(db, "email")) db.exec("ALTER TABLE users ADD COLUMN email TEXT") catch {};
     if (!userColumnExists(db, "reset_code")) db.exec("ALTER TABLE users ADD COLUMN reset_code TEXT") catch {};
     if (!userColumnExists(db, "reset_code_expires_at")) db.exec("ALTER TABLE users ADD COLUMN reset_code_expires_at INTEGER") catch {};
 }
 
-fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
+fn userColumnExists(db: RelationalDb, name: []const u8) bool {
     var stmt = db.prepare("PRAGMA table_info(users)") catch return false;
     defer stmt.finalize();
     while (stmt.step() catch false) {
@@ -209,12 +210,12 @@ fn parsePort(init: std.process.Init) u16 {
 pub fn main(init: std.process.Init) !void {
     var db_conn = try sqlite.Db.open(init.gpa, "books_api.db");
     defer db_conn.close();
-    try book.migrate(&db_conn);
+    try book.migrate(db_conn.asRelationalDb());
 
     var engine = TemplateEngine.init(init.gpa);
     defer engine.deinit();
     Admin.loadTemplates(&engine);
-    zypher.admin.setDb(&db_conn);
+    zypher.admin.setDb(db_conn.asRelationalDb());
     zypher.admin.setEngine(&engine);
 
     var sessions = SessionStore.init(init.gpa);
@@ -240,9 +241,10 @@ pub fn main(init: std.process.Init) !void {
     };
     const routes = app_routes ++ admin_routes;
     var router = Router.initFromSlice(&routes, notFound);
-    context.set(&db_conn, &router);
+    context.set(db_conn.asRelationalDb(), &router);
 
     tl_io = init.io;
+    context.setIo(tl_io);
     var app = zypher.core.App.init(init.gpa, .{ .host = "127.0.0.1", .port = parsePort(init) });
     defer app.deinit();
     app.middlewareHandler(runChain);

@@ -5,13 +5,15 @@ const domain = @import("../domain/note.zig");
 const sqlite = zypher.orm.sqlite;
 const query = zypher.orm.query;
 
+const RelationalDb = query.RelationalDb;
+
 pub const NoteList = std.ArrayList(domain.NoteRow);
 
-pub fn migrate(db: *sqlite.Db) !void {
+pub fn migrate(db: RelationalDb) !void {
     try db.exec(domain.Note.create_table_sql);
 }
 
-pub fn create(db: *sqlite.Db, input: domain.NoteInput, now: i64) !i64 {
+pub fn create(db: RelationalDb, input: domain.NoteInput, now: i64) !i64 {
     return query.create(domain.Note, db, &.{
         .{ .text = input.title },
         .{ .text = input.body },
@@ -23,7 +25,7 @@ pub fn create(db: *sqlite.Db, input: domain.NoteInput, now: i64) !i64 {
     });
 }
 
-pub fn listActive(db: *sqlite.Db, allocator: std.mem.Allocator) !NoteList {
+pub fn listActive(db: RelationalDb, allocator: std.mem.Allocator) !NoteList {
     return query.filterOrderLimitOffset(
         domain.Note,
         db,
@@ -36,7 +38,7 @@ pub fn listActive(db: *sqlite.Db, allocator: std.mem.Allocator) !NoteList {
     );
 }
 
-pub fn listArchived(db: *sqlite.Db, allocator: std.mem.Allocator) !NoteList {
+pub fn listArchived(db: RelationalDb, allocator: std.mem.Allocator) !NoteList {
     return query.filterOrderLimitOffset(
         domain.Note,
         db,
@@ -49,7 +51,7 @@ pub fn listArchived(db: *sqlite.Db, allocator: std.mem.Allocator) !NoteList {
     );
 }
 
-pub fn search(db: *sqlite.Db, allocator: std.mem.Allocator, term: []const u8) !NoteList {
+pub fn search(db: RelationalDb, allocator: std.mem.Allocator, term: []const u8) !NoteList {
     const pattern = try std.fmt.allocPrint(allocator, "%{s}%", .{term});
     defer allocator.free(pattern);
     return query.filterOrderLimitOffset(
@@ -64,11 +66,11 @@ pub fn search(db: *sqlite.Db, allocator: std.mem.Allocator, term: []const u8) !N
     );
 }
 
-pub fn get(db: *sqlite.Db, allocator: std.mem.Allocator, id: i64) !domain.NoteRow {
+pub fn get(db: RelationalDb, allocator: std.mem.Allocator, id: i64) !domain.NoteRow {
     return query.getById(domain.Note, db, allocator, id);
 }
 
-pub fn update(db: *sqlite.Db, id: i64, input: domain.NoteInput, now: i64) !void {
+pub fn update(db: RelationalDb, id: i64, input: domain.NoteInput, now: i64) !void {
     try query.updateById(domain.Note, db, id, &.{
         .{ .text = input.title },
         .{ .text = input.body },
@@ -80,7 +82,7 @@ pub fn update(db: *sqlite.Db, id: i64, input: domain.NoteInput, now: i64) !void 
     });
 }
 
-pub fn archive(db: *sqlite.Db, allocator: std.mem.Allocator, id: i64, archived: bool, now: i64) !void {
+pub fn archive(db: RelationalDb, allocator: std.mem.Allocator, id: i64, archived: bool, now: i64) !void {
     var row = try query.getById(domain.Note, db, allocator, id);
     defer query.freeRow(domain.Note, allocator, &row);
     try query.updateById(domain.Note, db, id, &.{
@@ -94,7 +96,7 @@ pub fn archive(db: *sqlite.Db, allocator: std.mem.Allocator, id: i64, archived: 
     });
 }
 
-pub fn delete(db: *sqlite.Db, id: i64) !void {
+pub fn delete(db: RelationalDb, id: i64) !void {
     try query.deleteById(domain.Note, db, id);
 }
 

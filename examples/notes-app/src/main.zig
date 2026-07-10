@@ -16,6 +16,7 @@ const Session = zypher.auth.session.Session;
 const SessionStore = zypher.auth.session.SessionStore;
 const TemplateEngine = zypher.template.renderer.TemplateEngine;
 const sqlite = zypher.orm.sqlite;
+const RelationalDb = zypher.orm.query.RelationalDb;
 const password = zypher.auth.password;
 const AdminSite = zypher.admin.AdminSite;
 const Registration = zypher.admin.Registration;
@@ -308,7 +309,7 @@ fn invalidLogin(res: *Response) void {
     html.render(app_context.get().engine, res, "login.html", &ctx);
 }
 
-fn ensureAuthRecoverySchema(db: *sqlite.Db) void {
+fn ensureAuthRecoverySchema(db: RelationalDb) void {
     db.exec(
         \\CREATE TABLE IF NOT EXISTS users (
         \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -326,7 +327,7 @@ fn ensureAuthRecoverySchema(db: *sqlite.Db) void {
     if (!userColumnExists(db, "reset_code_expires_at")) db.exec("ALTER TABLE users ADD COLUMN reset_code_expires_at INTEGER") catch {};
 }
 
-fn userColumnExists(db: *sqlite.Db, name: []const u8) bool {
+fn userColumnExists(db: RelationalDb, name: []const u8) bool {
     var stmt = db.prepare("PRAGMA table_info(users)") catch return false;
     defer stmt.finalize();
     while (stmt.step() catch false) {
@@ -519,7 +520,7 @@ pub fn main(init: std.process.Init) !void {
 
     var db = try sqlite.Db.open(allocator, "notes_app.db");
     errdefer db.close();
-    try notes.migrate(&db);
+    try notes.migrate(db.asRelationalDb());
 
     var engine = TemplateEngine.init(allocator);
     defer engine.deinit();
@@ -561,13 +562,13 @@ pub fn main(init: std.process.Init) !void {
     var router = Router.initFromSlice(&routes, notFoundHandler);
 
     var ctx = app_context.AppContext{
-        .db = &db,
+        .db = db.asRelationalDb(),
         .engine = &engine,
         .sessions = &sessions,
         .router = &router,
     };
     app_context.set(&ctx);
-    zypher.admin.setDb(&db);
+    zypher.admin.setDb(db.asRelationalDb());
     zypher.admin.setEngine(&engine);
 
     tl_io = init.io;

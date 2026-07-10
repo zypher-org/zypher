@@ -99,6 +99,11 @@ Because zypher is written in Zig:
 - No hidden global state
 - Thread-local storage explicitly documented (used by session, security headers, and admin middleware for configuration that would otherwise require runtime state in handler signatures)
 - **`std.Io` is always caller-supplied** — no zypher library source file may construct, own, or default-initialise an `std.Io` instance. Every module receives `io: std.Io` as a parameter, exactly like `Allocator`. The only exception is `src/cli/main.zig` (the binary entry point), which forwards its `std.process.Init.io` downstream. Violations are caught by `zig build test-io-clean`.
+- **The database driver is always caller-supplied** — `RelationalDb`, `DocumentStore`, and `KVStore` follow the same vtable-by-value pattern as `std.Io`. No zypher library source file outside `src/orm/driver/` may reference `sqlite.Db` directly. All relational DB code routes through the `RelationalDb` vtable interface.
+- **`?` is the canonical placeholder** inside all query builders. The PostgreSQL driver translates `?1 … ?N` → `$1 … $N` during `prepare()` so callers never branch on dialect.
+- **Non-relational stores** expose separate `DocumentStore` and `KVStore` types — they never touch `schema.zig`, `query.zig`, or `migration.zig`.
+- **All C FFI for optional drivers** is gated by build options (`-Ddb_postgres=true` etc.); importing a disabled driver is a `@compileError`, not a runtime panic.
+- **All network drivers** accept `io: std.Io` for every network operation — zero `std.net` / `std.posix` direct calls.
 - No undefined behavior tolerated
 
 Memory safety regressions are treated as **critical bugs**.

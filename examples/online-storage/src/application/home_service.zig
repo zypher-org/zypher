@@ -19,65 +19,47 @@ pub fn isSafeFilename(name: []const u8) bool {
     return true;
 }
 
-pub fn saveUpload(upload: anytype) !domain.StoredFile {
-    if (!isSafeFilename(upload.filename)) return error.InvalidFilename;
-    try ensureStorageDir();
-    const dir_fd = try std.posix.openat(std.posix.AT.FDCWD, storage_dir, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
-    defer closeFd(dir_fd);
-    const fd = try std.posix.openat(
-        dir_fd,
-        upload.filename,
-        .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true },
-        0o644,
-    );
-    defer closeFd(fd);
+fn ensureStorageDir(io: std.Io) !void {
+    const cwd = std.Io.Dir.cwd();
+    cwd.createDir(io, storage_dir, .default_dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => |e| return e,
+    };
+}
 
-    var written: usize = 0;
-    while (written < upload.data.len) {
-        const chunk = upload.data[written..];
-        const rc = std.os.linux.write(fd, chunk.ptr, chunk.len);
-        switch (std.posix.errno(rc)) {
-            .SUCCESS => {
-                const n: usize = @intCast(rc);
-                if (n == 0) return error.WriteFailed;
-                written += n;
-            },
-            .INTR => continue,
-            else => return error.WriteFailed,
-        }
-    }
+pub fn saveUpload(io: std.Io, upload: anytype) !domain.StoredFile {
+    if (!isSafeFilename(upload.filename)) return error.InvalidFilename;
+    try ensureStorageDir(io);
+    const cwd = std.Io.Dir.cwd();
+    const dir = try cwd.openDir(io, storage_dir, .{});
+    defer dir.close(io);
+    const file = try dir.createFile(io, upload.filename, .{});
+    defer file.close(io);
+    try file.writeStreamingAll(io, upload.data);
     return .{ .name = upload.filename, .size = upload.data.len };
 }
 
-pub fn readFile(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
+pub fn readFile(io: std.Io, gpa: std.mem.Allocator, name: []const u8) ![]u8 {
     if (!isSafeFilename(name)) return error.InvalidFilename;
-    try ensureStorageDir();
-    const dir_fd = try std.posix.openat(std.posix.AT.FDCWD, storage_dir, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
-    defer closeFd(dir_fd);
-    const fd = try std.posix.openat(dir_fd, name, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
-    defer closeFd(fd);
+    try ensureStorageDir(io);
+    const cwd = std.Io.Dir.cwd();
+    const dir = try cwd.openDir(io, storage_dir, .{});
+    defer dir.close(io);
+    const file = try dir.openFile(io, name, .{ .mode = .read_only });
+    defer file.close(io);
 
     var bytes: std.ArrayList(u8) = .empty;
     errdefer bytes.deinit(gpa);
     var buf: [8192]u8 = undefined;
     while (true) {
-        const n = try std.posix.read(fd, &buf);
+        var data: [1][]u8 = .{&buf};
+        const n = std.Io.File.readStreaming(file, io, &data) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => |e| return e,
+        };
         if (n == 0) break;
         try bytes.appendSlice(gpa, buf[0..n]);
         if (bytes.items.len > 10 * 1024 * 1024) return error.FileTooLarge;
     }
     return try bytes.toOwnedSlice(gpa);
-}
-
-fn ensureStorageDir() !void {
-    const path = storage_dir ++ "\x00";
-    const rc = std.os.linux.mkdir(path.ptr, 0o755);
-    switch (std.posix.errno(rc)) {
-        .SUCCESS, .EXIST => {},
-        else => return error.StorageUnavailable,
-    }
-}
-
-fn closeFd(fd: std.posix.fd_t) void {
-    _ = std.posix.system.close(fd);
 }

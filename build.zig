@@ -16,8 +16,18 @@ pub fn build(b: *std.Build) void {
         const end = std.mem.indexOfScalar(u8, zon[value_start..], '"') orelse break :blk "0.0.0";
         break :blk zon[value_start..][0..end];
     };
+    // ── Optional backend flags ───────────────────────────────────────
+    const db_postgres = b.option(bool, "db_postgres", "Enable PostgreSQL driver support (links libpq)") orelse false;
+    const db_mysql = b.option(bool, "db_mysql", "Enable MySQL/MariaDB driver support (links libmysqlclient)") orelse false;
+    const db_mongodb = b.option(bool, "db_mongodb", "Enable MongoDB document store (links libmongoc)") orelse false;
+    const db_redis = b.option(bool, "db_redis", "Enable Redis KV store (links hiredis)") orelse false;
+
     const opts = b.addOptions();
     opts.addOption([]const u8, "version", version_string);
+    opts.addOption(bool, "has_postgres", db_postgres);
+    opts.addOption(bool, "has_mysql", db_mysql);
+    opts.addOption(bool, "has_mongodb", db_mongodb);
+    opts.addOption(bool, "has_redis", db_redis);
     const build_config_mod = opts.createModule();
 
     // ── Vendored SQLite3 ─────────────────────────────────────────────
@@ -35,6 +45,18 @@ pub fn build(b: *std.Build) void {
     lib_mod.linkLibrary(sqlite3_lib);
     lib_mod.addIncludePath(b.path("vendor/sqlite-amalgamation-3530000"));
     lib_mod.link_libc = true;
+    if (db_postgres) {
+        lib_mod.linkSystemLibrary("pq", .{});
+    }
+    if (db_mysql) {
+        lib_mod.linkSystemLibrary("mysqlclient", .{});
+    }
+    if (db_mongodb) {
+        lib_mod.linkSystemLibrary("mongoc-1.0", .{});
+    }
+    if (db_redis) {
+        lib_mod.linkSystemLibrary("hiredis", .{});
+    }
 
     // ── Generate embedded templates ────────────────────────────────
     const gen_templates_mod = b.createModule(.{
@@ -153,6 +175,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "zypher", .module = lib_mod },
             .{ .name = "test_io", .module = test_helpers_mod },
+            .{ .name = "build_config", .module = build_config_mod },
         },
     });
 
@@ -230,7 +253,9 @@ pub fn build(b: *std.Build) void {
         "sh", "-c",
         \\grep -rn 'std\.posix\|std\.net\.\|std\.os\.linux\|std\.time\.Instant\|std\.io\.GenericReader\|AnyReader\|FixedBufferStream\|std\.Thread\.Pool\|std\.io\.getStd' src/ \
         \\  --include='*.zig' \
-        \\  --exclude-dir='orm/' \
+        \\  --exclude-dir='orm/driver/' \
+        \\  --exclude-dir='orm/document/' \
+        \\  --exclude-dir='orm/kv/' \
         \\  --exclude='embedded_templates.zig' \
         \\  --exclude='main.zig' \
         \\  --exclude='runner.zig' \

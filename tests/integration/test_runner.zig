@@ -5,7 +5,9 @@ test {
     _ = @import("middleware_test.zig");
     _ = @import("template_test.zig");
     _ = @import("orm_test.zig");
+    _ = @import("database_config_test.zig");
     _ = @import("forms_test.zig");
     _ = @import("auth_test.zig");
     _ = @import("admin_view_test.zig");
+    _ = @import("multi_db_test.zig");
 }

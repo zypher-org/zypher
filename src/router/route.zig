@@ -129,6 +129,92 @@ pub const Route = struct {
         return false;
     }
 
+    /// Match a pattern against pre-split path segments, extracting params.
+    /// `path` is the original request path, used for wildcard remaining-path computation.
+    pub fn matchPathSegments(pattern: []const u8, path_segs: []const []const u8, params: *RouteParams, path: []const u8) bool {
+        params.reset();
+
+        var pat_it = std.mem.splitScalar(u8, pattern, '/');
+        _ = pat_it.next();
+
+        var seg_idx: usize = 0;
+        while (true) {
+            const pat_seg = pat_it.next() orelse "";
+
+            if (pat_seg.len == 0 and seg_idx >= path_segs.len) return true;
+            if (pat_seg.len == 0) return false;
+            if (seg_idx >= path_segs.len) {
+                if (pat_seg[0] == '*') {
+                    if (path.len > 0 and path[path.len - 1] == '/') {
+                        params.put("*", "") catch return false;
+                        return true;
+                    }
+                    return false;
+                }
+                return false;
+            }
+
+            const act_seg = path_segs[seg_idx];
+            seg_idx += 1;
+
+            if (pat_seg[0] == '*') {
+                if (act_seg.len == 0) {
+                    if (path.len > 0 and path[path.len - 1] == '/') {
+                        params.put("*", "") catch return false;
+                        return true;
+                    }
+                    return false;
+                }
+                const wildcard_val = remainingPath(path, act_seg);
+                params.put("*", wildcard_val) catch return false;
+                return true;
+            }
+
+            if (pat_seg[0] == ':') {
+                const parsed = parseParamSegment(pat_seg);
+                switch (parsed.param_type) {
+                    .u64 => {
+                        _ = std.fmt.parseInt(u64, act_seg, 10) catch return false;
+                    },
+                    .str => {},
+                }
+                params.put(parsed.name, act_seg) catch return false;
+                continue;
+            }
+
+            if (!std.mem.eql(u8, pat_seg, act_seg)) return false;
+        }
+        return false;
+    }
+
+    /// Lightweight path-only match — no params extraction.
+    /// Used for 405 detection where only path-method mapping matters.
+    pub fn matchesPath(pattern: []const u8, path_segs: []const []const u8) bool {
+        var pat_it = std.mem.splitScalar(u8, pattern, '/');
+        _ = pat_it.next();
+
+        var seg_idx: usize = 0;
+        while (true) {
+            const pat_seg = pat_it.next() orelse "";
+
+            if (pat_seg.len == 0 and seg_idx >= path_segs.len) return true;
+            if (pat_seg.len == 0) return false;
+            if (seg_idx >= path_segs.len) {
+                if (pat_seg[0] == '*') return true;
+                return false;
+            }
+
+            const act_seg = path_segs[seg_idx];
+            seg_idx += 1;
+
+            if (pat_seg[0] == '*') return true;
+            if (pat_seg[0] == ':') continue;
+
+            if (!std.mem.eql(u8, pat_seg, act_seg)) return false;
+        }
+        return false;
+    }
+
     /// Compute the remaining path starting from the current segment position.
     /// Returns a slice into `path` from the segment onward.
     fn remainingPath(path: []const u8, current_segment: []const u8) []const u8 {

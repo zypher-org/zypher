@@ -1,16 +1,15 @@
 const std = @import("std");
-const sqlite = @import("zypher").orm.sqlite;
+const SqliteDb = @import("zypher").orm.driver.sqlite.SqliteDb;
 const migration = @import("zypher").orm.migration;
 
-const Db = sqlite.Db;
 const Migration = migration.Migration;
 const MigrationRunner = migration.MigrationRunner;
 const MigrationStatus = migration.MigrationStatus;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-fn openTestDb() !Db {
-    return Db.open(std.testing.allocator, ":memory:");
+fn openTestDb() !SqliteDb {
+    return try SqliteDb.open(std.testing.allocator, ":memory:");
 }
 
 // ── Test migrations ───────────────────────────────────────────────────────
@@ -24,10 +23,11 @@ const migrations = [_]Migration{
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 test "migration: runner creates history table on first run" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     try runner.migrate(&migrations, std.testing.io);
 
     // History table should exist
@@ -38,10 +38,11 @@ test "migration: runner creates history table on first run" {
 }
 
 test "migration: applies all pending migrations" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     try runner.migrate(&migrations, std.testing.io);
 
     // All 3 tables/columns should exist
@@ -51,10 +52,11 @@ test "migration: applies all pending migrations" {
 }
 
 test "migration: is idempotent (running twice is safe)" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     try runner.migrate(&migrations, std.testing.io);
     // Run again — should skip already-applied migrations
     try runner.migrate(&migrations, std.testing.io);
@@ -64,10 +66,11 @@ test "migration: is idempotent (running twice is safe)" {
 }
 
 test "migration: status lists applied and pending" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
 
     // Before any migration, all should be pending
     const statuses_before = try runner.status(std.testing.allocator, &migrations);
@@ -89,10 +92,11 @@ test "migration: status lists applied and pending" {
 }
 
 test "migration: rollback reverts a migration" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     try runner.migrate(&migrations, std.testing.io);
 
     // Rollback the last migration (add_email_to_users)
@@ -106,10 +110,11 @@ test "migration: rollback reverts a migration" {
 }
 
 test "migration: rollback multiple migrations" {
-    var db = try openTestDb();
-    defer db.close();
+    var sdb = try openTestDb();
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
-    var runner = MigrationRunner.init(&db);
+    var runner = MigrationRunner.init(db);
     try runner.migrate(&migrations, std.testing.io);
 
     // Rollback 2 migrations

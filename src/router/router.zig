@@ -29,6 +29,16 @@ pub fn Group(comptime prefix: []const u8, comptime routes: anytype) []const Rout
     }
 }
 
+const MethodBits = u7;
+
+fn methodBit(m: Method) MethodBits {
+    return @as(MethodBits, 1) << @intFromEnum(m);
+}
+
+fn methodAllowed(bits: MethodBits, m: Method) bool {
+    return bits & methodBit(m) != 0;
+}
+
 pub const Router = struct {
     routes: []const Route,
     not_found_handler: *const fn (*Request, *Response) void,
@@ -97,41 +107,36 @@ pub const Router = struct {
     /// - Path match + method mismatch → 405 with Allow header
     /// - No path match → 404
     pub fn dispatch(self: *const Router, req: *Request, res: *Response) void {
+        var path_segments: [64][]const u8 = undefined;
+        var seg_count: usize = 0;
+        {
+            var it = std.mem.splitScalar(u8, req.path, '/');
+            _ = it.next();
+            while (it.next()) |seg| {
+                if (seg.len > 0) {
+                    path_segments[seg_count] = seg;
+                    seg_count += 1;
+                }
+            }
+        }
+
         var candidate_params = RouteParams.init(req.allocator);
         defer candidate_params.deinit();
         var best_params = RouteParams.init(req.allocator);
 
         var path_matched = false;
-        var allowed_methods: [7]bool = std.mem.zeroes([7]bool); // one per Method variant
-        var allowed_count: usize = 0;
+        var allowed_methods: MethodBits = 0;
         var best_route: ?Route = null;
         var best_score: usize = 0;
 
         for (self.routes) |r| {
-            if (Route.matchPath(r.pattern, req.path, &candidate_params)) {
-                path_matched = true;
-                if (r.method == req.method) {
-                    const score = routeSpecificity(r.pattern);
-                    if (best_route == null or score > best_score) {
-                        best_route = r;
-                        best_score = score;
-                        best_params = candidate_params;
-                    }
-                    continue;
-                }
-                // Track allowed methods for this path
-                const method_idx: usize = switch (r.method) {
-                    .get => 0,
-                    .post => 1,
-                    .put => 2,
-                    .patch => 3,
-                    .delete => 4,
-                    .options => 5,
-                    .head => 6,
-                };
-                if (!allowed_methods[method_idx]) {
-                    allowed_methods[method_idx] = true;
-                    allowed_count += 1;
+            if (r.method != req.method) continue;
+            if (Route.matchPathSegments(r.pattern, path_segments[0..seg_count], &candidate_params, req.path)) {
+                const score = routeSpecificity(r.pattern);
+                if (best_route == null or score > best_score) {
+                    best_route = r;
+                    best_score = score;
+                    best_params = candidate_params;
                 }
             }
         }
@@ -143,10 +148,16 @@ pub const Router = struct {
             return;
         }
 
+        for (self.routes) |r| {
+            if (r.method == req.method) continue;
+            if (Route.matchesPath(r.pattern, path_segments[0..seg_count])) {
+                path_matched = true;
+                allowed_methods |= methodBit(r.method);
+            }
+        }
+
         if (path_matched) {
-            // Path matched but method didn't — 405 Method Not Allowed
             _ = res.status(405);
-            // Build Allow header value manually
             var buf: [128]u8 = undefined;
             var pos: usize = 0;
             const method_names = [_]struct { Method, []const u8 }{
@@ -159,8 +170,8 @@ pub const Router = struct {
                 .{ .head, "HEAD" },
             };
             var first = true;
-            for (method_names, 0..) |entry, i| {
-                if (allowed_methods[i]) {
+            inline for (method_names) |entry| {
+                if (methodAllowed(allowed_methods, entry[0])) {
                     if (!first) {
                         buf[pos] = ',';
                         pos += 1;
@@ -179,7 +190,6 @@ pub const Router = struct {
             return;
         }
 
-        // No path match — 404
         self.not_found_handler(req, res);
         log.warn("{s} {s} → 404 (no route matched)", .{ @tagName(req.method), req.path });
     }

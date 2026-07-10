@@ -210,13 +210,11 @@ fn mwPass(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *R
 }
 
 fn mwHeader(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
-    _ = io;
     _ = res.header("X-Bench", "1");
     next(io, req, res);
 }
 
 fn mwCookie(io: std.Io, req: *Request, res: *Response, next: *const fn (std.Io, *Request, *Response) void) void {
-    _ = io;
     _ = req.cookie("sid");
     next(io, req, res);
 }
@@ -225,7 +223,7 @@ fn terminalHandler(_: *Request, res: *Response) void {
     res.text("ok") catch {};
 }
 
-fn benchMiddlewareAggressive(allocator: std.mem.Allocator) !u64 {
+fn benchMiddlewareAggressive(allocator: std.mem.Allocator, io: std.Io) !u64 {
     const Chain = zypher.middleware.Chain(.{
         mwPass,
         mwHeader,
@@ -250,12 +248,15 @@ fn benchMiddlewareAggressive(allocator: std.mem.Allocator) !u64 {
     const start = nowNs();
     var i: u64 = 0;
     while (i < middleware_runs) : (i += 1) {
-        Chain.run(std.testing.io, &req, &res, terminalHandler);
+        Chain.run(io, &req, &res, terminalHandler);
     }
     return elapsedNs(start);
 }
 
 const sqlite = zypher.orm.sqlite;
+const driver_iface = zypher.orm.driver.interface;
+const RelationalDb = driver_iface.RelationalDb;
+const Value = driver_iface.Value;
 const query = zypher.orm.query;
 const schema = zypher.orm.schema;
 
@@ -273,63 +274,67 @@ fn freeRows(comptime M: type, allocator: std.mem.Allocator, rows: *std.ArrayList
 }
 
 fn setupBenchDb(allocator: std.mem.Allocator) !sqlite.Db {
-    var db = try sqlite.Db.open(allocator, ":memory:");
-    errdefer db.close();
-    try db.exec(BenchModel.create_table_sql);
-    try db.exec("BEGIN");
+    var sdb = try sqlite.Db.open(allocator, ":memory:");
+    errdefer sdb.close();
+    const db = sdb.asRelationalDb();
+    try sdb.exec(BenchModel.create_table_sql);
+    try sdb.exec("BEGIN");
     var i: u64 = 0;
     while (i < orm_seed_rows) : (i += 1) {
         const name = if (i % 2 == 0) "even-row" else "odd-row";
-        _ = try query.create(BenchModel, &db, &.{
+        _ = try query.create(BenchModel, db, &.{
             .{ .text = name },
             .{ .int = @intCast(i) },
             .{ .int = if (i % 3 == 0) 1 else 0 },
         });
     }
-    try db.exec("COMMIT");
-    return db;
+    try sdb.exec("COMMIT");
+    return sdb;
 }
 
 fn benchOrmWriteAggressive(allocator: std.mem.Allocator) !u64 {
-    var db = try sqlite.Db.open(allocator, ":memory:");
-    defer db.close();
-    try db.exec(BenchModel.create_table_sql);
+    var sdb = try sqlite.Db.open(allocator, ":memory:");
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
+    try sdb.exec(BenchModel.create_table_sql);
 
     const start = nowNs();
-    try db.exec("BEGIN");
+    try sdb.exec("BEGIN");
     var i: u64 = 0;
     while (i < orm_write_rows) : (i += 1) {
-        _ = try query.create(BenchModel, &db, &.{
+        _ = try query.create(BenchModel, db, &.{
             .{ .text = "write-row" },
             .{ .int = @intCast(i) },
             .{ .int = 1 },
         });
     }
-    try db.exec("COMMIT");
+    try sdb.exec("COMMIT");
     return elapsedNs(start);
 }
 
 fn benchOrmLookupAggressive(allocator: std.mem.Allocator) !u64 {
-    var db = try setupBenchDb(allocator);
-    defer db.close();
+    var sdb = try setupBenchDb(allocator);
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
     const start = nowNs();
     var i: u64 = 0;
     while (i < orm_lookup_runs) : (i += 1) {
-        var row = try query.getById(BenchModel, &db, allocator, @intCast((i % orm_seed_rows) + 1));
+        var row = try query.getById(BenchModel, db, allocator, @intCast((i % orm_seed_rows) + 1));
         query.freeRow(BenchModel, allocator, &row);
     }
     return elapsedNs(start);
 }
 
 fn benchOrmFilterAggressive(allocator: std.mem.Allocator) !u64 {
-    var db = try setupBenchDb(allocator);
-    defer db.close();
+    var sdb = try setupBenchDb(allocator);
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
     const start = nowNs();
     var i: u64 = 0;
     while (i < orm_filter_runs) : (i += 1) {
-        var qs = query.QuerySet(BenchModel).init(&db, allocator);
+        var qs = query.QuerySet(BenchModel).init(db, allocator);
         defer qs.deinit();
         const rows = try qs.filterBy("active = ?", &.{.{ .int = 1 }}).orderBy("score DESC").limit(25).offset(10).exec();
         var mutable_rows = rows;
@@ -339,13 +344,14 @@ fn benchOrmFilterAggressive(allocator: std.mem.Allocator) !u64 {
 }
 
 fn benchOrmScanAggressive(allocator: std.mem.Allocator) !u64 {
-    var db = try setupBenchDb(allocator);
-    defer db.close();
+    var sdb = try setupBenchDb(allocator);
+    defer sdb.close();
+    const db = sdb.asRelationalDb();
 
     const start = nowNs();
     var i: u64 = 0;
     while (i < orm_scan_runs) : (i += 1) {
-        var rows = try query.all(BenchModel, &db, allocator);
+        var rows = try query.all(BenchModel, db, allocator);
         freeRows(BenchModel, allocator, &rows);
     }
     return elapsedNs(start);
@@ -357,6 +363,10 @@ pub fn main() !void {
     zypher.log.setLogLevel(.err);
     defer zypher.log.setLogLevel(previous_log_level);
 
+    var t = std.Io.Threaded.init(allocator, .{});
+    defer t.deinit();
+    const io = t.io();
+
     std.debug.print("zypher Benchmarks\n", .{});
     std.debug.print("=================\n\n", .{});
 
@@ -365,7 +375,7 @@ pub fn main() !void {
     printBench("template aggressive render", template_aggressive_runs, try benchTemplateRenderAggressive(allocator));
     printBench("router baseline dispatch", router_baseline_runs, try benchRouterDispatchBaseline(allocator));
     printBench("router 256-route late match", router_aggressive_runs, try benchRouterDispatchAggressive(allocator));
-    printBench("middleware 12-step chain", middleware_runs, try benchMiddlewareAggressive(allocator));
+    printBench("middleware 12-step chain", middleware_runs, try benchMiddlewareAggressive(allocator, io));
     printBench("orm transactional writes", orm_write_rows, try benchOrmWriteAggressive(allocator));
     printBench("orm primary-key lookups", orm_lookup_runs, try benchOrmLookupAggressive(allocator));
     printBench("orm filtered querysets", orm_filter_runs, try benchOrmFilterAggressive(allocator));
