@@ -6,6 +6,42 @@ zypher is a **spec-driven, correctness-first web framework written in Zig**. Con
 
 ---
 
+## Phase 14 Axioms — `std.Io` Async/Concurrent Model
+
+These axioms apply to all contributions touching async or concurrent execution. Violations are treated as correctness bugs.
+
+### A1 — Async vs Concurrent Classification
+
+- **`io.async()`** — "I don't need a separate thread; run inline if single-threaded." Use when the caller merely expresses intent to overlap work but does not require true parallelism.
+- **`io.concurrent()`** — "I require true parallelism: the caller and task must advance simultaneously." Use for the server accept loop vs connection handlers. Every `io.concurrent()` MUST handle `error.ConcurrencyUnavailable` with an explicit fallback (never `catch unreachable`).
+
+### A2 — The Cancellation Contract
+
+Every `io.async()` and `io.concurrent()` call MUST be immediately followed by:
+```zig
+defer future.cancel(io) catch {};
+```
+This is not optional. The async closure allocated by `std.Io.Threaded` is freed by `cancel()` or `await()`. If neither is called before scope exit, the closure leaks. Violations are caught by `zig build test-cancel-audit`.
+
+If you intentionally skip `await`/`cancel`, add a `// SAFETY:` comment explaining why the future is guaranteed to complete before scope exit.
+
+### A3 — Collect-Results-Then-Try
+
+When spawning multiple futures, always collect results before inspecting errors:
+```zig
+const a_r = a.await(io);
+const b_r = b.await(io);
+try a_r;
+try b_r;
+```
+Never `try a.await(io)` before calling `b.await(io)` — if `a` fails, `b`'s `defer cancel` hasn't fired yet and `b`'s closure leaks.
+
+### A4 — Backend Construction Site Rule
+
+Only `src/core/io_backend.zig` and `src/cli/main.zig` may reference `std.Io.Threaded` or `std.Io.Evented` by name. All other files receive `io: std.Io` as a parameter. This is enforced by `zig build test-backend-construction-site`.
+
+---
+
 ## 1. Project Philosophy
 
 zypher is built on a few non-negotiable principles:

@@ -121,8 +121,11 @@ pub const Server = struct {
     }
 
     /// Start listening and serving requests. Blocks until shutdown.
-    /// Phase 14 TODO: Replace inline serving with io.concurrent() once Future
-    /// memory management is properly integrated (requires non-blocking cancel).
+    /// Under a threaded backend, each connection is spawned via io.concurrent()
+    /// for true parallelism. Under single-threaded, falls back to sequential
+    /// inline serving (no panic, no error propagation to caller).
+    ///
+    /// The caller-supplied Io is never stored by the framework (Axiom A1).
     pub fn listenAndServe(self: *Server, io: std.Io, gpa: std.mem.Allocator, handler: HandlerFn) !void {
         const addr = try listenAddress(self.config.host, self.config.port);
         var net_server = try std.Io.net.IpAddress.listen(&addr, io, .{});
@@ -132,7 +135,16 @@ pub const Server = struct {
 
         log.info("listening on {s}:{d} (io={s})", .{ self.config.host, self.config.port, @typeName(@TypeOf(io)) });
 
+        var futures_array: std.ArrayList(std.Io.Future(void)) = .empty;
+        defer {
+            for (futures_array.items) |*f| {
+                f.await(io);
+            }
+            futures_array.deinit(gpa);
+        }
+
         var served_requests: usize = 0;
+
         while (!self.shutdown_requested.load(.acquire)) {
             io.checkCancel() catch |check_err| switch (check_err) {
                 error.Canceled => {
@@ -154,9 +166,26 @@ pub const Server = struct {
             };
             served_requests += 1;
 
-            // Phase 14 TODO: Replace with io.concurrent() once Future memory
-            // management is integrated. Inline serving for now.
-            handleConnection(io, stream, gpa, handler, self.config.max_body_size, self.config.max_inline_body_size);
+            var future = io.concurrent(handleConnection, .{
+                io,
+                stream,
+                gpa,
+                handler,
+                self.config.max_body_size,
+                self.config.max_inline_body_size,
+            }) catch |concurrent_err| switch (concurrent_err) {
+                error.ConcurrencyUnavailable => {
+                    log.warn("concurrent spawn unavailable — serving inline (single-threaded mode)", .{});
+                    handleConnection(io, stream, gpa, handler, self.config.max_body_size, self.config.max_inline_body_size);
+                    // skip future tracking — handled inline
+                    continue;
+                },
+                else => |e| return e,
+            };
+            futures_array.append(gpa, future) catch |e| {
+                future.cancel(io);
+                return e;
+            };
 
             if (self.config.max_requests) |max_requests| {
                 if (served_requests >= max_requests) {
@@ -169,7 +198,8 @@ pub const Server = struct {
         self.listener = null;
     }
 
-    /// Handle a single HTTP connection. Signature compatible with io.concurrent/Future.
+    /// Handle a single HTTP request on a connection. Returns after one
+    /// request-response cycle (one-shot). Signature compatible with io.concurrent/Future.
     fn handleConnection(
         io: std.Io,
         stream: std.Io.net.Stream,
@@ -188,131 +218,129 @@ pub const Server = struct {
 
         var http_server = std.http.Server.init(&stream_reader.interface, &stream_writer.interface);
 
-        while (true) {
-            io.checkCancel() catch {
-                log.info("connection handler cancelled", .{});
+        io.checkCancel() catch {
+            log.info("connection handler cancelled", .{});
+            return;
+        };
+        var server_req = http_server.receiveHead() catch |err| switch (err) {
+            error.HttpConnectionClosing => return,
+            error.HttpHeadersOversize => {
+                log.warn("request headers too large", .{});
                 return;
-            };
-            var server_req = http_server.receiveHead() catch |err| switch (err) {
-                error.HttpConnectionClosing => return,
-                error.HttpHeadersOversize => {
-                    log.warn("request headers too large", .{});
-                    return;
-                },
-                error.HttpHeadersInvalid => {
-                    log.warn("request headers invalid", .{});
-                    return;
-                },
-                error.HttpRequestTruncated => {
-                    log.warn("request truncated", .{});
-                    return;
-                },
-                else => {
-                    log.warn("request error: {t}", .{err});
-                    return;
-                },
-            };
-
-            var req = buildRequest(gpa, server_req.head_buffer, max_body_size) catch |err| {
-                log.warn("failed to build request: {t}", .{err});
-                var err_res = Response.init(gpa);
-                defer err_res.deinit();
-                _ = err_res.status(400);
-                err_res.text("Bad Request") catch {};
-                err_res.send(io, &stream_writer.interface) catch {};
-                stream_writer.interface.flush() catch {};
+            },
+            error.HttpHeadersInvalid => {
+                log.warn("request headers invalid", .{});
                 return;
+            },
+            error.HttpRequestTruncated => {
+                log.warn("request truncated", .{});
+                return;
+            },
+            else => {
+                log.warn("request error: {t}", .{err});
+                return;
+            },
+        };
+
+        var req = buildRequest(gpa, server_req.head_buffer, max_body_size) catch |err| {
+            log.warn("failed to build request: {t}", .{err});
+            var err_res = Response.init(gpa);
+            defer err_res.deinit();
+            _ = err_res.status(400);
+            err_res.text("Bad Request") catch {};
+            err_res.send(io, &stream_writer.interface) catch {};
+            stream_writer.interface.flush() catch {};
+            return;
+        };
+        defer req.deinit();
+        req.query_owned = true;
+
+        // ── Read request body or leave as stream ────
+        var body_read_buf: [4096]u8 = undefined;
+        var body_reader: ?*std.Io.Reader = null;
+        var body_stream_active = false;
+
+        if (server_req.head.method.requestHasBody()) {
+            body_reader = server_req.readerExpectNone(&body_read_buf);
+            const br = body_reader.?;
+
+            // If Content-Length exceeds inline threshold, stream instead of buffering
+            const is_streaming = stream: {
+                const cl_str = Request.getHeaderCI(&req.headers, "content-length") orelse break :stream false;
+                const cl = std.fmt.parseInt(usize, cl_str, 10) catch break :stream false;
+                break :stream cl > max_inline_body_size;
             };
-            defer req.deinit();
-            req.query_owned = true;
 
-            // ── Read request body or leave as stream ────
-            var body_read_buf: [4096]u8 = undefined;
-            var body_reader: ?*std.Io.Reader = null;
-            var body_stream_active = false;
-
-            if (server_req.head.method.requestHasBody()) {
-                body_reader = server_req.readerExpectNone(&body_read_buf);
-                const br = body_reader.?;
-
-                // If Content-Length exceeds inline threshold, stream instead of buffering
-                const is_streaming = stream: {
-                    const cl_str = Request.getHeaderCI(&req.headers, "content-length") orelse break :stream false;
-                    const cl = std.fmt.parseInt(usize, cl_str, 10) catch break :stream false;
-                    break :stream cl > max_inline_body_size;
+            if (is_streaming) {
+                req.body_stream = Request.BodyStream{ .reader = body_reader.? };
+                body_stream_active = true;
+            } else {
+                const body = br.allocRemaining(gpa, std.Io.Limit.limited(max_body_size)) catch |read_err| {
+                    log.warn("body read failed: {t}", .{read_err});
+                    return;
                 };
+                req.body = body;
+                req.body_owned = true;
 
-                if (is_streaming) {
-                    req.body_stream = Request.BodyStream{ .reader = body_reader.? };
-                    body_stream_active = true;
-                } else {
-                    const body = br.allocRemaining(gpa, std.Io.Limit.limited(max_body_size)) catch |read_err| {
-                        log.warn("body read failed: {t}", .{read_err});
-                        return;
-                    };
-                    req.body = body;
-                    req.body_owned = true;
-
-                    if (body.len > 0) {
-                        const content_type = Request.getHeaderCI(&req.headers, "content-type") orelse "";
-                        if (std.mem.indexOf(u8, content_type, "x-www-form-urlencoded") != null) {
-                            var form_params = Request.parseQueryString(gpa, body) catch {
-                                log.warn("failed to parse form data", .{});
-                                return;
-                            };
-                            defer form_params.deinit();
-                            var iter = form_params.iterator();
-                            while (iter.next()) |entry| {
-                                req.query.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
-                            }
-                        } else if (std.mem.indexOf(u8, content_type, "multipart/form-data") != null) {
-                            var multipart = Request.parseMultipartFormData(gpa, content_type, body) catch {
-                                log.warn("failed to parse multipart form data", .{});
-                                return;
-                            };
-
-                            var field_iter = multipart.fields.iterator();
-                            while (field_iter.next()) |entry| {
-                                if (req.query.fetchPut(entry.key_ptr.*, entry.value_ptr.*)) |maybe_old| {
-                                    if (maybe_old) |old| {
-                                        req.allocator.free(old.key);
-                                        if (old.value.len > 0) req.allocator.free(old.value);
-                                    }
-                                } else |_| {}
-                            }
-                            multipart.fields.deinit();
-
-                            req.files = multipart.files;
-                            req.files_owned = true;
+                if (body.len > 0) {
+                    const content_type = Request.getHeaderCI(&req.headers, "content-type") orelse "";
+                    if (std.mem.indexOf(u8, content_type, "x-www-form-urlencoded") != null) {
+                        var form_params = Request.parseQueryString(gpa, body) catch {
+                            log.warn("failed to parse form data", .{});
+                            return;
+                        };
+                        defer form_params.deinit();
+                        var iter = form_params.iterator();
+                        while (iter.next()) |entry| {
+                            req.query.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
                         }
+                    } else if (std.mem.indexOf(u8, content_type, "multipart/form-data") != null) {
+                        var multipart = Request.parseMultipartFormData(gpa, content_type, body) catch {
+                            log.warn("failed to parse multipart form data", .{});
+                            return;
+                        };
+
+                        var field_iter = multipart.fields.iterator();
+                        while (field_iter.next()) |entry| {
+                            if (req.query.fetchPut(entry.key_ptr.*, entry.value_ptr.*)) |maybe_old| {
+                                if (maybe_old) |old| {
+                                    req.allocator.free(old.key);
+                                    if (old.value.len > 0) req.allocator.free(old.value);
+                                }
+                            } else |_| {}
+                        }
+                        multipart.fields.deinit();
+
+                        req.files = multipart.files;
+                        req.files_owned = true;
                     }
                 }
             }
-
-            log.info("{s} {s}", .{ @tagName(req.method), req.path });
-
-            var res = Response.init(gpa);
-            handler(&req, &res);
-            defer res.deinit();
-
-            // Drain unconsumed streaming body before sending response
-            if (body_stream_active) {
-                if (req.body_stream) |*bs| {
-                    bs.skip() catch |err| {
-                        log.warn("failed to drain body: {t}", .{err});
-                    };
-                }
-            }
-
-            res.send(io, &stream_writer.interface) catch {
-                log.warn("response send failed", .{});
-                return;
-            };
-            stream_writer.interface.flush() catch {
-                log.warn("response flush failed", .{});
-                return;
-            };
         }
+
+        log.info("{s} {s}", .{ @tagName(req.method), req.path });
+
+        var res = Response.init(gpa);
+        handler(&req, &res);
+        defer res.deinit();
+
+        // Drain unconsumed streaming body before sending response
+        if (body_stream_active) {
+            if (req.body_stream) |*bs| {
+                bs.skip() catch |err| {
+                    log.warn("failed to drain body: {t}", .{err});
+                };
+            }
+        }
+
+        res.send(io, &stream_writer.interface) catch {
+            log.warn("response send failed", .{});
+            return;
+        };
+        stream_writer.interface.flush() catch {
+            log.warn("response flush failed", .{});
+            return;
+        };
     }
 
     /// Graceful shutdown — sets the shutdown flag and makes a self-connection

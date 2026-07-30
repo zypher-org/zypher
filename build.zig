@@ -272,6 +272,47 @@ pub fn build(b: *std.Build) void {
 
     // ── Phase 14 — IO backend test targets ─────────────────────────
     {
+        const server_async_test_mod = b.createModule(.{
+            .root_source_file = b.path("tests/unit/core/server_async_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "test_io", .module = test_helpers_mod },
+                .{ .name = "options", .module = io_options_mod },
+            },
+        });
+
+        const server_async_threaded_test = b.addTest(.{
+            .root_module = server_async_test_mod,
+        });
+
+        const test_server_async_threaded_step = b.step("test-server-async-threaded", "Run server async tests with threaded backend");
+        test_server_async_threaded_step.dependOn(&b.addRunArtifact(server_async_threaded_test).step);
+    }
+
+    {
+        const server_async_single_mod = b.createModule(.{
+            .root_source_file = b.path("tests/unit/core/server_async_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zypher", .module = lib_mod },
+                .{ .name = "test_io", .module = test_helpers_mod },
+                .{ .name = "options", .module = io_options_mod },
+            },
+        });
+        server_async_single_mod.single_threaded = true;
+
+        const server_async_single_test = b.addTest(.{
+            .root_module = server_async_single_mod,
+        });
+
+        const test_server_async_single_step = b.step("test-server-async-single", "Run server async tests with single-threaded backend");
+        test_server_async_single_step.dependOn(&b.addRunArtifact(server_async_single_test).step);
+    }
+
+    {
         const concurrent_fallback_test_mod = b.createModule(.{
             .root_source_file = b.path("tests/unit/core/concurrent_fallback_test.zig"),
             .target = target,
