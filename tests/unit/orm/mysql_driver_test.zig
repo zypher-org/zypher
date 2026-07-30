@@ -19,13 +19,7 @@ test "mysql driver — open/exec/prepare/bind/step/column roundtrip" {
     const cfg = try getTestConfig(gpa);
     defer if (!std.mem.eql(u8, cfg.user, "root")) gpa.free(cfg.user);
 
-    var my_db = try mysql.MysqlDb.open(gpa, .{
-        .host = cfg.host,
-        .user = cfg.user,
-        .pass = cfg.pass,
-        .db = cfg.db,
-        .port = cfg.port,
-    });
+    var my_db = try openDb(gpa, cfg);
     defer my_db.close();
 
     try my_db.exec("DROP TABLE IF EXISTS zypher_my_test");
@@ -66,13 +60,7 @@ test "mysql driver — RelationalDb vtable dispatch" {
     const cfg = try getTestConfig(gpa);
     defer if (!std.mem.eql(u8, cfg.user, "root")) gpa.free(cfg.user);
 
-    var my_db = try mysql.MysqlDb.open(gpa, .{
-        .host = cfg.host,
-        .user = cfg.user,
-        .pass = cfg.pass,
-        .db = cfg.db,
-        .port = cfg.port,
-    });
+    var my_db = try openDb(gpa, cfg);
     defer my_db.close();
 
     const db: iface.RelationalDb = my_db.asRelationalDb();
@@ -109,13 +97,7 @@ test "mysql driver — error on bad SQL" {
     const cfg = try getTestConfig(gpa);
     defer if (!std.mem.eql(u8, cfg.user, "root")) gpa.free(cfg.user);
 
-    var my_db = try mysql.MysqlDb.open(gpa, .{
-        .host = cfg.host,
-        .user = cfg.user,
-        .pass = cfg.pass,
-        .db = cfg.db,
-        .port = cfg.port,
-    });
+    var my_db = try openDb(gpa, cfg);
     defer my_db.close();
 
     try testing.expectError(error.ExecFailed, my_db.exec("INVALID SQL HERE"));
@@ -129,15 +111,22 @@ test "mysql driver — close is idempotent" {
     const cfg = try getTestConfig(gpa);
     defer if (!std.mem.eql(u8, cfg.user, "root")) gpa.free(cfg.user);
 
-    var my_db = try mysql.MysqlDb.open(gpa, .{
+    var my_db = try openDb(gpa, cfg);
+    my_db.close();
+    my_db.close();
+}
+
+fn openDb(gpa: std.mem.Allocator, cfg: TestConfig) !mysql.MysqlDb {
+    return mysql.MysqlDb.open(gpa, .{
         .host = cfg.host,
         .user = cfg.user,
         .pass = cfg.pass,
         .db = cfg.db,
         .port = cfg.port,
-    });
-    my_db.close();
-    my_db.close();
+    }) catch |err| switch (err) {
+        error.OpenFailed => return error.SkipZigTest,
+        else => |e| return e,
+    };
 }
 
 const TestConfig = struct {

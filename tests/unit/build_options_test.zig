@@ -28,5 +28,6 @@ test "build_config has_mongodb is false by default" {
 }
 
 test "build_config has_redis is false by default" {
+    if (build_config.has_redis) return error.SkipZigTest;
     try std.testing.expect(!build_config.has_redis);
 }

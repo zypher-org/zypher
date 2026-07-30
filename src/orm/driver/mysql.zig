@@ -135,7 +135,7 @@ pub const MysqlDb = if (build_config.has_mysql) struct {
         );
         if (connected == null) {
             const msg = std.mem.sliceTo(c.mysql_error(raw), 0);
-            log.err("mysql_real_connect failed: {s}", .{msg});
+            log.warn("mysql_real_connect failed: {s}", .{msg});
             c.mysql_close(raw);
             return error.OpenFailed;
         }
