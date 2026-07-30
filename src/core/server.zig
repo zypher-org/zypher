@@ -128,7 +128,7 @@ pub const Server = struct {
     /// The caller-supplied Io is never stored by the framework (Axiom A1).
     pub fn listenAndServe(self: *Server, io: std.Io, gpa: std.mem.Allocator, handler: HandlerFn) !void {
         const addr = try listenAddress(self.config.host, self.config.port);
-        var net_server = try std.Io.net.IpAddress.listen(&addr, io, .{});
+        var net_server = try std.Io.net.IpAddress.listen(&addr, io, .{ .reuse_address = true });
         defer net_server.deinit(io);
         self.listener = net_server;
         self.shutdown_requested.store(false, .release);
