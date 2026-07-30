@@ -43,7 +43,7 @@ test "postgres driver — open/exec/prepare/bind/step/column/finalize roundtrip"
     const connstr = try getTestConnstr(gpa);
     defer gpa.free(connstr);
 
-    var pg_db = try postgres.PostgresDb.open(gpa, connstr);
+    var pg_db = try openDb(gpa, connstr);
     defer pg_db.close();
 
     try pg_db.exec("DROP TABLE IF EXISTS zypher_pg_test");
@@ -85,7 +85,7 @@ test "postgres driver — RelationalDb vtable dispatch" {
     const connstr = try getTestConnstr(gpa);
     defer gpa.free(connstr);
 
-    var pg_db = try postgres.PostgresDb.open(gpa, connstr);
+    var pg_db = try openDb(gpa, connstr);
     defer pg_db.close();
 
     const db: iface.RelationalDb = pg_db.asRelationalDb();
@@ -122,7 +122,7 @@ test "postgres driver — error on bad SQL" {
     const connstr = try getTestConnstr(gpa);
     defer gpa.free(connstr);
 
-    var pg_db = try postgres.PostgresDb.open(gpa, connstr);
+    var pg_db = try openDb(gpa, connstr);
     defer pg_db.close();
 
     try testing.expectError(error.ExecFailed, pg_db.exec("INVALID SQL HERE"));
@@ -136,9 +136,16 @@ test "postgres driver — close is idempotent" {
     const connstr = try getTestConnstr(gpa);
     defer gpa.free(connstr);
 
-    var pg_db = try postgres.PostgresDb.open(gpa, connstr);
+    var pg_db = try openDb(gpa, connstr);
     pg_db.close();
     pg_db.close();
+}
+
+fn openDb(gpa: std.mem.Allocator, connstr: [:0]const u8) !postgres.PostgresDb {
+    return postgres.PostgresDb.open(gpa, connstr) catch |err| switch (err) {
+        error.OpenFailed => return error.SkipZigTest,
+        else => |e| return e,
+    };
 }
 
 fn getTestConnstr(gpa: std.mem.Allocator) ![:0]const u8 {

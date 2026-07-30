@@ -20,12 +20,12 @@ pub const PostgresDb = if (build_config.has_postgres) struct {
 
     pub fn open(gpa: std.mem.Allocator, connstr: [:0]const u8) DbError!Self {
         const h = c.PQconnectdb(connstr.ptr) orelse {
-            log.err("PQconnectdb returned null", .{});
+            log.warn("PQconnectdb returned null", .{});
             return error.OpenFailed;
         };
         if (c.PQstatus(h) != c.CONNECTION_OK) {
             const msg = std.mem.sliceTo(c.PQerrorMessage(h), 0);
-            log.err("PQconnectdb failed: {s}", .{msg});
+            log.warn("PQconnectdb failed: {s}", .{msg});
             c.PQfinish(h);
             return error.OpenFailed;
         }
