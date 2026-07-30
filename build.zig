@@ -293,12 +293,11 @@ pub fn build(b: *std.Build) void {
 
     {
         const server_async_single_mod = b.createModule(.{
-            .root_source_file = b.path("tests/unit/core/server_async_test.zig"),
+            .root_source_file = b.path("tests/unit/core/server_async_single_test.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zypher", .module = lib_mod },
-                .{ .name = "test_io", .module = test_helpers_mod },
                 .{ .name = "options", .module = io_options_mod },
             },
         });

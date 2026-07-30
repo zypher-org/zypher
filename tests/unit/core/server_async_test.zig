@@ -11,8 +11,6 @@ fn handlerOK(req: *Request, res: *Response) void {
 }
 
 test "multi-threaded: a single request on threaded backend succeeds" {
-    // Same pattern as existing server_test.zig — uses std.testing.io
-    // to verify Group.concurrent path doesn't break basic serving.
     const port: u16 = 19350;
     var server = Server.init(.{ .host = "127.0.0.1", .port = port, .max_requests = 1 });
 
@@ -43,7 +41,7 @@ test "multi-threaded: a single request on threaded backend succeeds" {
     server.shutdown(std.testing.io);
 }
 
-test "single-threaded: falls back to sequential handling, no panic" {
+test "single-threaded backend: falls back to sequential handling, no panic" {
     const port: u16 = 19351;
     var server = Server.init(.{ .host = "127.0.0.1", .port = port, .max_requests = 2 });
     var single_backend = std.Io.Threaded.init_single_threaded;
